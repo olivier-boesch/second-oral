@@ -1,0 +1,587 @@
+@font-face{
+    font-family: "poppins";
+    src:url("PoppinsLatin-Regular.ttf");
+}
+
+@font-face{
+    font-family: "raleway";
+    src:url("raleway.regular.ttf");
+}
+
+:root {
+    --color-1: #ebe3f5;
+    --color-2: #fefeff;
+    --color-3:  #d6cfff;
+    --color-4: #aba0f9;
+    --color-5: #7c80fc;
+    --color-black: #000;
+    --color-black-trans: rgba(0,0,0,0.4);
+    font-family: "raleway", "poppins", sans-serif;
+}
+
+#sign-other-device-qr{
+    display: none;
+}
+
+#sign-other-device-button button{
+    padding: 20px;
+}
+
+.auth-icon {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    z-index: 1;
+    display: flex;
+}
+
+.user-name{
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    z-index: 1;
+    display: flex;
+    color: var(--color-5);
+}
+
+.user-name img{
+    height: 30px;
+    width: 30px;
+}
+
+.body-for-sticky {
+    position: relative;
+    padding-bottom: 5rem;
+}
+
+body {
+    padding: 10px;
+    margin: 0px;
+    background-color: var(--color-2);
+    color: var(--color-black);
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+a:hover {
+    text-decoration: underline;
+    text-decoration-style: dashed;
+}
+
+.qr-recherche {
+    position: fixed;
+    top: 100px;
+    left: 20px;
+    align-content: center;
+    text-align: center;
+}
+
+img {
+    vertical-align: middle;
+}
+
+.red {
+    color: var(--color-5);
+}
+
+.block_documents {
+    margin: 1em auto;
+    padding: 1em;
+    width: 50%;
+    background-color: var(--color-1);
+    border-radius: 2em;
+    align-content: center;
+}
+
+.not_available {
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(254, 254, 255, 0.5) 20px, rgba(254, 254, 255, 0.5) 40px);
+}
+
+.grid-options {
+    margin: auto;
+    display: grid;
+    grid-template-columns: 48% auto;
+    grid-gap: 20px;
+    padding: 10px;
+}
+
+.grid-options .grid-options-item {
+    text-align: left;
+    padding: 10px;
+    background-color: var(--color-2);
+    border-radius: 15px;
+}
+
+.grid-options-item img {
+    margin-right: 10px;
+}
+
+
+.tv_screen {
+    font-size: 25px;
+    cursor: none;
+}
+
+.tv_screen h1 {
+    position: sticky;
+    top: 0;
+    background-color: var(--color-2);
+}
+
+.tv_screen footer {
+    padding: 0;
+}
+
+
+.header {
+    text-align: center;
+}
+
+h1, h2 {
+    text-align: center;
+}
+
+.title {
+    font-size: 20px;
+    text-align: center;
+}
+
+.amenagement {
+    color: var(--color-5);
+}
+
+.tooltip {
+    display: inline-block;
+}
+
+.connect-button{
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    padding: 10px;
+    border-radius: 5px;
+    background-color: var(--color-5);
+    color: var(--color-1);
+}
+
+.tooltip .tooltiptext {
+    visibility: hidden;
+    width: 150px;
+    text-align: center;
+    border-radius: 10px;
+    margin: 5px;
+    padding: 10px;
+    background-color: var(--color-5);
+    color: var(--color-2);
+
+    /* Position the tooltip */
+    position: absolute;
+    z-index: 1;
+}
+
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+}
+
+.center_all {
+    align-content: center;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    -webkit-transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%);
+}
+
+.centered {
+    text-align: center;
+    align-items: center;
+    align-content: center;
+    justify-content: center;
+    display: block;
+}
+
+th {
+    background-color: var(--color-3);
+}
+
+.tr_light {
+    background-color: var(--color-2);
+}
+
+.tr_dark {
+    background-color: var(--color-1);
+}
+
+table, td, tr {
+    margin-left: auto;
+    margin-right: auto;
+    border-collapse: collapse;
+    text-align: center;
+}
+
+.table_oraux {
+    width: 60%;
+}
+
+.table_mobile {
+    width: 90%;
+}
+
+td {
+    padding: 5px;
+}
+
+.top_left {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+}
+
+form {
+    width: 80%;
+    display: table;
+    margin: 10px auto;
+}
+
+.login {
+    display: block;
+}
+
+.login label {
+    display: inline;
+}
+
+.login input {
+    display: inline;
+    border-radius: 5px;
+    text-align: center;
+    font-size: 1.7em;
+}
+
+.login input:focus {
+    outline: none;
+}
+
+.classic p {
+    display: table-row;
+}
+
+.classic label {
+    display: table-cell;
+}
+
+.classic input, select {
+    display: table-cell;
+}
+
+.classic p span {
+    display: table-cell;
+    margin: 10px;
+    padding: 10px;
+}
+
+.classic select {
+    /* A reset of styles, including removing the default dropdown arrow*/
+    appearance: none;
+    /* Additional resets for further consistency*/
+    margin: 10px;
+    /*width: 100%;*/
+    font-family: inherit;
+/ / . . . existing styles outline: none;
+    min-width: 100%;
+    max-width: 100%;
+    border: 1px solid black;
+    border-radius: 0.25em;
+    padding: 5px;
+    cursor: pointer;
+    line-height: 1.1;
+    background-color: var(--color-2);
+    background-image: linear-gradient(to top, var(--color-1), var(--color-2) 33%);
+}
+
+/* Chrome, Safari, Edge, Opera */
+.classic input::-webkit-outer-spin-button,
+.classic input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Firefox */
+.classic input[type=number] {
+    -moz-appearance: textfield;
+}
+
+.classic .button {
+    background-color: var(--color-2);
+    border: 1px solid var(--color-5);
+    border-radius: 5px;
+    font-size: 120%;
+    padding: 0.25em 0.5em;
+    margin: 5px;
+}
+
+.classic .button:hover {
+    background-color: var(--color-1);
+}
+
+.classic input {
+    margin: 10px;
+    padding: 5px;
+}
+
+.error_page {
+    background: black url("error_bg.jpg") no-repeat;
+    background-size: 100%;
+    color: var(--color-2);
+    font-size: 150%;
+}
+
+.grid-container {
+    margin: auto;
+    width: 80%;
+    display: grid;
+    grid-template-columns: auto auto auto;
+    grid-gap: 20px;
+    padding: 10px;
+}
+
+.grid-container .grid-item {
+    text-align: left;
+    padding: 10px 30px;
+    font-size: 20px;
+    background-color: var(--color-1);
+    border-radius: 15px;
+}
+
+.salle_big {
+    font-size: larger;
+}
+
+footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    color: var(--color-2);
+    background-color: var(--color-5);
+    text-align: center;
+    font-size: 15px;
+    border-radius: 1em 1em 0 0;
+}
+
+/* The Modal (background) */
+.modal-dialog {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 2; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: var(--color-black); /* Fallback color */
+    background-color: var(--color-black-trans); /* Black w/ opacity */
+}
+
+/* Modal Content/Box */
+.modal-content {
+    background-color: var(--color-2);
+    margin: 15% auto; /* 15% from the top and centered */
+    padding: 20px;
+    border: 1px solid var(--color-5);
+    border-radius: 10px;
+    width: 80%; /* Could be more or less, depending on screen size */
+}
+
+/* The Close Button */
+.close {
+    color: var(--color-5);
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.form-salle{
+    border: 3px double var(--color-5);
+    border-radius: 10px;
+    padding: 15px;
+    width: 50%;
+    margin: auto;
+}
+
+.form-salle input, select  {
+    box-sizing: border-box;
+    text-align: center;
+    font-size: 1.3em;
+}
+
+#togglePassword {
+    margin: -35px;
+    cursor: pointer;
+}
+
+.form-salle select,input{
+    margin: 5px;
+    width: 95%;
+    padding: 10px;
+    font-family: "poppins", sans-serif;
+}
+
+
+
+
+.sign-buttons{
+    width: 100%;
+    margin: 20px auto;
+}
+
+button, input[type=submit] {
+    padding: 10px;
+    font-size: initial;
+    border-radius: 10px;
+    background-color: var(--color-2);
+    border: var(--color-5) solid 1px;
+}
+
+button:hover, input[type=submit]:hover {
+    background-color: var(--color-3);
+}
+
+.sign-buttons .validate{
+    background-color: #88ff88;
+}
+
+.sign-buttons .drop{
+    background-color: #ff5555;
+    border: red solid 2px;
+}
+
+.sign-buttons input[type=submit] {
+    display: inline;
+    width: fit-content;
+    padding: 10px;
+}
+
+.sign-button-only{
+    padding: 5px;
+}
+
+.sign-canvas{
+    padding: 5px;
+    border: 2px dotted var(--color-5);
+    border-radius: 5px;
+    width: fit-content;
+    margin: auto;
+}
+
+.sign-canvas canvas{
+    width: 300px;
+    height: 300px;
+    margin: 20px auto;
+    background-color: var(--color-1);
+}
+
+@media only screen and (max-width: 800px) {
+    .form-salle{
+        width: 95%;
+        padding: 10px;
+    }
+    body {
+        position: relative;
+        padding-bottom: 4rem;
+    }
+
+    .table_oraux {
+        width: 95%;
+    }
+
+    .table_mobile {
+        width: 95%;
+    }
+
+    .block_documents {
+        width: 95%;
+        border-radius: 20px;
+    }
+
+    .grid-options {
+        grid-template-columns: auto;
+        grid-gap: 5px;
+    }
+
+    .grid-options-item {
+    }
+
+    .block_documents {
+        margin: 5px auto;
+        padding: 5px;
+        width: 95%;
+        background-color: var(--color-1);
+        */ border-radius: 1em;
+    }
+
+    .auth-icon {
+        display: block;
+        position: relative;
+        top: unset;
+        left: unset;
+    }
+
+    .connect-button{
+        position: block;
+        width: fit-content;
+        top: unset;
+        right: unset;
+        position: unset;
+        margin-top: 20px;
+    }
+
+    h1, h2 {
+        font-size: 20px;
+    }
+
+    .error_page {
+        background-image: none;
+        background-color: var(--color-black);
+        color: var(--color-2);
+        font-size: 150%;
+    }
+
+
+    .grid-container {
+        margin: auto;
+        width: 95%;
+        display: grid;
+        grid-template-columns: auto;
+        grid-gap: 5px;
+        padding: 5px;
+    }
+
+
+    footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        color: var(--color-2);
+        background-color: var(--color-5);
+        text-align: center;
+        font-size: 15px;
+        border-radius: 1em 1em 0 0;
+    }
+
+    #big-screen-only {
+        display: none;
+    }
+
+}

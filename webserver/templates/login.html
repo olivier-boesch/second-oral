@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Authentification Administrateur</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+<h1>Authentification Administrateur</h1>
+<div class="centered">
+<form class="login" action="{{ url_for('login') }}" method="post">
+    {{ form.hidden_tag() }}
+    {{ form.key }}
+    {{ form.link_back }}
+</form>
+</div>
+{% include 'footer.html' %}
+</body>
+</html>

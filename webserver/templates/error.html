@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - Error {{ e.code }}</title>
+    {% include 'style.html' %}
+</head>
+<body class="error_page body-for-sticky">
+<p class="centered">You've gone a bit too far...</p>
+<h1 class="centered">Error {{ e.code }}</h1>
+<h2 class="centered">{{ e.description }}</h2>
+{% include 'footer.html' %}
+</body>
+</html>

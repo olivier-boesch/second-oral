@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Liste des oraux</title>
+    {% include 'style.html' %}
+    {% if not dont_scroll %}
+    <script src="{{ url_for("static", filename="scroll.js") }}"></script>
+    {% endif %}
+    {% include 'script_reload.html' %}
+</head>
+{% if not dont_scroll %}
+    <body onload="pageScroll(true)" class="body-for-sticky tv_screen">
+    {% include 'qr_recherche.html' %}
+    {% else %}
+    <body class="body-for-sticky">
+    {% include 'auth_icon.html' %}
+    {% endif %}
+    <h1>Liste des Oraux de second groupe</h1>
+    <table class="table_oraux">
+        <tr>
+            <th>
+                Nom
+            </th>
+            <th>
+                Matiere
+            </th>
+            <th>
+                Heure
+            </th>
+            <th>
+                Salle
+            </th>
+        </tr>
+        {% for oral in oraux %}
+        {% if loop.index % 4 ==2 or loop.index % 4 ==1  %}
+            <tr class="tr_light">
+        {%  else %}
+            <tr class="tr_dark">
+        {% endif %}
+            {%  if loop.index % 2 != 0 %}
+                {% if dont_scroll %}
+                <td rowspan="2">
+                <a href="{{ url_for('candidat', id_candidat=oral['ine']) }}" target="_blank">
+                    {{ oral['nom'] }}</a></td>
+                {% else %}
+                <td rowspan="2">{{ oral['nom'] }}</td>
+                {% endif %}
+            {% endif %}
+            {% if oral['maj'] %}
+            <td class="red">
+            {% else %}
+            <td>
+            {% endif %}
+                {{ oral['matiere'] }}
+            </td>
+            {% if oral['maj'] %}
+            <td class="red">
+            {% else %}
+            <td>
+            {% endif %}
+                {{ oral['heure'] }}
+            </td>
+            {% if oral['maj'] %}
+            <td class="red">
+            {% else %}
+            <td>
+            {% endif %}
+                <a href="{{ url_for('salle', id_salle=oral['salle']) }}">{{ oral['salle'] }}</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% include 'footer.html' %}
+</body>
+</html>

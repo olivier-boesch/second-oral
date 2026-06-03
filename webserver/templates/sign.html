@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Signer l'émargement</title>
+    {% include 'style.html' %}
+    <script src="{{ url_for("static", filename="signature_pad.umd.min.js") }}"></script>
+    <script nonce="{{ csp_nonce() }}">
+        "use strict";
+
+        const SSE_BASE_URL = "{{ url_for('sse.stream') }}";
+        const SALLE_URL = "{{ url_for('salle', id_salle=data['salle']) }}";
+        let signToken = null;
+        let signSource = null;
+
+        // Backoff exponentiel pour la reconnexion SSE
+        let _backoffDelay = 2000;
+        function nextBackoff() {
+            _backoffDelay = Math.min(_backoffDelay * 2, 60000);
+            return _backoffDelay;
+        }
+
+        function openSignSource(token) {
+            if (signSource) signSource.close();
+            const url = `${SSE_BASE_URL}?channel=sign_${encodeURIComponent(token)}`;
+            signSource = new EventSource(url);
+
+            signSource.addEventListener("sign_done", (event) => {
+                if (event.data === token) {
+                    if (signSource) signSource.close();
+                    document.location = SALLE_URL;
+                }
+            });
+
+            signSource.addEventListener("error", () => {
+                signSource.close();
+                setTimeout(() => openSignSource(token), nextBackoff());
+            });
+
+            signSource.addEventListener("open", () => { _backoffDelay = 2000; });
+        }
+
+        window.addEventListener("beforeunload", () => {
+            if (signSource) signSource.close();
+        });
+
+        function request_token() {
+            fetch("{{ url_for('request_token', id_oral=data['id_oral']) }}")
+                .then(r => r.json())
+                .then(json => {
+                    signToken = json.token;
+                    document.getElementById('sign-other-device-qr').style.display = 'block';
+                    document.getElementById('sign-other-device-button').style.display = 'none';
+                    document.getElementById('sign-other-device-qrcode').src = json.image;
+                    openSignSource(signToken);
+                });
+        }
+    </script>
+</head>
+<body class="body-for-sticky">
+<h1>Signature de {{ data['nom'] }}, passation de l'oral de {{ data['matiere'] }} avec {{ data['examinateur'] }} </h1>
+<div id="canvas-wrapper" class="sign-canvas">
+    <p class="centered">Vous allez effectuer une signature qui va attester de votre présence à cette évaluation.</p>
+    <p class="centered">Si vous êtes d'accord, signez dans le cadre ci-dessous.</p>
+    <canvas class="centered"></canvas>
+    <div class="centered sign-buttons">
+        <button onclick="document.location='{{ url_for("salle", id_salle=data['salle']) }}';">< Retour</button>
+        <button onclick="signaturePad.clear();">Effacer</button>
+        <button class="validate" onclick="prepare_form()">Valider</button>
+    </div>
+    <div class="centered sign-buttons">
+        <button class="drop" onclick="cancel_signature();">Enlever l'émargement</button>
+    </div>
+</div>
+<p class="centered" id="sign-other-device-button">
+    <button onclick="request_token();">Signer depuis un autre appareil</button>
+</p>
+<p class="centered" id="sign-other-device-qr">
+    Pour signer depuis un autre appareil, flasher le QR code ci-desous:<br>
+    <img src="" id="sign-other-device-qrcode"><br>
+    Ce code est valable 5 minutes.
+</p>
+<form action="{{ url_for('sign') }}" method="post">
+    {{ form.hidden_tag() }}
+</form>
+{% include 'footer.html' %}
+</body>
+<script nonce="{{ csp_nonce() }}">
+    const canvas = document.querySelector("canvas");
+    const signaturePad = new SignaturePad(canvas);
+    {% if data['emargement'] %}
+        resizeCanvas();
+        signaturePad.fromDataURL("{{ data['emargement'] }}");
+        resizeCanvas();
+    {% endif %}
+
+    function resizeCanvas() {
+        const ratio =  Math.max(window.devicePixelRatio || 1, 1);
+        canvas.width = canvas.offsetWidth * ratio;
+        canvas.height = canvas.offsetHeight * ratio;
+        canvas.getContext("2d").scale(ratio, ratio);
+        signaturePad.clear(); // otherwise isEmpty() might return incorrect value
+    }
+    window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+function cancel_signature(){
+    if(confirm("Confirmer l'éffacement de la signture ?")) {
+        let cancel_field = document.getElementById('cancel');
+        let sign_form = document.querySelector("form");
+        cancel_field.value = "1";
+        sign_form.submit();
+    }
+}
+
+function prepare_form(){
+    let sign_form = document.querySelector("form");
+    let signature_image = document.getElementById("signature");
+    signature_image.value = signaturePad.toDataURL();
+    console.log(signaturePad.toDataURL());
+    sign_form.submit();
+}
+</script>
+</html>

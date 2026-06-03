@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Index des loges</title>
+    {% include 'style.html' %}
+    {% include 'script_reload.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+<h1>Index des loges</h1>
+<div class="grid-container">
+    {% for l in loges %}
+        <a href="{{ url_for('loge', id_loge=l['salle']) }}">
+            <div class="grid-item">{{ l['salle'] }}</div>
+        </a>
+    {% endfor %}
+</div>
+{% include 'footer.html' %}
+</body>
+</html>

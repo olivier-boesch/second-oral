@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>2ndOral — {{ centre_examen }}</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+
+<h1>{{ centre_examen }}</h1>
+
+<div class="centered">
+
+  {# ── Espaces personnels ───────────────────────────────── #}
+  <div class="block_documents">
+    <h2>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+      Accès personnels
+    </h2>
+    <div class="grid-options">
+
+      {# Candidat : fiche directe si connecté, sinon login #}
+      {% if session.get('candidat') %}
+      <a href="{{ url_for('candidat', id_candidat=session['candidat']) }}">
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+          Ma fiche ({{ session['candidat'] }})
+        </div>
+      </a>
+      {% else %}
+      <a href="{{ url_for('login_candidat') }}">
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+          Espace candidat
+        </div>
+      </a>
+      {% endif %}
+
+      {# Examinateur : sa salle directe si connecté, sinon login #}
+      {% if session.get('user') and session['user'] != 'admin' %}
+      <a href="{{ url_for('salle', id_salle=session['user']) }}">
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+          </svg>
+          Ma salle ({{ session['user'] }})
+        </div>
+      </a>
+      {% else %}
+      <a href="{{ url_for('login_examinateur') }}">
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+          </svg>
+          Espace examinateur
+        </div>
+      </a>
+      {% endif %}
+
+      {# Loge : sa loge directe si connectée, sinon login #}
+      {% if session.get('loge') %}
+      <a href="{{ url_for('loge', id_loge=session['loge']) }}">
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Ma loge ({{ session['loge'] }})
+        </div>
+      </a>
+      {% else %}
+      <a href="{{ url_for('login_loge') }}">
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Espace loge
+        </div>
+      </a>
+      {% endif %}
+
+      {# Recherche par INE #}
+      <a href="{{ url_for('candidat_form') }}">
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          Rechercher par INE
+        </div>
+      </a>
+
+      {# Connexion admin — toujours accessible #}
+      {% if not admin %}
+      <a href="{{ url_for('login', link_back=url_for('index')) }}">
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Connexion administrateur
+        </div>
+      </a>
+      {% endif %}
+
+    </div>
+  </div>
+
+  {# ── Administration ───────────────────────────────────── #}
+  <div class="block_documents{% if not admin %} not_available{% endif %}">
+    <h2>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+      </svg>
+      Administration
+      {% if not admin %}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           style="margin-left:.4em; opacity:.6;">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      {% endif %}
+    </h2>
+    <div class="grid-options">
+
+      {% if admin %}<a href="{{ url_for('liste', dont_scroll=True) }}">{% endif %}
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
+            <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          Liste des oraux
+        </div>
+      {% if admin %}</a>{% endif %}
+
+      {% if admin %}
+      <a id="big-screen-only" href="{{ url_for('liste') }}">
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          Grand écran (TV)
+        </div>
+      </a>
+      {% else %}
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          Grand écran (TV)
+        </div>
+      {% endif %}
+
+      {% if admin %}<a href="{{ url_for('index_gestion') }}">{% endif %}
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          Modifier les oraux
+        </div>
+      {% if admin %}</a>{% endif %}
+
+      {% if admin %}<a href="{{ url_for('liste_examinateurs') }}">{% endif %}
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+          Examinateurs
+        </div>
+      {% if admin %}</a>{% endif %}
+
+      {% if admin %}<a href="{{ url_for('gestion_algo') }}">{% endif %}
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 16 12 12 8 16"/>
+            <line x1="12" y1="12" x2="12" y2="21"/>
+            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+          </svg>
+          Lancer algo / Documents
+        </div>
+      {% if admin %}</a>{% endif %}
+
+      {% if admin %}<a href="{{ url_for('verify_logs') }}">{% endif %}
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          Intégrité des logs
+        </div>
+      {% if admin %}</a>{% endif %}
+
+    </div>
+
+  </div>
+
+</div>
+{% include 'footer.html' %}
+</body>
+</html>

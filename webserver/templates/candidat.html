@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Candidat: {{ data['nom'] }}</title>
+    {% include 'style.html' %}
+    <script nonce="{{ csp_nonce() }}">
+        let data = ["{{ data['ine'] }}"];
+    </script>
+    {% include 'script_reload.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'modal.html' %}
+{% include 'auth_icon.html' %}
+    <h1>Candidat : {{ data['nom'] }} ({{ data['ine'] }})</h1>
+
+    {% if data['tiers_temps'] == 1 %}
+        <p class="amenagement centered">~ Candidat disposant d'un aménagement d'épreuve ~</p>
+    {% endif %}
+
+{% if data['oraux'] %}
+    <table class="table_mobile">
+        <tr>
+            <th>Matière</th>
+            <th>Salle</th>
+            <th>Heure</th>
+        </tr>
+    {% for oral in data['oraux'] %}
+        {% if oral['maj'] %}
+        <tr class="red">
+        {% else %}
+        <tr>
+        {% endif %}
+            <td>{{ oral['matiere'] }}</td>
+            <td>{{ oral['salle'] }}</td>
+            <td>{{ oral['heure'] }}</td>
+        </tr>
+    {% endfor %}
+    </table>
+{% else %}
+    <p>Pas d'oraux programmés</p>
+{% endif %}
+
+<p>Les oraux indiqués dans cette <span class="red">couleur</span> ont été modifiés.</p>
+<p>Les horaires des oraux sont susceptibles de changer. Il est <strong>fortement recommandé</strong> de consulter régulièrement cette page.</p>
+<p>Les choix indiqués ci-dessus sont ceux que vous avez donnés en amont de cette épreuve. En cas de changement d'avis, vous devez nous en faire part dès votre arrivée dans l'établissement.</p>
+
+{% if show_credentials and data.get('login_key') %}
+<div class="centered" style="border:1px solid #aba0f9; border-radius:8px; padding:1em; margin:1em auto; max-width:400px;">
+    <p><strong>Vos identifiants de connexion</strong></p>
+    <p>INE : <code>{{ data['ine'] }}</code></p>
+    <p>Mot de passe : <code>{{ data['login_key'] }}</code></p>
+    <p><small>Conservez ces informations, elles ne seront plus affichées ensuite.</small></p>
+</div>
+{% endif %}
+
+<div class="centered">
+    <img src="{{ url_for('candidat_court', _external=True, id_candidat=data['ine']) | qr(scale=4) }}">
+    <a href="#" onclick="open_url('{{ url_for('generate_screen_one', type_doc='fiche_candidat', id_doc=data['id']) }}')"><img src="{{ url_for('static', filename='pdf.png') }}"></a>
+</div>
+
+{% include 'footer.html' %}
+</body>
+</html>

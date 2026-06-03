@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    {% include 'style.html' %}
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Authentification Examinateur</title>
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+<h1>Authentification Examinateur</h1>
+{% if message %}
+    <p class="centered">
+        <strong>Erreur : {{ message }}</strong>
+    </p>
+{% endif %}
+<form class="form-salle" action="{{ url_for('login_examinateur') }}" method="post">
+    {{ form.hidden_tag() }}
+    {{ form.salle.label }}
+    {{ form.salle }}
+    {{ form.password.label }}
+    <div class="password">
+        {{ form.password }}
+        <button type="button" id="togglePassword" class="toggle-pwd" aria-label="Afficher le mot de passe">
+            <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+            </svg>
+        </button>
+    </div>
+    {{ form.submit_button }}
+</form>
+{% include 'footer.html' %}
+<script nonce="{{ csp_nonce() }}">
+    (function () {
+        const btn = document.getElementById('togglePassword');
+        const pwd = document.getElementById('id_password');
+        btn.addEventListener('click', () => {
+            pwd.type = pwd.type === 'password' ? 'text' : 'password';
+            btn.setAttribute('aria-pressed', pwd.type === 'text');
+        });
+    }());
+</script>
+</body>
+</html>

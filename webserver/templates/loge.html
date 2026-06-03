@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{centre }} - Loge {{ data['salle'] }}</title>
+    {% include 'style.html' %}
+    <script nonce="{{ csp_nonce() }}">
+        let data = {{ students_ine | safe }};
+    </script>
+    {% include 'script_reload.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'modal.html' %}
+{% include 'auth_icon.html' %}
+    <h1>Loge {{ data['salle'] }}</h1>
+    <p class="centered">
+        <img src="{{ url_for('loge_court', _external=True, id_loge=data['salle']) | qr(scale=4) }}">
+        <a href="#" onclick="open_url('{{ url_for('generate_screen_one', type_doc="fiche_loge", id_doc=data['salle']) }}')">
+            <img src="{{ url_for('static', filename='pdf.png') }}">
+        </a>
+    </p>
+    {% if data['oraux'] != [] %}
+    <table class="table_mobile">
+        <tr>
+            <th>Candidat (INE)</th>
+            <th>Salle</th>
+            <th>Matière</th>
+            <th>Examinateur</th>
+            <th>Heure Sujet</th>
+            <th>Heure Oral</th>
+        </tr>
+    {%for oral in data['oraux'] %}
+        {% if loop.index % 2 == 1 %}
+            <tr class="tr_light">
+        {% else %}
+            <tr class="tr_dark">
+        {% endif %}
+            {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
+                <a href="{{ url_for('candidat', id_candidat=oral['ine']) }}" target="_blank">{{ oral['candidat'] }}</a> ({{ oral['ine'] }})
+            {% if oral['tiers_temps'] %}
+                        <div class="tooltip">🔴
+                            <span class="tooltiptext">le candidat dispose d'un aménagement d'épreuves
+                            </span>
+                        </div>
+                {% endif %}
+            </td>
+            {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
+                <a href="{{ url_for('salle', id_salle=oral['salle']) }}" target="_blank">{{ oral['salle'] }}</a>
+            </td>
+            {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
+                {{ oral['matiere'] }}
+            </td>
+            {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
+                <a href="{{ url_for('salle', id_salle=oral['salle']) }}" target="_blank">{{ oral['examinateur'] }}</a>
+            </td>
+            {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
+                {{ oral['sujet'] }}
+            </td>
+            {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
+                {{ oral['oral'] }}
+            </td>
+        </tr>
+    {% endfor %}
+    </table>
+{% else %}
+    <p>Pas d'oraux programmés</p>
+{% endif %}
+    <p>Note : 🔴 signifie que le candidat bénéficie d'un aménagement. Les oraux indiqués dans cette <span class="red">couleur</span> ont été modifiés. </p>
+    <p><a href="{{ url_for('loge_form') }}" target="_blank">liste des loges</a></p>
+    <p><a href="{{ url_for('salle_form') }}" target="_blank">liste des salles</a></p>
+{% include 'footer.html' %}
+</body>
+</html>

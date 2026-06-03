@@ -1,0 +1,97 @@
+services:
+
+  # ── Application Flask / Gunicorn ──────────────────────────────────────────
+  app:
+    build: .
+    image: secondoral-app
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Surchargent les valeurs localhost de app_secrets.py pour Docker
+      DB_HOST: mariadb
+      REDIS_URL: redis://redis:6379
+    volumes:
+      # ── Code source monté depuis l'hôte (pas dans l'image) ──────────────
+      - .:/app
+      # ── Secrets : lecture seule, appartient à root sur l'hôte ───────────
+      # Prérequis : sudo chown root:root webserver/app_secrets.py
+      #             sudo chmod 644 webserver/app_secrets.py
+      # (le conteneur tourne en root → peut le lire)
+      - ./webserver/app_secrets.py:/app/webserver/app_secrets.py:ro
+      # ── PDFs générés : volume nommé persistant, partagé avec nginx ───────
+      # Remplace le sous-dossier du bind-mount → survit à docker compose down
+      - static_docs:/app/webserver/static/docs
+    networks:
+      - internal
+    # Pas de port exposé directement : le nginx Docker s'en charge
+
+  # ── Nginx interne (reverse-proxy vers gunicorn) ───────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      # Accessible uniquement depuis localhost : le nginx hôte se connecte ici
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./docker/nginx/second_oral.conf:/etc/nginx/conf.d/default.conf:ro
+      # Assets statiques servis directement (hôte, lecture seule)
+      - ./webserver/static:/app/static:ro
+      # PDFs générés (même volume que l'app, lecture seule pour nginx)
+      - static_docs:/app/static/docs:ro
+    networks:
+      - internal
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── MariaDB ───────────────────────────────────────────────────────────────
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME:-SecondOral}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      MARIADB_CHARACTER_SET_SERVER: utf8mb4
+      MARIADB_COLLATION_SERVER: utf8mb4_unicode_ci
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - internal
+    healthcheck:
+      # --connect seul (sans --innodb_initialized) pour fonctionner dès le démarrage
+      test: ["CMD", "healthcheck.sh", "--connect"]
+      start_period: 2m   # laisse le temps à l'init du volume au premier lancement
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+# ── Volumes persistants ───────────────────────────────────────────────────────
+volumes:
+  mariadb_data:
+  redis_data:
+  static_docs:   # PDFs générés (partagé app ↔ nginx)
+
+# ── Réseau isolé ──────────────────────────────────────────────────────────────
+networks:
+  internal:
+    driver: bridge

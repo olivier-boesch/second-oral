@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Lancement algo</title>
+    {% include 'style.html' %}
+    <style>
+        .algo-section { margin: 1.5em 0; padding: 1em; border-radius: 8px; background: #f5f0ff; }
+        .algo-section h2 { margin-top: 0; font-size: 1.1em; }
+
+        /* CSV */
+        .file-row { display: flex; align-items: center; gap: .7em; margin: .4em 0; flex-wrap: wrap; }
+        .file-row label { min-width: 160px; }
+        .badge { display: inline-block; padding: .2em .6em; border-radius: 4px;
+                 font-size: .85em; font-weight: bold; }
+        .badge-ok      { background: #d4edda; color: #155724; }
+        .badge-missing { background: #f8d7da; color: #721c24; }
+        .badge-running { background: #fff3cd; color: #856404; }
+        .badge-idle    { background: #e2e3e5; color: #383d41; }
+        .upload-feedback { font-size: .85em; margin-top: .5em; min-height: 1.2em; }
+
+        /* Log */
+        #log-console {
+            font-family: monospace; font-size: .85em;
+            background: #1e1e1e; color: #d4d4d4;
+            border-radius: 6px; padding: 1em;
+            min-height: 120px; max-height: 500px;
+            overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+        }
+        .log-ok   { color: #89d185; }
+        .log-warn { color: #dcdcaa; }
+        .log-err  { color: #f14c4c; }
+        .log-sep  { color: #569cd6; }
+
+        /* Téléchargements */
+        .doc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: .8em;
+            margin-top: .8em;
+        }
+        .doc-card {
+            background: white; border: 1px solid #d0c8ef;
+            border-radius: 6px; padding: .8em 1em;
+            display: flex; flex-direction: column; gap: .4em;
+        }
+        .doc-card .doc-title { font-weight: bold; font-size: .95em; }
+        .doc-card .doc-note  { font-size: .78em; color: #666; }
+        .doc-card .doc-actions { display: flex; gap: .5em; flex-wrap: wrap; margin-top: .3em; }
+        .btn-gen, .btn-dl {
+            padding: .3em .8em; border: none; border-radius: 4px;
+            cursor: pointer; font-size: .85em; text-decoration: none;
+            display: inline-flex; align-items: center; gap: .3em;
+        }
+        .btn-gen { background: #7c80fc; color: white; }
+        .btn-gen:hover { background: #5a5ec0; }
+        .btn-gen:disabled { opacity: .5; cursor: not-allowed; }
+        .btn-dl  { background: #aba0f9; color: white; }
+        .btn-dl:hover { background: #7c80fc; }
+        .doc-spinner { display: none; font-size: .8em; color: #666; }
+        .doc-card.loading .doc-spinner { display: inline; }
+        .doc-card.loading .btn-gen { display: none; }
+
+        /* Templates CSV */
+        .templates-list { list-style: none; padding: 0; }
+        .templates-list li { margin: .3em 0; }
+    </style>
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+
+<h1>Lancement de algo.py</h1>
+
+{# ── 1. Fichiers CSV ──────────────────────────────────────────────────────── #}
+<div class="algo-section">
+    <h2>📂 Fichiers CSV</h2>
+    <p>Déposez les fichiers mis à jour puis cliquez sur <em>Envoyer</em>.</p>
+
+    <form id="upload-form">
+        <div class="file-row">
+            <label>candidats.csv</label>
+            <span class="badge {% if csv_status.candidats %}badge-ok{% else %}badge-missing{% endif %}">
+                {% if csv_status.candidats %}présent{% else %}absent{% endif %}
+            </span>
+            <input type="file" name="candidats" accept=".csv">
+        </div>
+        <div class="file-row">
+            <label>profs_total.csv</label>
+            <span class="badge {% if csv_status.profs %}badge-ok{% else %}badge-missing{% endif %}">
+                {% if csv_status.profs %}présent{% else %}absent{% endif %}
+            </span>
+            <input type="file" name="profs" accept=".csv">
+        </div>
+        <div class="file-row">
+            <label>preps.csv</label>
+            <span class="badge {% if csv_status.preps %}badge-ok{% else %}badge-missing{% endif %}">
+                {% if csv_status.preps %}présent{% else %}absent{% endif %}
+            </span>
+            <input type="file" name="preps" accept=".csv">
+        </div>
+        <p style="margin-top:.8em;">
+            <button type="submit">⬆ Envoyer les fichiers sélectionnés</button>
+        </p>
+        <p id="upload-feedback" class="upload-feedback"></p>
+    </form>
+</div>
+
+{# ── 2. Modèles CSV ───────────────────────────────────────────────────────── #}
+<div class="algo-section">
+    <h2>📄 Modèles de fichiers CSV</h2>
+    <ul class="templates-list">
+        <li>
+            <a href="{{ url_for('static', filename='templates_csv/candidats_modele.csv') }}" download>
+                ⬇ candidats_modele.csv
+            </a>
+            <small>— CANDIDAT ; CHOIX DISCIPLINE 1 ; CHOIX DISCIPLINE 2 ; TT ; Etab ; Profs</small>
+        </li>
+        <li>
+            <a href="{{ url_for('static', filename='templates_csv/profs_modele.csv') }}" download>
+                ⬇ profs_modele.csv
+            </a>
+            <small>— Nom ; Disc.poste ; Salle ; Heure mini ; Etab ; Loge</small>
+        </li>
+        <li>
+            <a href="{{ url_for('static', filename='templates_csv/preps_modele.csv') }}" download>
+                ⬇ preps_modele.csv
+            </a>
+            <small>— Matiere ; Matière court ; Temps preparation (min) ; Duree (min)</small>
+        </li>
+    </ul>
+</div>
+
+{# ── 3. Lancement et log ──────────────────────────────────────────────────── #}
+<div class="algo-section">
+    <h2>⚙ Lancement</h2>
+    <p>
+        Statut : <span id="status-badge" class="badge {% if is_running %}badge-running{% else %}badge-idle{% endif %}">
+            {% if is_running %}En cours…{% else %}Inactif{% endif %}
+        </span>
+    </p>
+    <p>
+        <button id="run-btn" {% if is_running %}disabled{% endif %} onclick="lancerAlgo()">
+            ▶ Lancer algo.py
+        </button>
+        <small style="color:#666; margin-left:.5em;">
+            ⚠ Recrée entièrement la base de données.
+        </small>
+    </p>
+    <h2>📋 Sortie en temps réel</h2>
+    <div id="log-console"></div>
+</div>
+
+{# ── 4. Téléchargements ───────────────────────────────────────────────────── #}
+<div class="algo-section">
+    <h2>📥 Télécharger les documents</h2>
+    <p style="font-size:.88em; color:#555;">
+        Les boutons <strong>Générer</strong> recalculent le PDF à partir de la base courante.
+        Les boutons <strong>Télécharger</strong> servent le dernier fichier produit par algo.py.
+    </p>
+
+    <div class="doc-grid">
+
+        {# Paillons candidats : regénérable (login_key en clair en base) #}
+        <div class="doc-card" id="card-paillons-candidats">
+            <span class="doc-title">🎫 Paillons candidats</span>
+            <span class="doc-note">INE + mot de passe + QR code, 10 par page A4</span>
+            <div class="doc-actions">
+                <button class="btn-gen"
+                        onclick="generer('paillons_candidats', 'card-paillons-candidats')">
+                    ⚙ Générer et télécharger
+                </button>
+                <span class="doc-spinner">⏳ Génération…</span>
+            </div>
+        </div>
+
+        {# Paillons examinateurs : algo.py uniquement (hash en base, pas de clair) #}
+        <div class="doc-card" id="card-paillons-exam">
+            <span class="doc-title">🎫 Paillons examinateurs</span>
+            <span class="doc-note">Généré par algo.py — non regénérable depuis le web</span>
+            <div class="doc-actions" id="actions-paillons-exam">
+                <span class="doc-spinner">⏳ Vérification…</span>
+            </div>
+        </div>
+
+        {# Paillons loges : algo.py uniquement #}
+        <div class="doc-card" id="card-paillons-loges">
+            <span class="doc-title">🎫 Paillons loges</span>
+            <span class="doc-note">Généré par algo.py — non regénérable depuis le web</span>
+            <div class="doc-actions" id="actions-paillons-loges">
+                <span class="doc-spinner">⏳ Vérification…</span>
+            </div>
+        </div>
+
+        {# Fiches candidats (lot) #}
+        <div class="doc-card" id="card-fiches-candidats">
+            <span class="doc-title">📋 Fiches candidats (lot)</span>
+            <span class="doc-note">Toutes les fiches en un seul PDF</span>
+            <div class="doc-actions">
+                <button class="btn-gen"
+                        onclick="generer('fiches_candidats', 'card-fiches-candidats')">
+                    ⚙ Générer et télécharger
+                </button>
+                <span class="doc-spinner">⏳ Génération…</span>
+            </div>
+        </div>
+
+        {# Fiches salles (lot) #}
+        <div class="doc-card" id="card-fiches-salles">
+            <span class="doc-title">📋 Fiches salles (lot)</span>
+            <span class="doc-note">Toutes les fiches d'émargement en un seul PDF</span>
+            <div class="doc-actions">
+                <button class="btn-gen"
+                        onclick="generer('fiches_salles', 'card-fiches-salles')">
+                    ⚙ Générer et télécharger
+                </button>
+                <span class="doc-spinner">⏳ Génération…</span>
+            </div>
+        </div>
+
+        {# Fiches loges (lot) #}
+        <div class="doc-card" id="card-fiches-loges">
+            <span class="doc-title">📋 Fiches loges (lot)</span>
+            <span class="doc-note">Toutes les fiches de loge en un seul PDF</span>
+            <div class="doc-actions">
+                <button class="btn-gen"
+                        onclick="generer('fiches_loges', 'card-fiches-loges')">
+                    ⚙ Générer et télécharger
+                </button>
+                <span class="doc-spinner">⏳ Génération…</span>
+            </div>
+        </div>
+
+        {# Liste générale oraux #}
+        <div class="doc-card" id="card-liste-oraux">
+            <span class="doc-title">📄 Liste générale des oraux</span>
+            <span class="doc-note">Tous les candidats, matières, horaires, salles</span>
+            <div class="doc-actions">
+                <button class="btn-gen"
+                        onclick="generer('liste_oraux', 'card-liste-oraux')">
+                    ⚙ Générer et télécharger
+                </button>
+                <span class="doc-spinner">⏳ Génération…</span>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{% include 'footer.html' %}
+
+<script nonce="{{ csp_nonce() }}">
+"use strict";
+
+const SSE_BASE   = "{{ url_for('sse.stream') }}";
+const RUN_URL    = "{{ url_for('algo_run') }}";
+const UPLOAD_URL = "{{ url_for('algo_upload_csv') }}";
+const BATCH_BASE = "/generate-doc-batch/";
+const EXISTS_BASE = "{{ url_for('algo_doc_exists', filename='__fn__') }}".replace('__fn__', '');
+const CSRF = "{{ csrf_token }}";
+
+const logEl       = document.getElementById('log-console');
+const runBtn      = document.getElementById('run-btn');
+const statusBadge = document.getElementById('status-badge');
+let algoSource    = null;
+
+// ── Helpers log ──────────────────────────────────────────────────────────────
+// Nombre maximal de lignes conservées dans le DOM.
+// Au-delà, les plus anciennes sont supprimées pour éviter que le DOM
+// grossisse indéfiniment et que les reflows ralentissent le navigateur.
+const MAX_LOG_LINES = 500;
+
+// Un seul requestAnimationFrame en attente suffit pour regrouper
+// tous les scrolls d'une même "frame" en un seul reflow.
+let _scrollPending = false;
+
+function appendLog(text, cls = '') {
+    const span = document.createElement('span');
+    if (cls) span.className = cls;
+    span.textContent = text + '\n';
+    logEl.appendChild(span);
+
+    // Retire les lignes excédentaires (FIFO)
+    while (logEl.children.length > MAX_LOG_LINES) {
+        logEl.removeChild(logEl.firstChild);
+    }
+
+    // Scroll groupé : un seul reflow par frame d'animation
+    if (!_scrollPending) {
+        _scrollPending = true;
+        requestAnimationFrame(() => {
+            logEl.scrollTop = logEl.scrollHeight;
+            _scrollPending = false;
+        });
+    }
+}
+function classForLine(line) {
+    if (line.startsWith('==='))              return 'log-sep';
+    if (/\[(CRITICAL|ERROR)\]/.test(line))  return 'log-err';
+    if (/\[WARNING\]/.test(line))           return 'log-warn';
+    if (/\[INFO\]/.test(line))              return 'log-ok';
+    return '';
+}
+
+// ── SSE algo_output ──────────────────────────────────────────────────────────
+function connectAlgoSSE() {
+    if (algoSource) algoSource.close();
+    algoSource = new EventSource(`${SSE_BASE}?channel=algo_output`);
+    algoSource.addEventListener('algo_line', (event) => {
+        const p = JSON.parse(event.data);
+        appendLog(p.line, classForLine(p.line));
+        if (p.done) {
+            setRunning(false);
+            algoSource.close();
+            algoSource = null;
+            // Rafraîchit les boutons de téléchargement après la fin de algo.py
+            checkAlgoFiles();
+        }
+    });
+}
+
+function setRunning(running) {
+    runBtn.disabled = running;
+    statusBadge.textContent = running ? 'En cours…' : 'Inactif';
+    statusBadge.className   = 'badge ' + (running ? 'badge-running' : 'badge-idle');
+}
+
+// ── Lancement de algo.py ─────────────────────────────────────────────────────
+function lancerAlgo() {
+    logEl.innerHTML = '';
+    appendLog('=== Envoi de la requête de lancement… ===', 'log-sep');
+    setRunning(true);
+    connectAlgoSSE();
+    fetch(RUN_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) {
+                appendLog(`Erreur : ${d.reason || 'inconnue'}`, 'log-err');
+                setRunning(false);
+                if (algoSource) algoSource.close();
+            }
+        })
+        .catch(e => {
+            appendLog(`Erreur réseau : ${e}`, 'log-err');
+            setRunning(false);
+        });
+}
+
+// ── Upload CSV ───────────────────────────────────────────────────────────────
+document.getElementById('upload-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fb = document.getElementById('upload-feedback');
+    fb.textContent = 'Envoi en cours…';
+    const formData = new FormData(e.target);
+    fetch(UPLOAD_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: formData })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok && d.uploaded.length) {
+                fb.style.color = '#155724';
+                fb.textContent = `✔ Fichiers reçus : ${d.uploaded.join(', ')}`;
+                if (d.uploaded.length) setTimeout(() => location.reload(), 1200);
+            } else if (d.errors.length) {
+                fb.style.color = '#721c24';
+                fb.textContent = `✘ ${d.errors.join(' | ')}`;
+            } else {
+                fb.style.color = '#383d41';
+                fb.textContent = 'Aucun fichier sélectionné.';
+            }
+        })
+        .catch(() => { fb.style.color = 'red'; fb.textContent = 'Erreur réseau.'; });
+});
+
+// ── Génération + téléchargement d'un document ────────────────────────────────
+function generer(type, cardId) {
+    const card = document.getElementById(cardId);
+    card.classList.add('loading');
+    fetch(`${BATCH_BASE}${type}-0`)
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(d => {
+            card.classList.remove('loading');
+            telecharger(d.url);
+        })
+        .catch(e => {
+            card.classList.remove('loading');
+            alert(`Erreur lors de la génération : ${e}`);
+        });
+}
+
+function telecharger(url) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+// ── Vérification de l'existence des fichiers algo.py (paillons examinateurs/loges) ──
+function makeDlButton(url, label) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    a.className = 'btn-dl';
+    a.textContent = `⬇ ${label}`;
+    return a;
+}
+
+function makeAbsent() {
+    const span = document.createElement('span');
+    span.style.cssText = 'font-size:.8em; color:#856404;';
+    span.textContent = '⚠ Non disponible — lancez algo.py d\'abord';
+    return span;
+}
+
+function checkFile(filename, actionsId) {
+    const container = document.getElementById(actionsId);
+    fetch(`${EXISTS_BASE}${encodeURIComponent(filename)}`)
+        .then(r => r.json())
+        .then(d => {
+            container.innerHTML = '';
+            container.appendChild(d.exists ? makeDlButton(d.url, 'Télécharger') : makeAbsent());
+        })
+        .catch(() => {
+            container.innerHTML = '';
+            container.appendChild(makeAbsent());
+        });
+}
+
+function checkAlgoFiles() {
+    checkFile('paillons_examinateurs.pdf', 'actions-paillons-exam');
+    checkFile('paillons_loges.pdf',        'actions-paillons-loges');
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+checkAlgoFiles();
+
+{% if is_running %}
+connectAlgoSSE();
+appendLog('=== algo.py est déjà en cours — connexion au flux existant ===', 'log-sep');
+{% endif %}
+</script>
+</body>
+</html>

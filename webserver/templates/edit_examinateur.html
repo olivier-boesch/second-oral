@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{centre }} - Edition Examinateur: {{ donnees_examinateur['nom'] }}</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+<h1>Edition d'examinateur: {{ donnees_examinateur['nom'] }}</h1>
+<div class="centered">
+    <img src="{{ url_for('salle_court', _external=True, id_salle=donnees_examinateur['salle']) | qr(scale=4) }}">
+</div>
+<form class="classic" action="{{ url_for('edit_examinateur') }}" method="post">
+    <fieldset>
+        <legend>Informations de l'examinateur</legend>
+        <p>
+            <input type="hidden" name="id" value="{{ donnees_examinateur['id'] }}">
+            <input type="hidden" name="link_back" value="{{ link_back }}">
+        </p>
+        <p>
+            <label for="nom">Nom: </label>
+            <input type="text" name="nom" value="{{ donnees_examinateur['nom'] }}">
+        </p>
+        <p>
+            <label for="etablissements">Etablissements: </label>
+            <input type="text" name="etablissements" title="Etablissements (séparés par des virgules)"  value="{{ donnees_examinateur['etablissements'] }}">
+        </p>
+        <p><span>Matière:</span><span>{{ donnees_examinateur['matiere'] }}</span></p>
+        <p>
+            <label for="salle">Salle: </label>
+            <input type="text" name="salle" value="{{ donnees_examinateur['salle'] }}">
+        </p>
+        <p>
+            <label for="loge">Loge: </label>
+            <input type="text" name="loge" value="{{ donnees_examinateur['loge'] }}">
+        </p>
+        <p><span>Nombre d'oraux:</span><span>{{ donnees_examinateur['nb_oraux'] }}</span></p>
+        <p class="centered">
+            <button type="submit" class="button">Valider</button>
+            <button type="button" onclick="document.location='{{ url_for('edit_examinateur', id_examinateur=donnees_examinateur['id'], link_back=link_back) }}';" class="button">Reset</button>
+            <button type="button" onclick="document.location='{% if link_back %}{{ link_back }}{% else %}{{ url_for('liste_examinateurs') }}{% endif %}';" class="button">Annuler</button>
+        </p>
+    </fieldset>
+</form>
+    <table class="table_oraux">
+        <tr>
+            <th>
+                Ordre
+            </th>
+            <th>
+                Nom
+            </th>
+            <th>
+                Établissements
+            </th>
+            <th>
+                Heure
+            </th>
+            <th>
+                Editer
+            </th>
+        </tr>
+        {% for oral in liste_oraux %}
+        <tr>
+            <td>
+                {{ loop.index }}
+            </td>
+            <td>
+                {{ oral['candidat'] }} ({{ oral['ine'] }})
+                {% if oral['tiers_temps'] %}
+                        <div class="tooltip">🔴
+                            <span class="tooltiptext">aménagement d'épreuves</span>
+                        </div>
+                {% endif %}
+            </td>
+            <td>
+                {{ oral['etablissement'] }}
+            </td>
+            <td>
+                {{ oral['heure'] }}
+            </td>
+            <td>
+                <a href="{{ url_for('edit_oral', oral=oral['id'], link_back=url_of_page) }}">
+                    <div class="tooltip">
+                        <img alt="Editer oral" src="{{ url_for('static', filename='edit.png') }}">
+                        <span class="tooltiptext">éditer</span>
+                    </div>
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% include 'footer.html' %}
+</body>
+</html>

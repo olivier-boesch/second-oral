@@ -1,0 +1,66 @@
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    "use strict";
+
+    const SSE_URL = "{{ url_for('sse.stream') }}?channel=general";
+    let source = null;
+
+    function connect() {
+        if (source) {
+            source.close();
+        }
+        source = new EventSource(SSE_URL);
+
+        // Rechargement complet demandé par l'admin
+        source.addEventListener("reload_page", function () {
+            location.reload();
+        });
+
+        // Mise à jour d'un oral : modal si la page concerne ce candidat,
+        // sinon rechargement direct (ex. liste générale sans modal)
+        source.addEventListener("data_updated", function (event) {
+            var ine = event.data;
+            var modal = document.getElementById("modal");
+
+            if (!modal) {
+                location.reload();
+                return;
+            }
+
+            // Filtre : concerne-t-il un candidat affiché sur cette page ?
+            if (typeof data === "undefined" || data.indexOf(ine) === -1) {
+                return;
+            }
+
+            modal.style.display = "block";
+
+            function closeModal() {
+                modal.style.display = "none";
+                location.reload();
+            }
+
+            var closeBtn = modal.querySelector(".close");
+            if (closeBtn) { closeBtn.onclick = closeModal; }
+            window.onclick = function (e) {
+                if (e.target === modal) { closeModal(); }
+            };
+        });
+    }
+
+    // Pause quand l'onglet est masqué (économise une connexion Redis)
+    document.addEventListener("visibilitychange", function () {
+        if (document.hidden) {
+            if (source) { source.close(); source = null; }
+        } else {
+            connect();
+        }
+    });
+
+    // Fermeture propre à la navigation
+    window.addEventListener("beforeunload", function () {
+        if (source) { source.close(); }
+    });
+
+    connect();
+}());
+</script>

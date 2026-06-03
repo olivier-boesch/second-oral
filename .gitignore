@@ -1,0 +1,57 @@
+# ── Secrets — NE JAMAIS VERSIONNER ──────────────────────────────────────────
+webserver/app_secrets.py
+webserver/app_secrets.py.bak
+.env
+.env.bak
+otp_setup.png
+
+# ── Données personnelles (RGPD) ───────────────────────────────────────────────
+data/candidats.csv
+data/candidats.csv.*
+data/profs_total.csv
+data/profs_total.csv.*
+# preps.csv est versionné (pas de données personnelles)
+
+# Fichiers CSV à la racine (éventuels résidus)
+candidats.csv
+profs_total.csv
+
+# ── Documents générés ─────────────────────────────────────────────────────────
+webserver/static/docs/
+paillons_*.pdf
+credentials.pdf
+*.pdf
+
+# ── Logs et fichiers runtime ──────────────────────────────────────────────────
+log.txt
+result.txt
+*.log
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pycache
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# ── Environnement virtuel ─────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+# .env est déjà exclu ci-dessus
+# docker-compose.override.yml si utilisé localement
+
+# ── Éditeurs et OS ────────────────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+Thumbs.db

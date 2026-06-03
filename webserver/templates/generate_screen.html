@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>2ndOral — Génération en cours…</title>
+    {% include 'style.html' %}
+    <style>
+        body { padding: 0 !important; margin: 0; }
+        .center_all {
+            position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        .center_all img { width: 56px; height: 56px; }
+        #message { color: var(--text-md); font-size: .95rem; margin-top: .75em; }
+        #message.red { color: var(--danger); }
+    </style>
+    <script nonce="{{ csp_nonce() }}">
+        function generate() {
+            fetch('{{ generation_url }}')
+                .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(data => {
+                    document.location = data.url;
+                    setTimeout(() => window.close(), 500);
+                })
+                .catch(() => {
+                    const m = document.getElementById('message');
+                    m.textContent = '~ La génération a échoué ~';
+                    m.classList.add('red');
+                    setTimeout(() => window.close(), 2000);
+                });
+        }
+    </script>
+</head>
+<body onload="generate();">
+    <div class="center_all">
+        <img alt="Chargement…" src="{{ url_for('static', filename='loading.svg') }}">
+        <p id="message">~ Création du document ~</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# Le code source n'est pas copié dans l'image (bind-mount dans docker-compose).
+# Ce fichier réduit le contexte envoyé au daemon Docker lors du build,
+# qui ne contient que requirements.txt.
+
+# Tout sauf requirements.txt
+*
+!requirements.txt

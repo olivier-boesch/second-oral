@@ -1,0 +1,5 @@
+<div class="qr-recherche">
+    <p>Recherche:</p>
+    <p>{{ url_for('candidat_form_court', _external=True) }}</p>
+    <img src="{{ url_for('candidat_form_court', _external=True) | qr(scale=10, light="#fefeff", dark="#000000") }}">
+</div>

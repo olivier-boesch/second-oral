@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Signer l'émargement</title>
+    {% include 'style.html' %}
+    <script src="{{ url_for("static", filename="signature_pad.umd.min.js") }}"></script>
+    </head>
+<body class="body-for-sticky">
+<h1>Signature de {{ data['nom'] }}, passation de l'oral de {{ data['matiere'] }} avec {{ data['examinateur'] }} </h1>
+<div id="canvas-wrapper" class="sign-canvas centered">
+    <p class="centered">Vous allez effectuer une signature qui va attester de votre présence à cette évaluation.</p>
+    <p class="centered">Si vous êtes d'accord, signez dans le cadre ci-dessous.</p>
+    <canvas></canvas>
+    <div class="sign-buttons">
+        <button onclick="window.close();">Annuler</button>
+        <button onclick="signaturePad.clear();">Effacer</button>
+        <button class="validate" onclick="prepare_form();">Valider</button>
+    </div>
+</div>
+<form action="{{ url_for('sign_other_device', token=form.token.data) }}" method="post">
+    {{ form.hidden_tag() }}
+    {{ form.signature_image }}
+    {{ form.cancel }}
+    {{ form.token }}
+    {{ form.id_oral }}
+</form>
+{% include 'footer.html' %}
+</body>
+<script nonce="{{ csp_nonce() }}">
+    const canvas = document.querySelector("canvas");
+    const signaturePad = new SignaturePad(canvas);
+    {% if data['emargement'] %}
+        resizeCanvas();
+        signaturePad.fromDataURL("{{ data['emargement'] }}");
+        resizeCanvas();
+    {% endif %}
+
+    function resizeCanvas() {
+        const ratio =  Math.max(window.devicePixelRatio || 1, 1);
+        canvas.width = canvas.offsetWidth * ratio;
+        canvas.height = canvas.offsetHeight * ratio;
+        canvas.getContext("2d").scale(ratio, ratio);
+        signaturePad.clear(); // otherwise isEmpty() might return incorrect value
+    }
+    window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+function cancel_signature(){
+    let cancel_field = document.getElementById('cancel');
+    let sign_form = document.querySelector("form");
+    cancel_field.value = "1";
+    sign_form.submit();
+}
+
+function prepare_form(){
+    let sign_form = document.querySelector("form");
+    let signature_image = document.getElementById("signature");
+    signature_image.value = signaturePad.toDataURL();
+    sign_form.submit();
+}
+</script>
+</html>

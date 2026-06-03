@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre}} - Ajout d'Examinateur</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+<h1>Ajout d'examinateur</h1>
+<form class="classic" action="{{ url_for('add_examinateur') }}" method="post">
+    <fieldset>
+        <legend>Information de l'examinateur</legend>
+        <p>
+            <label for="nom">Nom: </label>
+            <input type="text" name="nom" placeholder="Nom complet">
+        </p>
+        <p>
+            <label for="etablissements">Etablissements: </label>
+            <input type="text" name="etablissements" title="Etablissements (séparés par des virgules)" placeholder="etab1,etab2">
+        </p>
+        <p>
+            <label for="matiere">Matière: </label>
+            <select name="matiere">
+                {% for matiere in liste_matieres %}
+                    <option value="{{ matiere['id'] }}">{{ matiere['nom'] }}</option>
+                {% endfor %}
+            </select>
+        </p>
+        <p>
+            <label for="salle">Salle: </label>
+            <input type="text" name="salle" placeholder="Salle attribuée">
+        </p>
+        <p>
+            <label for="loge">Loge: </label>
+            <input type="text" name="loge" placeholder="Loge correspondante">
+        </p>
+        <p class="centered">
+            <button type="submit" class="button">Valider</button>
+            <button type="reset" class="button">Reset</button>
+            <button type="button" onclick="document.location='{{ url_for('liste_examinateurs') }}';" class="button">Annuler</button>
+        </p>
+    </fieldset>
+</form>
+{% include 'footer.html' %}
+</body>
+</html>

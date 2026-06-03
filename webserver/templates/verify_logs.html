@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Verification des logs</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+    <h1>Verification des logs</h1>
+    <div>
+        <a href="{{ url_for('index_gestion') }}">Liste des oraux</a><br>
+        <a href="{{ url_for('liste_examinateurs') }}">Liste des examinateurs</a><br>
+        <a href="{{ url_for('reload_pages', link_back='/gestion') }}">Recharger toutes les pages ouvertes</a><br>
+        <a href="#" onclick="open_url('{{ url_for('generate_screen_batch', type_doc="liste_oraux", id_doc=0) }}');">Liste générale des oraux (pdf)</a><br>
+        <a href="#" onclick="open_url('{{ url_for('generate_screen_batch', type_doc="fiches_candidats", id_doc=0) }}')">Fiches des candidats (pdf)</a><br>
+        <a href="#" onclick="open_url('{{ url_for('generate_screen_batch', type_doc="fiches_salles", id_doc=0) }}')">Fiches des salles (pdf)</a><br>
+        <a href="#" onclick="open_url('{{ url_for('generate_screen_batch', type_doc="fiches_loges", id_doc=0) }}')">Fiches des loges (pdf)</a><br>
+    </div>
+    <p class="centered">Intégrité des logs: {% if logs_integrity_ok %}✅{% else %}❌{% endif %}</p>
+    <p>Entrées de log ({{ logs|length }} entrées) :</p>
+    <table>
+        <thead>
+            <th>Heure (UTC)</th>
+            <th>Hash Vérifié</th>
+            <th>Table/Action</th>
+            <th>Données (cliquer pour plus de détails)</th>
+        </thead>
+        {% for log in logs %}
+            <tr>
+                <td>{{ log['timestamp'] }}</td>
+                <td>{% if log['ok'] %}✅{% else %}❌{% endif %}</td>
+                <td>{{ log['table_name'] }}/{{ log['action_data']['action'] }}</td>
+                <td><a href="#" onclick="open_log({{ log['id'] }})">{{ log['action_data']|items|join(',')|truncate(100, False, '...', 5) }}</a></td>
+            </tr>
+        {% endfor %}
+        {% for log in logs %}
+        <dialog id="{{log['id']}}">
+            <form method="dialog">
+                <h3>Log ID {{ log['id'] }}</h3>
+                <p><strong>Timestamp (UTC):</strong> {{ log['timestamp'] }}</p>
+                <p><strong>Table:</strong> {{ log['table_name'] }}</p>
+                <p><strong>Action:</strong> {{ log['action_data']['action'] }}</p>
+                <p><strong>Données:</strong></p>
+                <pre>{{ log['action_data']|tojson(indent=2) }}</pre>
+                {% if 'image_new' in log.keys() %}
+                <p><strong>Images:</strong></p>
+                <figure>
+                    <figcaption>Nouvelle image:</figcaption>
+                    <img src="{{ log['image_new'] }}" alt="Image" width="200px">
+                </figure>
+                {% endif %}
+                {% if 'image_old' in log.keys() %}
+                <figure>
+                    <figcaption>Ancienne image:</figcaption>
+                    <img src="{{ log['image_old'] }}" alt="Image" width="200px">
+                </figure>
+                {% endif %}
+                <menu>
+                    <button value="close">Fermer</button>
+                </menu>
+            </form>
+            <!--- {{ log|items|join(',') }} --->
+        </dialog>
+        {% endfor %}
+    </table>
+    {% include 'footer.html' %}
+</body>
+<script nonce="{{ csp_nonce() }}">
+    function open_log(log_id) {
+        const dialog = document.getElementById(log_id);
+        dialog.showModal();
+    }
+</script>
+</html>

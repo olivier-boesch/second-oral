@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }}</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+    {% include 'auth_icon.html' %}
+    <h1>Gestion des oraux de second groupe - développement</h1>
+    <ul>
+        <li><strong>Programmeur principal</strong>: <a href="https://www.linkedin.com/in/olivier-boesch/">Olivier Boesch</a> - olivier.boesch@ac-aix-marseille.fr</li>
+        <li><strong>Remarques, recherche de bug, prospositions</strong>: Manon Barbé - manon.barbe@ac-aix-marseille.fr</li>
+    </ul>
+    <p>
+        Cette application est développée en python avec Flask.
+        Son but est de faciliter l'organisation des oraux de second groupe.
+        Ce projet est divisé en deux parties:
+        <ul>
+            <li>Le présent site web : permet l'affichage et la gestion le jour J</li>
+            <li>un algorithme d'appairage qui permet de préparer au mieux les oraux en amont</li>
+        </ul>
+    </p>
+    <p>running on <strong>{{ hostname }}</strong>; instance: {{ centre }}</p>
+    {% include 'footer.html' %}
+</body>
+</html>

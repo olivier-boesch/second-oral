@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    {% include 'style.html' %}
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{centre}} - Index des salles</title>
+    {% include 'script_reload.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+<h1>Index des salles</h1>
+<div class="grid-container">
+    {% for s in salles %}
+        <a href="{{ url_for('salle', id_salle=s['salle'])  }}">
+            <div class="grid-item"><span class="salle_big">{{ s['salle'] }}</span> - {{ s['nom'] }} ({{ s['matiere'] }})</div>
+        </a>
+    {% endfor %}
+</div>
+{% include 'footer.html' %}
+</body>
+</html>

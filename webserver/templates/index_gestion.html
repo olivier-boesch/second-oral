@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Gestion des oraux</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+    <h1>Edition des Oraux de second groupe</h1>
+    <div>
+        <a href="{{ url_for('liste_examinateurs') }}">Liste des examinateurs</a><br>
+        <a href="{{ url_for('reload_pages', link_back='/gestion') }}">Recharger toutes les pages ouvertes</a><br>
+        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="liste_oraux", id_doc=0) }}">Liste générale des oraux (pdf)</a><br>
+        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_candidats", id_doc=0) }}">Fiches des candidats (pdf)</a><br>
+        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_salles", id_doc=0) }}">Fiches des salles (pdf)</a><br>
+        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_loges", id_doc=0) }}">Fiches des loges (pdf)</a><br>
+        <a href="{{ url_for("verify_logs") }}">Vérifier l'intégrité des données</a>
+    </div>
+    <table class="table_oraux">
+        <tr>
+            <th>
+                Nom
+            </th>
+            <th>
+                Matiere
+            </th>
+            <th>
+                Heure
+            </th>
+            <th>
+                Salle
+            </th>
+            <th>
+                Éditer
+            </th>
+        </tr>
+        {% for oral in oraux %}
+            <tr class="{{ loop.cycle("tr_light","tr_light","tr_dark","tr_dark") }}">
+            {%  if loop.index0 % 2 == 0 %}
+                <td rowspan="2">
+                    <a href="{{ url_for('candidat', id_candidat=oral['ine']) }}" target="_blank">
+                        {{ oral['nom'] }} ({{ oral['ine'] }})</a> {% if oral['tiers_temps'] %}
+                        <div class="tooltip">🔴
+                            <span class="tooltiptext">aménagement d'épreuves</span>
+                        </div> {% endif %}
+                </td>
+            {% endif %}
+            {% if oral['maj'] %}
+            <td class="red">
+            {% else %}
+            <td>
+            {% endif %}
+                <a id="{{ oral['id_oral'] }}">{{ oral['matiere'] }}</a>
+            </td>
+            {% if oral['maj'] %}
+            <td class="red">
+            {% else %}
+            <td>
+            {% endif %}
+                {{ oral['heure'] }}
+            </td>
+            {% if oral['maj'] %}
+            <td class="red">
+            {% else %}
+            <td>
+            {% endif %}
+                <a href="{{ url_for('salle', id_salle=oral['salle']) }}" target="_blank">{{ oral['salle'] }}</a>
+            </td>
+            <td>
+                <a href="{{ url_for('edit_oral', oral=oral['id_oral']) }}">
+                    <div class="tooltip">
+                        <img alt="Editer oral" src="{{ url_for('static', filename='edit.png') }}">
+                        <span class="tooltiptext">éditer</span>
+                    </div>
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% include 'footer.html' %}
+</body>
+</html>

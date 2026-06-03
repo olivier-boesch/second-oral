@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>2ndOral — Édition oral : {{ donnees_oral['nom'] }}</title>
+    {% include 'style.html' %}
+    <script nonce="{{ csp_nonce() }}">
+        function update_examinateurs() {
+            const matiere = document.getElementById('select_matieres').value;
+            fetch("{{ url_for('liste_examinateurs_json') }}?matiere=" + encodeURIComponent(matiere))
+                .then(r => r.json())
+                .then(json => {
+                    const sel = document.getElementById('select_examinateurs');
+                    sel.innerHTML = '<option>--</option>';
+                    json.forEach(obj => {
+                        const opt = document.createElement('option');
+                        opt.value = obj.id;
+                        opt.textContent = obj.nom + ' (' + obj.salle
+                            + (obj.etablissements ? ' — ' + obj.etablissements : '') + ')';
+                        sel.appendChild(opt);
+                    });
+                });
+        }
+    </script>
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+
+<h1>Édition — {{ donnees_oral['nom'] }} / {{ donnees_oral['matiere'] }}</h1>
+
+<div style="max-width:560px; margin:0 auto;">
+<form class="form-salle" action="{{ url_for('edit_oral') }}" method="post"
+      style="width:100%; max-width:100%;">
+    {{ form.hidden_tag() if form is defined }}
+    <input type="hidden" name="id"        value="{{ donnees_oral['id'] }}">
+    <input type="hidden" name="link_back" value="{{ link_back }}">
+    <input type="hidden" name="ine"       value="{{ donnees_oral['ine'] }}">
+
+    <p style="margin:0; font-size:.9rem; color:var(--text-md);">
+        {{ donnees_oral['nom'] }}
+        <span style="color:var(--text-sm);">({{ donnees_oral['ine'] }} · {{ donnees_oral['etablissement'] }})</span>
+        {% if donnees_oral['tiers_temps'] %}<span title="Aménagement">🔴</span>{% endif %}
+    </p>
+
+    <label for="heure_sujet">Heure de sujet (début préparation)</label>
+    <input type="time" name="heure_sujet" id="heure_sujet"
+           value="{{ donnees_oral['heure_sujet'] }}">
+
+    <label for="heure_oral">Heure d'oral (début oral)</label>
+    <input type="time" name="heure_oral" id="heure_oral"
+           value="{{ donnees_oral['heure_oral'] }}">
+
+    <label for="select_matieres">Matière</label>
+    <select name="matiere" id="select_matieres" onchange="update_examinateurs();">
+        {% for m in matieres %}
+        <option value="{{ m['id'] }}"
+                {% if m['id'] == donnees_oral['id_matiere'] %}selected{% endif %}>
+            {{ m['nom'] }}
+        </option>
+        {% endfor %}
+    </select>
+
+    <label for="select_examinateurs">Examinateur</label>
+    <select name="examinateur" id="select_examinateurs">
+        {% for ex in examinateurs %}
+        <option value="{{ ex['id'] }}"
+                {% if ex['id'] == donnees_oral['id_examinateur'] %}selected{% endif %}>
+            {{ ex['nom'] }} ({{ ex['salle'] }}{% if ex['etablissements'] %} — {{ ex['etablissements'] }}{% endif %})
+        </option>
+        {% endfor %}
+    </select>
+
+    <label style="display:flex; align-items:center; gap:.5em; cursor:pointer;">
+        <input type="checkbox" name="mis_a_jour" checked
+               style="width:auto; accent-color:var(--primary);">
+        Marquer comme modifié (indicateur rouge)
+    </label>
+
+    <div style="display:flex; gap:.5em; flex-wrap:wrap;">
+        <button type="submit">✓ Valider</button>
+        <button type="button" class="outline"
+                onclick="document.location='{{ url_for('edit_oral', oral=donnees_oral['id']) }}';">
+            ↺ Réinitialiser
+        </button>
+        <button type="button" class="outline"
+                onclick="document.location='{% if link_back %}{{ link_back }}{% else %}{{ url_for('index_gestion', _anchor=''~donnees_oral['id']) }}{% endif %}';">
+            ← Annuler
+        </button>
+    </div>
+</form>
+</div>
+
+<h2>Oraux du candidat</h2>
+<table class="table_oraux">
+    <tr>
+        <th>Matière</th>
+        <th>Examinateur (Salle)</th>
+        <th>Heure sujet</th>
+        <th>Heure oral</th>
+        <th>Heure fin</th>
+    </tr>
+    {% for oral in liste_oraux %}
+    <tr {% if oral['id'] == donnees_oral['id'] %}style="font-weight:600; background:var(--surface-2);"{% endif %}>
+        <td>{% if oral['id'] == donnees_oral['id'] %}▶ {% endif %}{{ oral['matiere'] }}</td>
+        <td>{{ oral['examinateur'] }} ({{ oral['salle'] }})</td>
+        <td>{{ oral['heure_sujet'] }}</td>
+        <td>{{ oral['heure_oral'] }}</td>
+        <td>{{ oral['heure_fin'] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+{% include 'footer.html' %}
+</body>
+</html>

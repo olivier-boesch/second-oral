@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Liste des examinateurs</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+    <h1>Liste des Examinateurs</h1>
+    <div>
+        <a href="{{ url_for('index_gestion') }}">Liste des oraux</a><br>
+        <a href="{{ url_for('reload_pages', link_back='/gestion') }}">Recharger toutes les pages ouvertes</a><br>
+        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="liste_oraux", id_doc=0) }}">Liste générale des oraux (pdf)</a><br>
+        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_candidats", id_doc=0) }}">Fiches des candidats (pdf)</a><br>
+        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_salles", id_doc=0) }}">Fiches des salles (pdf)</a><br>
+        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_loges", id_doc=0) }}">Fiches des loges (pdf)</a><br>
+        <a href="{{ url_for("verify_logs") }}">Vérifier l'intégrité des données</a>
+        <a href="{{ url_for('add_examinateur') }}">
+            <div class="tooltip">
+                <img src="{{ url_for('static', filename='add.png') }}">
+                <span class="tooltiptext">Créer un nouvel Examinateur</span>
+            </div>
+        </a>
+    </div>
+    <table class="table_oraux">
+        <tr>
+            <th>
+                Nom
+            </th>
+            <th>
+                Fiche Salle
+            </th>
+            <th>
+                Établissements
+            </th>
+            <th>
+                Matiere
+            </th>
+            <th>
+                Salle
+            </th>
+            <th>
+              Loge
+            </th>
+            <th>
+                Nombre d'oraux
+            </th>
+            <th>
+                Supprimer
+            </th>
+        </tr>
+        {% for ex in examinateurs %}
+            <tr class="{{ loop.cycle("tr_light", "tr_dark") }}">
+                <td>
+                    <div class="tooltip">
+                        <a href="{{ url_for('edit_examinateur', id_examinateur=ex['id']) }}">{{ ex['nom'] }}</a>
+                        <span class="tooltiptext">éditer</span>
+                    </div>
+                </td>
+                <td>
+                    <a href="{{ url_for('generate_screen_one', type_doc="fiche_salle", id_doc=ex['salle']) }}" target="_blank">
+                        <img src="{{ url_for('static', filename='pdf.png') }}">
+                    </a>
+                </td>
+                <td>
+                    {{ ex['etablissements']}}
+                </td>
+                <td>
+                    {{ ex['matiere'] }}
+                </td>
+                <td>
+                    <div class="tooltip">
+                        <a href="{{ url_for('edit_examinateur', id_examinateur=ex['id']) }}">{{ ex['salle'] }}</a>
+                        <span class="tooltiptext">éditer</span>
+                    </div>
+                </td>
+                <td>
+                    {{ ex['loge'] }}
+                </td>
+                <td>
+                    {{ ex['nb_oraux'] }}
+                </td>
+                <td>
+                    <div class="tooltip">
+                        {% if ex['nb_oraux'] == 0 %}
+                            <a href="{{ url_for('delete_examinateur', id_examinateur=ex['id']) }}">
+                                <img src="{{ url_for('static', filename='delete.png') }}">
+                            </a>
+                        {% endif %}
+                    <span class="tooltiptext">Supprimer maintenant <b>SANS CONFIRMATION !</b></span>
+                    </div>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+    {% include 'footer.html' %}
+</body>
+</html>
