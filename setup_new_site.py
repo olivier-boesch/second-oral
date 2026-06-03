@@ -238,6 +238,230 @@ def show_otp_setup(otp_key: str, centre: str, output_dir: Path) -> None:
         warn("Installez-le : pip install pyotp")
 
 
+# ── PDF administrateur ───────────────────────────────────────────────────────
+
+def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
+                       output_dir: Path) -> Path | None:
+    """
+    Génère un PDF confidentiel pour l'administrateur contenant :
+    - Titre 2ndOral + centre d'examen
+    - Adresse du site
+    - QR code TOTP (à scanner avec Aegis / Google Authenticator)
+    - Clé TOTP brute (saisie manuelle)
+    - URI TOTP complète
+    """
+    try:
+        import datetime as _dt
+        import tempfile as _tempfile
+        from reportlab.lib import colors as _rc, pagesizes as _rp
+        from reportlab.lib.units import mm
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Image as RLImage,
+            Table, TableStyle, HRFlowable,
+        )
+        from reportlab.lib.utils import ImageReader
+    except ImportError:
+        warn("reportlab non disponible — PDF admin non généré.")
+        return None
+
+    if not _HAS_SEGNO:
+        warn("segno non disponible — PDF admin non généré.")
+        return None
+
+    # ── Palette couleurs (identique à main.css) ──────────────────────────────
+    C_PRIMARY  = _rc.HexColor('#6c63ff')   # accent violet
+    C_SURFACE  = _rc.HexColor('#f5f3ff')   # fond léger
+    C_SURFACE2 = _rc.HexColor('#ede9fe')   # bandeau
+    C_TEXT     = _rc.HexColor('#1e1b4b')   # texte principal
+    C_MUTED    = _rc.HexColor('#8b85b3')   # texte secondaire
+    C_WHITE    = _rc.white
+    C_DANGER   = _rc.HexColor('#dc2626')
+
+    # ── Police ────────────────────────────────────────────────────────────────
+    font_path = PROJECT_ROOT / 'webserver' / 'PoppinsLatin-Regular.ttf'
+    font = 'Helvetica'
+    if font_path.exists():
+        try:
+            pdfmetrics.registerFont(TTFont('Poppins', str(font_path)))
+            font = 'Poppins'
+        except Exception:
+            pass
+    font_b = 'Helvetica-Bold' if font == 'Helvetica' else font
+
+    # ── Fichier de sortie ─────────────────────────────────────────────────────
+    pdf_path = output_dir / 'admin_setup.pdf'
+    doc = SimpleDocTemplate(
+        str(pdf_path),
+        pagesize=_rp.portrait(_rp.A4),
+        rightMargin=18 * mm,
+        leftMargin=18 * mm,
+        topMargin=15 * mm,
+        bottomMargin=15 * mm,
+        title=f"2ndOral — Configuration administrateur — {fqdn}",
+        author="setup_new_site.py",
+    )
+
+    W = _rp.portrait(_rp.A4)[0] - 36 * mm  # largeur utile
+
+    # ── Styles de texte ───────────────────────────────────────────────────────
+    def ps(name, **kw):
+        return ParagraphStyle(name, fontName=font, textColor=C_TEXT, **kw)
+
+    st_big_title = ps('bigtitle', fontSize=32, textColor=C_WHITE,
+                      fontName=font_b, alignment=TA_CENTER, leading=38)
+    st_subtitle  = ps('subtitle',  fontSize=11, textColor=C_MUTED,
+                      alignment=TA_CENTER, spaceAfter=4 * mm)
+    st_section   = ps('section',   fontSize=13, textColor=C_PRIMARY,
+                      fontName=font_b, spaceBefore=6 * mm, spaceAfter=3 * mm)
+    st_label     = ps('label',     fontSize=9,  textColor=C_MUTED,
+                      spaceBefore=1 * mm)
+    st_value     = ps('value',     fontSize=11, fontName=font_b,
+                      spaceAfter=2 * mm)
+    st_key       = ps('key',       fontSize=13, fontName='Courier-Bold',
+                      textColor=C_TEXT, alignment=TA_CENTER,
+                      spaceBefore=3 * mm, spaceAfter=3 * mm)
+    st_uri       = ps('uri',       fontSize=7,  fontName='Courier',
+                      textColor=C_MUTED, alignment=TA_CENTER,
+                      wordWrap='CJK')
+    st_warning   = ps('warning',   fontSize=9,  textColor=C_DANGER,
+                      fontName=font_b, alignment=TA_CENTER,
+                      spaceBefore=5 * mm)
+    st_foot      = ps('foot',      fontSize=7,  textColor=C_MUTED,
+                      alignment=TA_CENTER)
+
+    story = []
+
+    # ── Bandeau titre ─────────────────────────────────────────────────────────
+    title_table = Table(
+        [[Paragraph("2ndOral", st_big_title)],
+         [Paragraph("Document Administrateur", ps(
+             'hdr2', fontSize=12, textColor=_rc.HexColor('#d4d0ff'),
+             alignment=TA_CENTER))]],
+        colWidths=[W],
+    )
+    title_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), C_PRIMARY),
+        ('TOPPADDING',    (0, 0), (-1, -1), 6 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6 * mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 0),
+        ('ROUNDEDCORNERS', [3 * mm]),
+    ]))
+    story.append(title_table)
+    story.append(Spacer(1, 5 * mm))
+    story.append(Paragraph(
+        "⚠ CONFIDENTIEL — À conserver en lieu sûr — Ne pas distribuer",
+        st_warning,
+    ))
+    story.append(HRFlowable(width=W, thickness=1, color=C_SURFACE2,
+                             spaceAfter=4 * mm, spaceBefore=4 * mm))
+
+    # ── Informations du site ──────────────────────────────────────────────────
+    story.append(Paragraph("Informations du site", st_section))
+
+    date_str = _dt.datetime.now().strftime("%d/%m/%Y à %H:%M")
+    info_data = [
+        ["Centre d'examen", centre],
+        ["Adresse",         f"https://{fqdn}"],
+        ["Configuré le",    date_str],
+    ]
+    info_table = Table(info_data, colWidths=[50 * mm, W - 50 * mm])
+    info_table.setStyle(TableStyle([
+        ('FONTNAME',   (0, 0), (0, -1), font_b),
+        ('FONTNAME',   (1, 0), (1, -1), font),
+        ('FONTSIZE',   (0, 0), (-1, -1), 10),
+        ('TEXTCOLOR',  (0, 0), (0, -1), C_MUTED),
+        ('TEXTCOLOR',  (1, 0), (1, -1), C_TEXT),
+        ('BACKGROUND', (0, 0), (-1, -1), C_SURFACE),
+        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [C_SURFACE, C_WHITE]),
+        ('TOPPADDING',    (0, 0), (-1, -1), 3 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 4 * mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 4 * mm),
+        ('GRID', (0, 0), (-1, -1), 0.5, C_SURFACE2),
+        ('ROUNDEDCORNERS', [2 * mm]),
+    ]))
+    story.append(info_table)
+
+    # ── QR code TOTP ──────────────────────────────────────────────────────────
+    story.append(Paragraph("Authentification Administrateur (TOTP)", st_section))
+    story.append(Paragraph(
+        "Scannez ce QR code avec votre application TOTP "
+        "(Aegis, Google Authenticator, etc.)",
+        st_subtitle,
+    ))
+
+    uri = build_totp_uri(otp_key)
+
+    # Génère le QR code dans un fichier temporaire
+    with _tempfile.NamedTemporaryFile(suffix='.png', delete=False) as _qr_tmp:
+        _qr_path = _qr_tmp.name
+    _segno.make_qr(uri).save(
+        _qr_path, kind='png', scale=12, dpi=300,
+        dark='#1e1b4b', light='#ffffff',
+    )
+
+    qr_size = 65 * mm
+    qr_img = RLImage(_qr_path, width=qr_size, height=qr_size)
+    qr_table = Table([[qr_img]], colWidths=[W])
+    qr_table.setStyle(TableStyle([
+        ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
+        ('BACKGROUND',    (0, 0), (-1, -1), C_SURFACE),
+        ('TOPPADDING',    (0, 0), (-1, -1), 5 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5 * mm),
+        ('ROUNDEDCORNERS', [3 * mm]),
+    ]))
+    story.append(qr_table)
+
+    # ── Clé TOTP brute ────────────────────────────────────────────────────────
+    story.append(Paragraph("Clé TOTP (saisie manuelle)", st_label))
+    grouped = "  ".join(
+        otp_key[i:i + 8] for i in range(0, len(otp_key), 8)
+    )
+    key_table = Table([[Paragraph(grouped, st_key)]], colWidths=[W])
+    key_table.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_SURFACE2),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4 * mm),
+        ('ROUNDEDCORNERS', [2 * mm]),
+    ]))
+    story.append(key_table)
+
+    # ── URI TOTP ──────────────────────────────────────────────────────────────
+    story.append(Spacer(1, 3 * mm))
+    story.append(Paragraph("URI TOTP complète", st_label))
+    story.append(Paragraph(uri, st_uri))
+
+    # ── Note de sécurité ──────────────────────────────────────────────────────
+    story.append(HRFlowable(width=W, thickness=1, color=C_SURFACE2,
+                             spaceAfter=3 * mm, spaceBefore=6 * mm))
+    story.append(Paragraph(
+        "Ce document contient les clés d'accès administrateur du site. "
+        "Imprimez-le, conservez-le dans un endroit sécurisé, puis "
+        "supprimez le fichier numérique.",
+        st_foot,
+    ))
+    story.append(Spacer(1, 2 * mm))
+    story.append(Paragraph(
+        f"Généré par setup_new_site.py le {date_str}",
+        st_foot,
+    ))
+
+    doc.build(story)
+
+    # Nettoyage du QR temporaire
+    try:
+        Path(_qr_path).unlink()
+    except Exception:
+        pass
+
+    return pdf_path
+
+
 # ── Génération de la config nginx ─────────────────────────────────────────────
 
 def generate_nginx_conf(fqdn: str) -> str:
@@ -510,6 +734,12 @@ def main() -> None:
     # Affichage QR + clé + vérification interactive
     hdr("Configuration TOTP (authentification admin)")
     show_otp_setup(otp_key, centre, PROJECT_ROOT)
+
+    # PDF administrateur
+    pdf = generate_admin_pdf(otp_key, fqdn, centre, PROJECT_ROOT)
+    if pdf:
+        ok(f"PDF administrateur généré → {pdf}")
+        warn("Imprimez ce document et supprimez le fichier numérique.")
 
     # ── 1b. Fichier .env Docker ───────────────────────────────────────────────
     hdr("Génération du fichier .env Docker")
