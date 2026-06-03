@@ -309,7 +309,9 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
 
     # ── Styles de texte ───────────────────────────────────────────────────────
     def ps(name, **kw):
-        return ParagraphStyle(name, fontName=font, textColor=C_TEXT, **kw)
+        kw.setdefault('fontName', font)
+        kw.setdefault('textColor', C_TEXT)
+        return ParagraphStyle(name, **kw)
 
     st_big_title = ps('bigtitle', fontSize=32, textColor=C_WHITE,
                       fontName=font_b, alignment=TA_CENTER, leading=38)
