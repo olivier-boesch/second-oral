@@ -217,6 +217,28 @@
         </div>
       {% if admin %}</a>{% endif %}
 
+      {% if admin %}<a href="{{ url_for('salle_form') }}">{% endif %}
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          Liste des salles
+        </div>
+      {% if admin %}</a>{% endif %}
+
+      {% if admin %}<a href="{{ url_for('loge_form') }}">{% endif %}
+        <div class="grid-options-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Liste des loges
+        </div>
+      {% if admin %}</a>{% endif %}
+
       {% if admin %}<a href="{{ url_for('verify_logs') }}">{% endif %}
         <div class="grid-options-item">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
