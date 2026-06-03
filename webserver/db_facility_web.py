@@ -37,7 +37,7 @@ FROM Candidat
 WHERE Candidat.numero = %s
 """
 
-SELECT_ALL_CANDIDATS_PAILLONS = """
+SELECT_ALL_CANDIDATS_PAPILLONS = """
 SELECT Candidat.nom AS nom, Candidat.numero AS ine, Candidat.login_key AS login_key
 FROM Candidat
 ORDER BY Candidat.nom

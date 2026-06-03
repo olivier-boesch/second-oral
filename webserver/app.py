@@ -5,7 +5,7 @@ Gestion des oraux de second groupe :
   - Consultation publique (candidats, salles, loges)
   - Authentification examinateurs (mot de passe par salle)
   - Authentification admin (TOTP)
-  - Authentification candidats (INE + paillon)
+  - Authentification candidats (INE + papillon)
   - Signature dématérialisée
   - Génération de documents PDF
 """
@@ -421,7 +421,7 @@ class LoginCandidatForm(FlaskForm):
     )
     password = PasswordField(
         'Mot de passe',
-        render_kw={"placeholder": "Mot de passe du paillon"},
+        render_kw={"placeholder": "Mot de passe du papillon"},
         validators=[DataRequired(message="Entrez le mot de passe")],
     )
     submit_button = SubmitField('Se Connecter')
@@ -939,7 +939,7 @@ def logout():
 @app.route('/login-candidat', methods=['GET', 'POST'])
 @nocache
 def login_candidat():
-    """Connexion d'un candidat par INE + mot de passe du paillon."""
+    """Connexion d'un candidat par INE + mot de passe du papillon."""
     form = LoginCandidatForm()
     if request.method == 'GET':
         message = request.args.get('message', None)
@@ -1310,16 +1310,16 @@ def generate_doc_batch(type_doc, id_doc=None):
                                  centre_examen=CENTRE_EXAMEN)
         return jsonify({"url": url_for('download', filename='liste_loges.pdf')})
 
-    if type_doc == 'paillons_candidats':
-        infos = db_get(db_facility_web.SELECT_ALL_CANDIDATS_PAILLONS, no_list_auto=False)
+    if type_doc == 'papillons_candidats':
+        infos = db_get(db_facility_web.SELECT_ALL_CANDIDATS_PAPILLONS, no_list_auto=False)
         base_url = request.host_url.rstrip('/')
-        reports.liste_paillons_candidats(
+        reports.liste_papillons_candidats(
             infos,
-            filename='static/docs/paillons_candidats.pdf',
+            filename='static/docs/papillons_candidats.pdf',
             base_url=base_url,
             centre_examen=CENTRE_EXAMEN,
         )
-        return jsonify({"url": url_for('download', filename='paillons_candidats.pdf')})
+        return jsonify({"url": url_for('download', filename='papillons_candidats.pdf')})
 
     abort(404)
 
@@ -1343,7 +1343,7 @@ def download():
     """
     Sert les fichiers PDF générés.
     - Les fiches candidats (candidat_*) sont publiques.
-    - Les paillons (paillons_*) nécessitent d'être admin.
+    - Les papillons (papillons_*) nécessitent d'être admin.
     - Tous les autres documents nécessitent d'être authentifié.
     """
     filename = request.args.get('filename', '')
@@ -1351,7 +1351,7 @@ def download():
     if not re.match(r'^[\w\-. ]+\.pdf$', filename):
         abort(400, "Nom de fichier invalide")
 
-    if filename.startswith('paillons_'):
+    if filename.startswith('papillons_'):
         if not is_admin_user():
             abort(403)
     elif not filename.startswith('candidat_'):

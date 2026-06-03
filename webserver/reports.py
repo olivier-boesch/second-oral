@@ -1,7 +1,7 @@
 """
 Génération des documents PDF pour les oraux de second groupe.
 
-Utilise ReportLab (Platypus) pour les tableaux et canvas direct pour les paillons.
+Utilise ReportLab (Platypus) pour les tableaux et canvas direct pour les papillons.
 """
 import datetime
 import tempfile
@@ -435,12 +435,12 @@ def liste_fiches_candidats(candidats, file_dir='.', filename_root='candidat_',
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Génération des paillons (slips de connexion imprimables)
+# Génération des papillons (slips de connexion imprimables)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _draw_paillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
+def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
                   name, id_label, id_value, pwd_value, url=''):
-    """Dessine un paillon (slip de connexion) à la position (x, y) sur le canvas."""
+    """Dessine un papillon (slip de connexion) à la position (x, y) sur le canvas."""
     pad = 3 * mm
     # Bordure
     c_canvas.setStrokeColorRGB(0.4, 0.35, 0.8)
@@ -495,14 +495,14 @@ def _draw_paillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
         c_canvas.drawString(x + pad, y + 3 * mm, url[:45])
 
 
-def _build_paillons_pdf(items, filename, title1, title2, id_label,
+def _build_papillons_pdf(items, filename, title1, title2, id_label,
                         get_id, get_name, get_pwd, get_url):
     """
-    Moteur générique de génération de paillons.
+    Moteur générique de génération de papillons.
 
     :param items: liste des objets à imprimer
     :param filename: chemin de sortie PDF
-    :param title1: première ligne du titre de chaque paillon
+    :param title1: première ligne du titre de chaque papillon
     :param title2: deuxième ligne du titre (souvent le nom du centre)
     :param id_label: libellé de l'identifiant (ex. 'Salle', 'INE')
     :param get_id/get_name/get_pwd/get_url: callables item → valeur
@@ -529,7 +529,7 @@ def _build_paillons_pdf(items, filename, title1, title2, id_label,
         x = margin_x + col * slip_w
         y = H - margin_y - (row + 1) * slip_h
 
-        _draw_paillon(
+        _draw_papillon(
             c_canvas, x, y, slip_w, slip_h,
             title1, title2,
             get_name(item), id_label, get_id(item),
@@ -542,17 +542,17 @@ def _build_paillons_pdf(items, filename, title1, title2, id_label,
         f.write(buffer.read())
 
 
-def liste_papillons_connexion(connexions, filename='paillons_examinateurs.pdf',
+def liste_papillons_connexion(connexions, filename='papillons_examinateurs.pdf',
                                base_url='', centre_examen=''):
     """
-    Génère les paillons de connexion pour les examinateurs.
+    Génère les papillons de connexion pour les examinateurs.
 
     :param connexions: liste de tuples (salle, nom, mot_de_passe)
     :param filename: chemin du PDF de sortie
     :param base_url: URL de base du site (ex. 'https://stex.mesoraux.fr')
-    :param centre_examen: nom du centre affiché sur chaque paillon
+    :param centre_examen: nom du centre affiché sur chaque papillon
     """
-    _build_paillons_pdf(
+    _build_papillons_pdf(
         items=connexions,
         filename=filename,
         title1="Oraux de second groupe — Examinateur",
@@ -565,17 +565,17 @@ def liste_papillons_connexion(connexions, filename='paillons_examinateurs.pdf',
     )
 
 
-def liste_paillons_candidats(candidats, filename='static/docs/paillons_candidats.pdf',
+def liste_papillons_candidats(candidats, filename='static/docs/papillons_candidats.pdf',
                               base_url='', centre_examen=''):
     """
-    Génère les paillons de connexion pour les candidats (élèves).
+    Génère les papillons de connexion pour les candidats (élèves).
 
     :param candidats: liste de dicts {'nom', 'ine', 'login_key'}
     :param filename: chemin du PDF de sortie
     :param base_url: URL de base du site (ex. 'https://stex.mesoraux.fr')
-    :param centre_examen: nom du centre affiché sur chaque paillon
+    :param centre_examen: nom du centre affiché sur chaque papillon
     """
-    _build_paillons_pdf(
+    _build_papillons_pdf(
         items=candidats,
         filename=filename,
         title1="Oraux de second groupe — Candidat",
@@ -588,17 +588,17 @@ def liste_paillons_candidats(candidats, filename='static/docs/paillons_candidats
     )
 
 
-def liste_paillons_loges(loges, filename='paillons_loges.pdf',
+def liste_papillons_loges(loges, filename='papillons_loges.pdf',
                           base_url='', centre_examen=''):
     """
-    Génère les paillons de connexion pour les surveillants de loge.
+    Génère les papillons de connexion pour les surveillants de loge.
 
     :param loges: liste de tuples (nom_loge, mot_de_passe)
     :param filename: chemin du PDF de sortie
     :param base_url: URL de base du site (ex. 'https://stex.mesoraux.fr')
-    :param centre_examen: nom du centre affiché sur chaque paillon
+    :param centre_examen: nom du centre affiché sur chaque papillon
     """
-    _build_paillons_pdf(
+    _build_papillons_pdf(
         items=loges,
         filename=filename,
         title1="Oraux de second groupe — Surveillant de Loge",

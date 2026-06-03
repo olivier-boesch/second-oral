@@ -1,6 +1,6 @@
 # Guide administrateur — Workflow annuel 2ndOral
 
-Ce document décrit le processus complet de préparation et de lancement des oraux de second groupe, du formatage des fichiers CSV jusqu'à la distribution des paillons le jour J.
+Ce document décrit le processus complet de préparation et de lancement des oraux de second groupe, du formatage des fichiers CSV jusqu'à la distribution des papillons le jour J.
 
 ---
 
@@ -15,7 +15,7 @@ Ce document décrit le processus complet de préparation et de lancement des ora
         ↓
 4. Vérifier le résultat et corriger si besoin
         ↓
-5. Imprimer et distribuer les paillons
+5. Imprimer et distribuer les papillons
         ↓
 6. Jour des épreuves : émargements en temps réel
 ```
@@ -219,9 +219,9 @@ Sur la page `/gestion/algo`, section **Télécharger les documents** :
 
 | Document | Action | À faire |
 |---|---|---|
-| Paillons examinateurs | Télécharger | Distribuer aux examinateurs avant le jour J |
-| Paillons candidats | Générer + télécharger | Distribuer aux candidats avant le jour J |
-| Paillons loges | Télécharger | Distribuer aux surveillants de loge |
+| Papillons examinateurs | Télécharger | Distribuer aux examinateurs avant le jour J |
+| Papillons candidats | Générer + télécharger | Distribuer aux candidats avant le jour J |
+| Papillons loges | Télécharger | Distribuer aux surveillants de loge |
 | Fiches salles (lot) | Générer + télécharger | Afficher ou distribuer aux examinateurs |
 | Fiches loges (lot) | Générer + télécharger | Remettre aux surveillants de loge |
 | Liste générale | Générer + télécharger | Affichage public ou usage interne |
@@ -252,9 +252,9 @@ Sur `/gestion`, cliquer **Recharger toutes les pages** : tous les navigateurs co
 
 | Acteur | Comment se connecter | Identifiants |
 |---|---|---|
-| Candidat | `https://[site]/login-candidat` | INE + mot de passe du paillon |
-| Examinateur | `https://[site]/login-examinateur` | Numéro de salle + mot de passe du paillon |
-| Surveillant de loge | `https://[site]/login-loge` | Nom de la loge + mot de passe du paillon |
+| Candidat | `https://[site]/login-candidat` | INE + mot de passe du papillon |
+| Examinateur | `https://[site]/login-examinateur` | Numéro de salle + mot de passe du papillon |
+| Surveillant de loge | `https://[site]/login-loge` | Nom de la loge + mot de passe du papillon |
 | Admin | `https://[site]/login` | Code TOTP (application type Aegis) |
 
 ### Émargement
@@ -280,4 +280,4 @@ Sur `/gestion`, cliquer **Recharger toutes les pages** : tous les navigateurs co
 | `Aucun placement valide trouvé` | Contraintes incompatibles (anti-conflit établissement trop restrictif, horaires trop contraints) | Réduire les contraintes `Etab` ou élargir les `Heure mini` |
 | Algo très long (> 15 min) | Données volumineuses ou beaucoup de contraintes | Normal ; attendre. Réduire `N_run` dans `algo.py` si nécessaire (défaut : 1000) |
 | Candidat sans oral | Discipline non couverte par un examinateur | Vérifier que la discipline du candidat a au moins un examinateur dans `profs_total.csv` |
-| Mot de passe de paillon invalide | Algo relancé (nouveaux mots de passe générés) | Redistribuer les nouveaux paillons |
+| Mot de passe de papillon invalide | Algo relancé (nouveaux mots de passe générés) | Redistribuer les nouveaux papillons |

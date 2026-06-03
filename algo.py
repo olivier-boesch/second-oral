@@ -20,8 +20,8 @@ from db_facility_save import DbFacility
 from webserver.app_secrets import generate_password, hash_password, CENTRE_EXAMEN
 from webserver.reports import (
     liste_papillons_connexion,
-    liste_paillons_candidats,
-    liste_paillons_loges,
+    liste_papillons_candidats,
+    liste_papillons_loges,
 )
 
 colorama.init(autoreset=True)
@@ -166,7 +166,7 @@ class Candidat:
 
     @property
     def infos_connexion(self) -> dict:
-        """Renvoie les informations de connexion du candidat pour les paillons."""
+        """Renvoie les informations de connexion du candidat pour les papillons."""
         return {'nom': self.nom, 'ine': self.numero, 'login_key': self.login_key}
 
     def verifie_temps_minimum(self, oral: "Oral", intervalle_minimum: int) -> bool:
@@ -854,23 +854,23 @@ if __name__ == '__main__':
     log.info("Génération de la Base de données")
     liste_connexion_exams, liste_connexion_candidats, liste_connexion_loges = best_alg.save()
 
-    log.info("Génération des paillons examinateurs")
+    log.info("Génération des papillons examinateurs")
     liste_papillons_connexion(
         liste_connexion_exams,
-        filename=str(DOCS_DIR / 'paillons_examinateurs.pdf'),
+        filename=str(DOCS_DIR / 'papillons_examinateurs.pdf'),
         centre_examen=CENTRE_EXAMEN,
     )
-    log.info("Génération des paillons candidats")
-    liste_paillons_candidats(
+    log.info("Génération des papillons candidats")
+    liste_papillons_candidats(
         liste_connexion_candidats,
-        filename=str(DOCS_DIR / 'paillons_candidats.pdf'),
+        filename=str(DOCS_DIR / 'papillons_candidats.pdf'),
         centre_examen=CENTRE_EXAMEN,
     )
-    log.info("Génération des paillons loges")
-    liste_paillons_loges(
+    log.info("Génération des papillons loges")
+    liste_papillons_loges(
         liste_connexion_loges,
-        filename=str(DOCS_DIR / 'paillons_loges.pdf'),
+        filename=str(DOCS_DIR / 'papillons_loges.pdf'),
         centre_examen=CENTRE_EXAMEN,
     )
-    log.info(f"Paillons enregistrés dans {DOCS_DIR}")
+    log.info(f"Papillons enregistrés dans {DOCS_DIR}")
     log.info("Fin ----")

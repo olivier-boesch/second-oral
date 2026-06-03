@@ -160,33 +160,33 @@
 
     <div class="doc-grid">
 
-        {# Paillons candidats : regénérable (login_key en clair en base) #}
-        <div class="doc-card" id="card-paillons-candidats">
-            <span class="doc-title">🎫 Paillons candidats</span>
+        {# Papillons candidats : regénérable (login_key en clair en base) #}
+        <div class="doc-card" id="card-papillons-candidats">
+            <span class="doc-title">🎫 Papillons candidats</span>
             <span class="doc-note">INE + mot de passe + QR code, 10 par page A4</span>
             <div class="doc-actions">
                 <button class="btn-gen"
-                        onclick="generer('paillons_candidats', 'card-paillons-candidats')">
+                        onclick="generer('papillons_candidats', 'card-papillons-candidats')">
                     ⚙ Générer et télécharger
                 </button>
                 <span class="doc-spinner">⏳ Génération…</span>
             </div>
         </div>
 
-        {# Paillons examinateurs : algo.py uniquement (hash en base, pas de clair) #}
-        <div class="doc-card" id="card-paillons-exam">
-            <span class="doc-title">🎫 Paillons examinateurs</span>
+        {# Papillons examinateurs : algo.py uniquement (hash en base, pas de clair) #}
+        <div class="doc-card" id="card-papillons-exam">
+            <span class="doc-title">🎫 Papillons examinateurs</span>
             <span class="doc-note">Généré par algo.py — non regénérable depuis le web</span>
-            <div class="doc-actions" id="actions-paillons-exam">
+            <div class="doc-actions" id="actions-papillons-exam">
                 <span class="doc-spinner">⏳ Vérification…</span>
             </div>
         </div>
 
-        {# Paillons loges : algo.py uniquement #}
-        <div class="doc-card" id="card-paillons-loges">
-            <span class="doc-title">🎫 Paillons loges</span>
+        {# Papillons loges : algo.py uniquement #}
+        <div class="doc-card" id="card-papillons-loges">
+            <span class="doc-title">🎫 Papillons loges</span>
             <span class="doc-note">Généré par algo.py — non regénérable depuis le web</span>
-            <div class="doc-actions" id="actions-paillons-loges">
+            <div class="doc-actions" id="actions-papillons-loges">
                 <span class="doc-spinner">⏳ Vérification…</span>
             </div>
         </div>
@@ -394,7 +394,7 @@ function telecharger(url) {
     document.body.removeChild(a);
 }
 
-// ── Vérification de l'existence des fichiers algo.py (paillons examinateurs/loges) ──
+// ── Vérification de l'existence des fichiers algo.py (papillons examinateurs/loges) ──
 function makeDlButton(url, label) {
     const a = document.createElement('a');
     a.href = url;
@@ -426,8 +426,8 @@ function checkFile(filename, actionsId) {
 }
 
 function checkAlgoFiles() {
-    checkFile('paillons_examinateurs.pdf', 'actions-paillons-exam');
-    checkFile('paillons_loges.pdf',        'actions-paillons-loges');
+    checkFile('papillons_examinateurs.pdf', 'actions-papillons-exam');
+    checkFile('papillons_loges.pdf',        'actions-papillons-loges');
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────

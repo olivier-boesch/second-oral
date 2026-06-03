@@ -61,7 +61,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | Admin | `/login` | Code TOTP 6 chiffres (toutes les 30 s) |
 | Examinateur | `/login-examinateur` | Mot de passe par salle |
 | Surveillant de loge | `/login-loge` | Mot de passe par loge |
-| Candidat | `/login-candidat` | Numéro INE + mot de passe du paillon |
+| Candidat | `/login-candidat` | Numéro INE + mot de passe du papillon |
 
 ---
 
@@ -177,9 +177,9 @@ lance `algo.py` dans Docker, puis redémarre l'app.
 
 | Fichier | Contenu | Regénérable depuis le web |
 |---|---|---|
-| `paillons_examinateurs.pdf` | Salle + nom + mot de passe | ❌ (hash uniquement en base) |
-| `paillons_candidats.pdf` | INE + mot de passe + QR code | ✅ via `/gestion/algo` |
-| `paillons_loges.pdf` | Loge + mot de passe | ❌ (hash uniquement en base) |
+| `papillons_examinateurs.pdf` | Salle + nom + mot de passe | ❌ (hash uniquement en base) |
+| `papillons_candidats.pdf` | INE + mot de passe + QR code | ✅ via `/gestion/algo` |
+| `papillons_loges.pdf` | Loge + mot de passe | ❌ (hash uniquement en base) |
 
 ### Télécharger les documents depuis l'interface web
 
@@ -187,9 +187,9 @@ La page `/gestion/algo` propose, en plus du lancement :
 
 | Document | Action | Remarque |
 |---|---|---|
-| Paillons candidats | Générer + télécharger | Depuis la base courante |
-| Paillons examinateurs | Télécharger | Produit par algo.py uniquement |
-| Paillons loges | Télécharger | Produit par algo.py uniquement |
+| Papillons candidats | Générer + télécharger | Depuis la base courante |
+| Papillons examinateurs | Télécharger | Produit par algo.py uniquement |
+| Papillons loges | Télécharger | Produit par algo.py uniquement |
 | Fiches candidats (lot) | Générer + télécharger | Toutes les fiches en un seul PDF |
 | Fiches salles (lot) | Générer + télécharger | Toutes les fiches d'émargement |
 | Fiches loges (lot) | Générer + télécharger | Toutes les fiches de loge |
@@ -198,10 +198,10 @@ La page `/gestion/algo` propose, en plus du lancement :
 Les boutons **Générer** recalculent le PDF depuis la base de données courante.
 Les boutons **Télécharger** servent le dernier fichier produit par algo.py.
 
-### Distribuer les paillons
+### Distribuer les papillons
 
 - Imprimer et distribuer **avant** le jour des épreuves
-- Chaque paillon contient : identifiant + mot de passe + QR code vers la page personnelle
+- Chaque papillon contient : identifiant + mot de passe + QR code vers la page personnelle
 - Les identifiants de connexion apparaissent aussi sur la fiche web du candidat
   (visible par l'admin et le candidat lui-même une fois connecté)
 
@@ -335,4 +335,4 @@ pytz, colorama, setuptools
 - [ ] Clé OTP configurée dans l'application TOTP (scannée pendant le script)
 - [ ] nginx hôte rechargé (`sudo nginx -s reload`)
 - [ ] Fichiers CSV déposés dans `data/` et `./run_algo.sh` lancé (si pas fait pendant le script)
-- [ ] PDFs paillons imprimés et distribués avant le jour des épreuves
+- [ ] PDFs papillons imprimés et distribués avant le jour des épreuves

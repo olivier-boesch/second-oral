@@ -7,7 +7,7 @@
 #   2. Démarre MariaDB et attend qu'elle soit prête
 #   3. Exécute algo.py dans le conteneur Docker (même image, même réseau)
 #   4. Redémarre le conteneur app
-#   5. Affiche les paillons PDF générés
+#   5. Affiche les papillons PDF générés
 #
 # Utilisation :
 #   ./run_algo.sh                  # run normal
@@ -116,16 +116,16 @@ header "Fichiers générés"
 if ! $DRY_RUN; then
     FOUND=false
     for f in \
-        "$SCRIPT_DIR/paillons_examinateurs.pdf" \
-        "$SCRIPT_DIR/paillons_candidats.pdf" \
-        "$SCRIPT_DIR/paillons_loges.pdf"; do
+        "$SCRIPT_DIR/papillons_examinateurs.pdf" \
+        "$SCRIPT_DIR/papillons_candidats.pdf" \
+        "$SCRIPT_DIR/papillons_loges.pdf"; do
         if [[ -f "$f" ]]; then
             SIZE=$(du -sh "$f" 2>/dev/null | cut -f1)
             echo -e "  ${GREEN}✔${NC} $(basename "$f")  (${SIZE})"
             FOUND=true
         fi
     done
-    $FOUND || warn "Aucun paillon PDF trouvé dans $SCRIPT_DIR"
+    $FOUND || warn "Aucun papillon PDF trouvé dans $SCRIPT_DIR"
 fi
 
 echo ""

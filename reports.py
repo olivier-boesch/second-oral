@@ -4,6 +4,6 @@ Délègue aux fonctions de webserver/reports.py.
 """
 from webserver.reports import (  # noqa: F401
     liste_papillons_connexion,
-    liste_paillons_candidats,
-    liste_paillons_loges,
+    liste_papillons_candidats,
+    liste_papillons_loges,
 )
