@@ -227,7 +227,7 @@ Les boutons **Télécharger** servent le dernier fichier produit par algo.py.
 | **Mots de passe** | `scrypt(n=2048, r=8, p=2)` + pepper + sel, encodé base64 |
 | **TOTP admin** | `pyotp`, fenêtre ±1 intervalle, rate limit 10 req/min |
 | **CSRF** | Flask-WTF sur tous les formulaires |
-| **CSP** | `script-src 'self' 'nonce-<aléatoire>'` par requête (nonces Talisman) — pas d'`unsafe-inline` sur les scripts |
+| **CSP** | `default-src 'self'`, `script-src 'self' 'unsafe-inline'`, `form-action 'self'`, `base-uri 'self'` via Flask-Talisman — scripts externes bloqués, injection de base et de formulaire bloquées |
 | **Sessions** | `HttpOnly`, `Secure`, `SameSite=Lax` (production) |
 | **INE en session** | Stocké en Redis (TTL 5 min, token aléatoire) — jamais en clair dans le cookie |
 | **Rate limiting** | Flask-Limiter + Redis ; 10 req/min sur les routes de login |

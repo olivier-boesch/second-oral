@@ -32,7 +32,7 @@
     {{ form.submit_button }}
 </form>
 {% include 'footer.html' %}
-<script nonce="{{ csp_nonce() }}">
+<script>
     (function () {
         const btn = document.getElementById('togglePassword');
         const pwd = document.getElementById('id_password');

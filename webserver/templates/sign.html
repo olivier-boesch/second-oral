@@ -5,7 +5,7 @@
     <title>Mes Oraux - {{ centre }} - Signer l'émargement</title>
     {% include 'style.html' %}
     <script src="{{ url_for("static", filename="signature_pad.umd.min.js") }}"></script>
-    <script nonce="{{ csp_nonce() }}">
+    <script>
         "use strict";
 
         const SSE_BASE_URL = "{{ url_for('sse.stream') }}";
@@ -85,7 +85,7 @@
 </form>
 {% include 'footer.html' %}
 </body>
-<script nonce="{{ csp_nonce() }}">
+<script>
     const canvas = document.querySelector("canvas");
     const signaturePad = new SignaturePad(canvas);
     {% if data['emargement'] %}

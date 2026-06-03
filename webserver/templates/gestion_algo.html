@@ -248,7 +248,7 @@
 
 {% include 'footer.html' %}
 
-<script nonce="{{ csp_nonce() }}">
+<script>
 "use strict";
 
 const SSE_BASE   = "{{ url_for('sse.stream') }}";

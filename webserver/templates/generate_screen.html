@@ -15,7 +15,7 @@
         #message { color: var(--text-md); font-size: .95rem; margin-top: .75em; }
         #message.red { color: var(--danger); }
     </style>
-    <script nonce="{{ csp_nonce() }}">
+    <script>
         function generate() {
             fetch('{{ generation_url }}')
                 .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })

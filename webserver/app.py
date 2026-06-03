@@ -103,12 +103,14 @@ else:
     app.logger.handlers = gunicorn_logger.handlers
     app.logger.setLevel(gunicorn_logger.level)
 
+    # Note : 'unsafe-inline' est nécessaire pour les handlers inline HTML
+    # (onclick, onchange, onload). Les nonces CSP bloquent ces handlers dans les
+    # navigateurs modernes, ce qui casse les fonctionnalités (PDF, signature…).
+    # Protection principale : default-src 'self' bloque tout script externe,
+    # form-action et base-uri bloquent les vecteurs d'injection les plus courants.
     csp = {
         'default-src': ["'self'"],
-        # 'unsafe-inline' supprimé : les scripts utilisent des nonces CSP
-        # (nonce="{{ csp_nonce() }}" sur chaque balise <script>)
-        'script-src':  ["'self'"],
-        # 'unsafe-inline' conservé pour style= inline (risque moindre que script)
+        'script-src':  ["'self'", "'unsafe-inline'"],
         'style-src':   ["'self'", "'unsafe-inline'"],
         'img-src':     ["'self'", "data:"],
         'base-uri':    ["'self'"],
@@ -117,9 +119,6 @@ else:
     Talisman(
         app,
         content_security_policy=csp,
-        # Talisman génère un nonce aléatoire par requête et l'injecte dans
-        # script-src ; disponible dans les templates via {{ csp_nonce() }}
-        content_security_policy_nonce_in=['script-src'],
         permissions_policy={
             'camera':      '()',
             'microphone':  '()',
