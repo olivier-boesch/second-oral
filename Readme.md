@@ -141,6 +141,9 @@ sudo python setup_new_site.py \
 
 ## Workflow annuel
 
+> 📖 **Documentation complète** : [docs/workflow_admin.md](docs/workflow_admin.md)
+> — format détaillé des CSV, contraintes de l'algorithme, résolution des problèmes.
+
 ### Préparer les fichiers CSV
 
 Trois fichiers sont nécessaires dans `data/` :
@@ -265,6 +268,9 @@ second_oral/
 │   ├── candidats.csv            Données candidats (séparateur ;)
 │   ├── profs_total.csv          Données examinateurs
 │   └── preps.csv                Matières et durées
+│
+├── docs/
+│   └── workflow_admin.md        Guide administrateur : CSV, algo, jour J
 │
 ├── docker-compose.yml           Stack : app, nginx, redis, mariadb
 ├── Dockerfile                   Image runtime (Python + pdftk, sans code source)
