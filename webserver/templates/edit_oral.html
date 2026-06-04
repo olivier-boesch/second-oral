@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>2ndOral — Édition oral : {{ donnees_oral['nom'] }}</title>
     {% include 'style.html' %}
-    <script>
+    <script nonce="{{ csp_nonce }}">
         function update_examinateurs() {
             const matiere = document.getElementById('select_matieres').value;
             fetch("{{ url_for('liste_examinateurs_json') }}?matiere=" + encodeURIComponent(matiere))

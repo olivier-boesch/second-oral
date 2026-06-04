@@ -96,6 +96,8 @@ else:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SECURE=True,
         SESSION_COOKIE_SAMESITE='Lax',
+        # #6 — Expiration de session inactive (8 h)
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
     )
     limiter = Limiter(
         get_remote_address,
@@ -109,14 +111,21 @@ else:
     app.logger.handlers = gunicorn_logger.handlers
     app.logger.setLevel(gunicorn_logger.level)
 
-    # Note : 'unsafe-inline' est nécessaire pour les handlers inline HTML
-    # (onclick, onchange, onload). Les nonces CSP bloquent ces handlers dans les
-    # navigateurs modernes, ce qui casse les fonctionnalités (PDF, signature…).
-    # Protection principale : default-src 'self' bloque tout script externe,
-    # form-action et base-uri bloquent les vecteurs d'injection les plus courants.
+    # #5 — CSP : les handlers inline (onclick/onchange) imposent 'unsafe-inline'.
+    # Les nonces protègent les blocs <script> contre l'injection externe.
+    # 'strict-dynamic' + nonce rend 'unsafe-inline' inopérant dans les navigateurs
+    # modernes ; 'unsafe-inline' reste comme fallback pour les anciens.
+    def _csp_nonce():
+        from flask import g
+        from secrets import token_urlsafe
+        if not hasattr(g, 'csp_nonce'):
+            g.csp_nonce = token_urlsafe(16)
+        return g.csp_nonce
+
     csp = {
         'default-src': ["'self'"],
-        'script-src':  ["'self'", "'unsafe-inline'"],
+        'script-src':  ["'self'", "'unsafe-inline'", "'strict-dynamic'",
+                        _csp_nonce],
         'style-src':   ["'self'", "'unsafe-inline'"],
         'img-src':     ["'self'", "data:"],
         'base-uri':    ["'self'"],
@@ -125,6 +134,13 @@ else:
     Talisman(
         app,
         content_security_policy=csp,
+        # #4 — HSTS explicite : 1 an, includeSubDomains
+        strict_transport_security=True,
+        strict_transport_security_max_age=31536000,
+        strict_transport_security_include_subdomains=True,
+        strict_transport_security_preload=True,
+        # #8 — Headers supplémentaires
+        referrer_policy='strict-origin-when-cross-origin',
         permissions_policy={
             'camera':      '()',
             'microphone':  '()',
@@ -142,6 +158,58 @@ limiter.exempt(
     sse,
     flags=ExemptionScope.DEFAULT | ExemptionScope.APPLICATION | ExemptionScope.ANCESTORS,
 )
+
+
+_AUTH_FAIL_THRESHOLD = 5   # échecs avant avertissement dans les logs
+_auth_failures: dict = {}  # {ip: [timestamp, ...]} — en mémoire, réinitialisé au redémarrage
+
+
+def _record_auth_failure(role: str, identifier: str) -> None:
+    """Enregistre un échec d'auth et émet un WARNING si le seuil est dépassé."""
+    import time as _time
+    ip = request.remote_addr or "unknown"
+    now = _time.time()
+    window = 300  # 5 min glissantes
+    timestamps = [t for t in _auth_failures.get(ip, []) if now - t < window]
+    timestamps.append(now)
+    _auth_failures[ip] = timestamps
+    count = len(timestamps)
+    if count >= _AUTH_FAIL_THRESHOLD:
+        app.logger.warning(
+            f"ALERTE AUTH — {count} échecs en {window}s depuis {ip} "
+            f"(rôle={role}, id={identifier})"
+        )
+
+
+@app.context_processor
+def _inject_csp_nonce():
+    """Rend csp_nonce disponible dans tous les templates pour les balises <script>."""
+    from flask import g
+    from secrets import token_urlsafe
+    if not hasattr(g, 'csp_nonce'):
+        g.csp_nonce = token_urlsafe(16)
+    return {'csp_nonce': g.csp_nonce}
+
+
+@app.after_request
+def _security_headers(response):
+    """#8 — Headers de sécurité complémentaires non couverts par Talisman."""
+    response.headers.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    return response
+
+
+@app.before_request
+def _check_session_expiry():
+    """#6 — Invalide les sessions créées il y a plus de 8 h."""
+    import time as _time
+    ts = session.get('_ts')
+    if ts and _time.time() - ts > 8 * 3600:
+        session.clear()
+        return
+    if any(k in session for k in ('user', 'candidat', 'loge')):
+        if not ts:
+            session['_ts'] = _time.time()
 
 
 @app.before_request
@@ -725,10 +793,13 @@ def login_examinateur():
     infos = db_get(db_facility_web.SELECT_PASSWORD_CHECK_SALLE,
                    salle, no_list_auto=False)
     if len(infos) == 1 and check_password(passwd, infos[0]['password_hash']):
+        session.clear()
         session['user'] = salle
+        session['_ts'] = __import__('time').time()
         app.logger.info(f"{salle}: connecté")
         return redirect(url_for('salle', id_salle=salle))
     app.logger.warning(f"{salle}: échec connexion")
+    _record_auth_failure("examinateur", salle)
     return redirect(url_for('login_examinateur', salle=salle,
                              message='Mot de passe incorrect'))
 
@@ -918,11 +989,14 @@ def login():
     url = _safe_redirect_url(form.link_back.data)
     passcode = form.key.data
     if app._otp.verify(otp=passcode, valid_window=1):
+        session.clear()
         session['user'] = 'admin'
+        session['_ts'] = __import__('time').time()
         app.logger.info("admin: connecté")
         return redirect(url or url_for("index"))
 
     app.logger.warning(f"admin: échec connexion code={passcode}")
+    _record_auth_failure("admin", "totp")
     if url:
         return redirect(url_for('login', link_back=quote(url)))
     return redirect(url_for("login"))
@@ -968,10 +1042,13 @@ def login_candidat():
                            ine, no_list_auto=False)
     if (len(candidat_info) == 1
             and check_password(password, candidat_info[0]['password_hash'])):
+        session.clear()
         session['candidat'] = ine
+        session['_ts'] = __import__('time').time()
         app.logger.info(f"Candidat {ine}: connecté")
         return redirect(url_for('candidat', id_candidat=ine))
     app.logger.warning(f"Candidat {ine}: échec connexion")
+    _record_auth_failure("candidat", ine)
     return redirect(url_for('login_candidat', message='INE ou mot de passe incorrect'))
 
 
@@ -1013,10 +1090,13 @@ def login_loge():
     infos = db_get(db_facility_web.SELECT_PASSWORD_CHECK_LOGE,
                    loge_nom, no_list_auto=False)
     if len(infos) == 1 and check_password(passwd, infos[0]['password_hash']):
+        session.clear()
         session['loge'] = loge_nom
+        session['_ts'] = __import__('time').time()
         app.logger.info(f"Loge {loge_nom}: connectée")
         return redirect(url_for('loge', id_loge=loge_nom))
     app.logger.warning(f"Loge {loge_nom}: échec connexion")
+    _record_auth_failure("loge", loge_nom)
     return redirect(url_for('login_loge', loge=loge_nom,
                              message='Mot de passe incorrect'))
 

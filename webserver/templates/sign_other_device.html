@@ -27,7 +27,7 @@
 </form>
 {% include 'footer.html' %}
 </body>
-<script>
+<script nonce="{{ csp_nonce }}">
     const canvas = document.querySelector("canvas");
     const signaturePad = new SignaturePad(canvas);
     {% if data['emargement'] %}

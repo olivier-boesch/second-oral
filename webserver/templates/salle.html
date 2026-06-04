@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <title>Mes Oraux - {{centre }} - Salle {{ data['salle'] }}</title>
     {% include 'style.html' %}
-    <script>
+    <script nonce="{{ csp_nonce }}">
         let data = {{ students_ine | safe }};
     </script>
     {% include 'script_reload.html' %}
-    <script>
+    <script nonce="{{ csp_nonce }}">
         function sign_document(id){
             console.log("sign for " + id);
             document.location = "{{ url_for('sign') }}" + "?id=" + id + "&link_back={{ data['salle'] }}";

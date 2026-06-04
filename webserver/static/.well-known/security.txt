@@ -1,0 +1,4 @@
+Contact: mailto:olivier.boesch@ac-aix-marseille.fr
+Preferred-Languages: fr, en
+Canonical: https://FQDN_PLACEHOLDER/.well-known/security.txt
+Policy: Cette application est réservée à l'organisation des oraux du baccalauréat. Signalez toute vulnérabilité par e-mail à l'adresse ci-dessus.

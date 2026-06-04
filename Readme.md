@@ -17,8 +17,9 @@ placement automatique des candidats et examinateurs, consultation en temps réel
 5. [Workflow annuel](#workflow-annuel)
 6. [Référence des scripts](#référence-des-scripts)
 7. [Sécurité](#sécurité)
-8. [Structure des fichiers](#structure-des-fichiers)
-9. [Dépendances](#dépendances)
+8. [Tests et CI](#tests-et-ci)
+9. [Structure des fichiers](#structure-des-fichiers)
+10. [Dépendances](#dépendances)
 
 ---
 
@@ -124,18 +125,24 @@ sudo python setup_new_site.py \
     --db-user secondoral \
     --db-password MOT_DE_PASSE \
     --certbot-email admin@mesoraux.fr \
+    --director-name "Jean Dupont" \
+    --centre-address "13 avenue du Lycée, 13001 Marseille" \
+    --academie "Académie d'Aix-Marseille" \
+    --hebergeur "OVHcloud SAS, 2 rue Kellermann, 59100 Roubaix" \
+    --dpd-email "dpd@ac-aix-marseille.fr" \
     --no-digital-sign   # optionnel : désactive l'émargement en ligne
 ```
 
 **Ce que fait le script (dans l'ordre) :**
 
-1. **`webserver/app_secrets.py`** — génère tous les secrets (clé OTP, `APP_SECRET_KEY`, `DB_SALT`, pepper/sel)
+1. **`webserver/app_secrets.py`** — génère tous les secrets (clé OTP, `APP_SECRET_KEY`, `DB_SALT`, pepper/sel) + infos légales (directeur de publication, adresse, académie, DPD)
 2. **QR code TOTP** — affiché dans le terminal + sauvegardé en PNG (`otp_setup.png`) + vérification interactive du code
-3. **`.env` Docker** — généré automatiquement avec `DB_ROOT_PASSWORD` aléatoire et credentials cohérents avec `app_secrets.py`
-4. **Config nginx** — écrite dans `nginx-conf/<fqdn>` et installée dans `/etc/nginx/sites-available/`
-5. **Certbot** — `certbot --nginx -d <fqdn>` (Let's Encrypt)
-6. **Docker** *(optionnel, demande confirmation)* — `docker compose build`, démarrage MariaDB + Redis, attente de disponibilité, création de la base et de l'utilisateur, démarrage de la stack complète
-7. **algo.py** *(optionnel)* — proposé si les fichiers CSV sont disponibles
+3. **PDF administrateur** — clé TOTP + démarches légales RGPD à effectuer par le chef de centre
+4. **`.env` Docker** — généré automatiquement avec `DB_ROOT_PASSWORD` aléatoire et credentials cohérents avec `app_secrets.py`
+5. **Config nginx** — écrite dans `nginx-conf/<fqdn>` et installée dans `/etc/nginx/sites-available/` (TLS 1.2+, HTTP→HTTPS, HSTS)
+6. **Certbot** — `certbot --nginx -d <fqdn>` (Let's Encrypt)
+7. **Docker** *(optionnel, demande confirmation)* — `docker compose build`, démarrage MariaDB + Redis, attente de disponibilité, création de la base et de l'utilisateur avec privilèges limités, démarrage de la stack complète
+8. **algo.py** *(optionnel)* — proposé si les fichiers CSV sont disponibles
 
 > **Fichiers protégés** : `app_secrets.py` (`chmod 640`, root) et `.env` (`chmod 600`) ne doivent jamais être versionnés.
 
@@ -229,24 +236,51 @@ Les boutons **Télécharger** servent le dernier fichier produit par algo.py.
 | Mesure | Détail |
 |---|---|
 | **SQL** | Paramètres liés `%s` / `%(name)s` — aucune interpolation |
-| **Mots de passe** | `scrypt(n=2048, r=8, p=2)` + pepper + sel, encodé base64 |
+| **Mots de passe** | `scrypt(n=2048, r=8, p=2)` + pepper + sel, encodé base64 ; comparaison via `hmac.compare_digest` (protection timing attack) |
 | **TOTP admin** | `pyotp`, fenêtre ±1 intervalle, rate limit 10 req/min |
 | **CSRF** | Flask-WTF sur tous les formulaires |
-| **CSP** | `default-src 'self'`, `script-src 'self' 'unsafe-inline'`, `form-action 'self'`, `base-uri 'self'` via Flask-Talisman — scripts externes bloqués, injection de base et de formulaire bloquées |
-| **Sessions** | `HttpOnly`, `Secure`, `SameSite=Lax` (production) |
+| **CSP** | `default-src 'self'`, nonce par requête + `'strict-dynamic'` sur `script-src`, `form-action 'self'`, `base-uri 'self'` via Flask-Talisman |
+| **Sessions** | `HttpOnly`, `Secure`, `SameSite=Lax` ; expiration 8 h ; `session.clear()` avant chaque login (protection fixation de session) |
 | **INE en session** | Stocké en Redis (TTL 5 min, token aléatoire) — jamais en clair dans le cookie |
 | **Rate limiting** | Flask-Limiter + Redis ; 10 req/min sur les routes de login |
+| **Alerting auth** | Compteur d'échecs par IP (fenêtre 5 min) ; `WARNING` gunicorn après 5 tentatives |
+| **HSTS** | `max-age=31536000; includeSubDomains; preload` côté Talisman et nginx |
+| **TLS** | TLS 1.2+ uniquement ; suites ECDHE/DHE-GCM/CHACHA20 ; `ssl_session_tickets off` ; redirection HTTP→HTTPS |
+| **Headers** | `Referrer-Policy: strict-origin-when-cross-origin`, `Cross-Origin-Opener-Policy: same-origin`, `X-Content-Type-Options: nosniff` |
+| **Permissions-Policy** | `camera`, `microphone`, `geolocation`, `payment`, `usb` désactivés |
 | **Open redirect** | Toutes les URLs `link_back` validées (même domaine) — encodage simple via `url_for` |
 | **IDOR** | `/generate-doc-one` protégé — auth obligatoire (fiche candidat, salle, loge) |
 | **Path traversal** | `/download` : regex `^[\w\-. ]+\.pdf$` + `send_from_directory` |
 | **SSE** | Auth requise (`before_request`) + connexion Redis sans socket timeout (gevent) |
 | **Noms examinateurs** | Dropdown `/login-examinateur` : numéro de salle uniquement, pas de noms |
 | **Server header** | `server_tokens off` sur nginx hôte et Docker |
-| **Permissions-Policy** | `camera`, `microphone`, `geolocation`, `payment`, `usb` désactivés |
 | **IP client réelle** | nginx hôte remplace `X-Forwarded-For` par `$remote_addr` (anti-spoofing) ; nginx Docker le transmet intact ; `ProxyFix(x_for=1)` dans Flask |
 | **Logs gunicorn** | Format `%({x-forwarded-for}i)s` — affiche l'IP réelle du client (pas l'IP Docker) |
 | **Logs d'audit** | Chaîne de hash SHA-256 + sel côté DB (falsification détectable) |
 | **Tokens signature** | Usage unique, expiration 5 min, canal `sign_<token>` dédié |
+| **DB privilèges** | Compte applicatif limité à `SELECT, INSERT, UPDATE, DELETE` — pas de `DROP`/`ALTER` |
+| **Docker** | Conteneur exécuté en tant qu'utilisateur non-root `appuser` (UID 1000) |
+| **Dépendances** | Versions épinglées dans `requirements.txt` ; `pip-audit` exécuté à chaque CI |
+| **security.txt** | `/.well-known/security.txt` (RFC 9116) — contact de divulgation responsable |
+
+---
+
+## Tests et CI
+
+```bash
+# Lancer toute la suite de tests
+python -m pytest tests/ -v
+
+# Tests unitaires uniquement (pas de dépendances Flask)
+python -m pytest tests/unit/
+
+# Tests d'intégration Flask (DB mockée, sans MariaDB réel)
+python -m pytest tests/integration/
+```
+
+Le pipeline GitHub Actions (`.github/workflows/ci.yml`) exécute à chaque push sur `main` :
+1. **`pip-audit`** — détection des CVE connues dans les dépendances
+2. **Tests** — 108 tests unitaires + intégration avec couverture
 
 ---
 
@@ -265,17 +299,29 @@ second_oral/
 ├── login_key_generator.py       Génère une clé OTP base32
 ├── 2fa.sh                       Teste la configuration OTP (QR + vérification)
 ├── update_python_packages       Met à jour le venv hôte
+├── requirements.txt             Dépendances Python (versions épinglées)
+├── requirements-test.txt        Dépendances de test uniquement
+├── pytest.ini                   Configuration pytest
 │
 ├── data/
 │   ├── candidats.csv            Données candidats (séparateur ;)
 │   ├── profs_total.csv          Données examinateurs
-│   └── preps.csv                Matières et durées
+│   ├── preps.csv                Matières et durées
+│   └── algo_params.json         Paramètres algo (généré par l'interface web)
 │
 ├── docs/
 │   └── workflow_admin.md        Guide administrateur : CSV, algo, jour J
 │
+├── tests/
+│   ├── unit/
+│   │   ├── test_csv_validator.py   Tests unitaires du validateur CSV
+│   │   └── test_setup_utils.py     Tests unitaires des utilitaires de setup
+│   └── integration/
+│       └── test_flask_routes.py    Tests d'intégration Flask (DB mockée)
+│
+├── .github/workflows/ci.yml     Pipeline CI : pip-audit + tests
 ├── docker-compose.yml           Stack : app, nginx, redis, mariadb
-├── Dockerfile                   Image runtime (Python + pdftk, sans code source)
+├── Dockerfile                   Image runtime (Python + pdftk, non-root)
 ├── .env.example                 Template des variables Docker à copier en .env
 ├── .dockerignore                Exclut tout sauf requirements.txt du contexte
 │
@@ -285,12 +331,15 @@ second_oral/
     ├── app.py                   Application Flask principale
     ├── app_secrets.py           Secrets (root:root 640, non versionné)
     ├── algo_bg.py               Exécution de algo.py en tâche de fond (SSE)
+    ├── csv_validator.py         Validation et normalisation des fichiers CSV
     ├── db_facility_web.py       Requêtes SQL paramétrées
     ├── reports.py               Génération PDF (ReportLab + pypdftk)
     ├── flask_sse.py             Blueprint SSE avec cache Redis
     ├── patched_app.py           Point d'entrée gunicorn (gevent monkey-patch)
     │
     ├── static/
+    │   ├── .well-known/
+    │   │   └── security.txt     Contact de divulgation responsable (RFC 9116)
     │   ├── templates_csv/       Modèles CSV téléchargeables depuis /gestion/algo
     │   ├── docs/                PDFs générés (volume Docker nommé)
     │   └── ...                  CSS, images, JS
@@ -305,7 +354,8 @@ second_oral/
         ├── loge.html            Fiche loge
         ├── liste.html           Liste générale (affichage grand écran)
         ├── sign.html            Signature dématérialisée
-        ├── gestion_algo.html    Upload CSV + lancement algo + log temps réel
+        ├── mentions_legales.html Mentions légales + politique de confidentialité
+        ├── gestion_algo.html    Upload CSV + paramètres algo + lancement + log
         └── ...
 ```
 
@@ -319,22 +369,25 @@ second_oral/
 - **nginx** (hôte, pour le SSL)
 - **certbot** + `python3-certbot-nginx` (pour Let's Encrypt)
 
-### Python (dans `requirements.txt`)
+### Python (dans `requirements.txt`, versions épinglées)
 
 ```
-Flask, Flask-SSE, Flask-WTF, Flask-Compress, Flask-Limiter, Flask-Talisman
-gunicorn, gevent
-mysql-connector-python
-redis
-pyotp, segno
-reportlab, pypdftk, pillow
-pytz, colorama, setuptools
+Flask==3.1.3, Flask-SSE==1.0.0, Flask-WTF==1.3.0, Flask-Compress==1.24
+Flask-Limiter==4.1.1, Flask-Talisman==1.1.0
+gunicorn==23.0.0, gevent==25.5.1
+mysql-connector-python==9.7.0
+redis==8.0.0
+pyotp==2.9.0, segno==1.6.6
+reportlab==4.5.1, pypdftk==0.5, pillow==12.1.1
+pytz==2026.2, colorama==0.4.6, setuptools==80.9.0
 ```
 
 ### Checklist déploiement initial
 
-- [ ] `sudo python setup_new_site.py` exécuté jusqu'à la fin
+- [ ] `sudo python setup_new_site.py` exécuté jusqu'à la fin (avec infos légales)
 - [ ] Clé OTP configurée dans l'application TOTP (scannée pendant le script)
+- [ ] PDF administrateur imprimé et fichier numérique supprimé
 - [ ] nginx hôte rechargé (`sudo nginx -s reload`)
+- [ ] DPD de l'académie informé du traitement (voir section RGPD du PDF admin)
 - [ ] Fichiers CSV déposés dans `data/` et `./run_algo.sh` lancé (si pas fait pendant le script)
 - [ ] PDFs papillons imprimés et distribués avant le jour des épreuves

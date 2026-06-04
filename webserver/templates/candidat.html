@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Mes Oraux - {{ centre }} - Candidat: {{ data['nom'] }}</title>
     {% include 'style.html' %}
-    <script>
+    <script nonce="{{ csp_nonce }}">
         let data = ["{{ data['ine'] }}"];
     </script>
     {% include 'script_reload.html' %}

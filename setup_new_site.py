@@ -177,7 +177,8 @@ def generate_password(password_len=PASSWORD_LENGTH):
 
 
 def check_password(password, hash_value):
-    return hash_password(password) == hash_value
+    from hmac import compare_digest
+    return compare_digest(hash_password(password), hash_value)
 '''
     return content, otp_key
 
@@ -566,16 +567,41 @@ def generate_nginx_conf(fqdn: str) -> str:
 # Second Oral — {fqdn}
 # Généré par setup_new_site.py — SSL ajouté par certbot.
 ##
+
+# Redirection HTTP → HTTPS
+server {{
+    server_name {fqdn};
+    listen 80;
+    listen [::]:80;
+    return 301 https://$host$request_uri;
+}}
+
 server {{
     server_name {fqdn};
 
     root {static_dir};
 
+    # ── TLS (certbot complète ces directives) ─────────────────────────────
+    listen 443 ssl;
+    listen [::]:443 ssl;
+
+    # Protocoles et suites de chiffrement — TLS 1.2+ uniquement
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers off;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+
+    # HSTS (31536000 s = 1 an) — doit correspondre à Talisman dans Flask
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
     location / {{
         proxy_pass http://127.0.0.1:8080;
 
         proxy_set_header Host               $host;
-        proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
+        # Remplace X-Forwarded-For par l'IP cliente directe (anti-spoofing)
+        proxy_set_header X-Forwarded-For    $remote_addr;
         proxy_set_header X-Forwarded-Proto  $scheme;
         proxy_set_header X-Forwarded-Host   $host;
         proxy_set_header X-Forwarded-Prefix /;
@@ -596,9 +622,6 @@ server {{
     location = /error.html   {{ }}
     location = /main.css     {{ }}
     location = /error_bg.jpg {{ }}
-
-    listen 80;
-    listen [::]:80;
 }}
 '''
 
@@ -672,7 +695,7 @@ def init_mariadb(db_root_password: str, db_name: str,
         f"  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
         f"CREATE USER IF NOT EXISTS '{db_user}'@'%' "
         f"  IDENTIFIED BY '{db_password}'; "
-        f"GRANT ALL PRIVILEGES ON `{db_name}`.* TO '{db_user}'@'%'; "
+        f"GRANT SELECT, INSERT, UPDATE, DELETE ON `{db_name}`.* TO '{db_user}'@'%'; "
         f"FLUSH PRIVILEGES;"
     )
     _compose_check([
@@ -849,6 +872,15 @@ def main() -> None:
         director_name, centre_address, academie, hebergeur, dpd_email,
     )
     secrets_path.write_text(content, encoding="utf-8")
+
+    # security.txt — mise à jour du FQDN canonique
+    sec_txt = PROJECT_ROOT / "webserver" / "static" / ".well-known" / "security.txt"
+    if sec_txt.exists():
+        sec_txt.write_text(
+            sec_txt.read_text(encoding="utf-8").replace("FQDN_PLACEHOLDER", fqdn),
+            encoding="utf-8",
+        )
+        ok(f"security.txt mis à jour → {sec_txt}")
     try:
         os.chmod(secrets_path, 0o640)
     except PermissionError:

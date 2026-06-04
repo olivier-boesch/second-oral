@@ -24,8 +24,13 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 # Enlever gcc après la compilation (image plus légère)
 RUN apt-get purge -y --auto-remove gcc
 
+# Utilisateur non-root dédié (UID 1000 pour compatibilité avec les volumes hôte)
+RUN groupadd --gid 1000 appuser && useradd --uid 1000 --gid 1000 --no-create-home appuser
+
 # Point d'entrée : gunicorn depuis le dossier webserver (monté en volume)
 WORKDIR /app/webserver
+
+USER appuser
 
 EXPOSE 8000
 
