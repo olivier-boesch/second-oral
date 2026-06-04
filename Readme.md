@@ -378,7 +378,7 @@ gunicorn==23.0.0, gevent==25.5.1
 mysql-connector-python==9.7.0
 redis==8.0.0
 pyotp==2.9.0, segno==1.6.6
-reportlab==4.5.1, pypdftk==0.5, pillow==12.1.1
+reportlab==4.5.1, pypdftk==0.5, pillow==12.2.0
 pytz==2026.2, colorama==0.4.6, setuptools==80.9.0
 ```
 
