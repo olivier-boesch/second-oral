@@ -17,10 +17,11 @@ services:
     volumes:
       # ── Code source monté depuis l'hôte (pas dans l'image) ──────────────
       - .:/app
-      # ── Secrets : lecture seule, appartient à root sur l'hôte ───────────
-      # Prérequis : sudo chown root:root webserver/app_secrets.py
-      #             sudo chmod 644 webserver/app_secrets.py
-      # (le conteneur tourne en root → peut le lire)
+      # ── Secrets : lecture seule, appartient à root:1000 sur l'hôte ────────
+      # setup_new_site.py applique automatiquement :
+      #   sudo chown root:1000 webserver/app_secrets.py
+      #   sudo chmod 640 webserver/app_secrets.py
+      # (GID 1000 = appuser dans le conteneur, défini dans le Dockerfile)
       - ./webserver/app_secrets.py:/app/webserver/app_secrets.py:ro
       # ── PDFs générés : volume nommé persistant, partagé avec nginx ───────
       # Remplace le sous-dossier du bind-mount → survit à docker compose down

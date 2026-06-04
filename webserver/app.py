@@ -112,28 +112,22 @@ else:
     app.logger.setLevel(gunicorn_logger.level)
 
     # #5 — CSP : les handlers inline (onclick/onchange) imposent 'unsafe-inline'.
-    # Les nonces protègent les blocs <script> contre l'injection externe.
-    # 'strict-dynamic' + nonce rend 'unsafe-inline' inopérant dans les navigateurs
+    # Talisman génère un nonce par requête via content_security_policy_nonce_in
+    # et l'expose dans g.csp_nonce (lu par le context_processor ci-dessous).
+    # 'strict-dynamic' + nonce neutralise 'unsafe-inline' dans les navigateurs
     # modernes ; 'unsafe-inline' reste comme fallback pour les anciens.
-    def _csp_nonce():
-        from flask import g
-        from secrets import token_urlsafe
-        if not hasattr(g, 'csp_nonce'):
-            g.csp_nonce = token_urlsafe(16)
-        return g.csp_nonce
-
     csp = {
-        'default-src': ["'self'"],
-        'script-src':  ["'self'", "'unsafe-inline'", "'strict-dynamic'",
-                        _csp_nonce],
-        'style-src':   ["'self'", "'unsafe-inline'"],
-        'img-src':     ["'self'", "data:"],
-        'base-uri':    ["'self'"],
-        'form-action': ["'self'"],
+        'default-src': "'self'",
+        'script-src':  "'self' 'unsafe-inline' 'strict-dynamic'",
+        'style-src':   "'self' 'unsafe-inline'",
+        'img-src':     "'self' data:",
+        'base-uri':    "'self'",
+        'form-action': "'self'",
     }
     Talisman(
         app,
         content_security_policy=csp,
+        content_security_policy_nonce_in=['script-src'],
         # #4 — HSTS explicite : 1 an, includeSubDomains
         strict_transport_security=True,
         strict_transport_security_max_age=31536000,
@@ -183,12 +177,9 @@ def _record_auth_failure(role: str, identifier: str) -> None:
 
 @app.context_processor
 def _inject_csp_nonce():
-    """Rend csp_nonce disponible dans tous les templates pour les balises <script>."""
+    """Rend csp_nonce disponible dans les templates (généré par Talisman)."""
     from flask import g
-    from secrets import token_urlsafe
-    if not hasattr(g, 'csp_nonce'):
-        g.csp_nonce = token_urlsafe(16)
-    return {'csp_nonce': g.csp_nonce}
+    return {'csp_nonce': getattr(g, 'csp_nonce', '')}
 
 
 @app.after_request

@@ -561,46 +561,23 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
 # ── Génération de la config nginx ─────────────────────────────────────────────
 
 def generate_nginx_conf(fqdn: str) -> str:
+    """Config HTTP uniquement — certbot ajoutera le bloc HTTPS et les directives ssl_*."""
     static_dir = PROJECT_ROOT / 'webserver' / 'static'
     return f'''\
 ##
 # Second Oral — {fqdn}
 # Généré par setup_new_site.py — SSL ajouté par certbot.
+# Durcissement TLS global : /etc/nginx/conf.d/ssl-params.conf
 ##
-
-# Redirection HTTP → HTTPS
-server {{
-    server_name {fqdn};
-    listen 80;
-    listen [::]:80;
-    return 301 https://$host$request_uri;
-}}
-
 server {{
     server_name {fqdn};
 
     root {static_dir};
 
-    # ── TLS (certbot complète ces directives) ─────────────────────────────
-    listen 443 ssl;
-    listen [::]:443 ssl;
-
-    # Protocoles et suites de chiffrement — TLS 1.2+ uniquement
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256;
-    ssl_prefer_server_ciphers off;
-    ssl_session_timeout 1d;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_tickets off;
-
-    # HSTS (31536000 s = 1 an) — doit correspondre à Talisman dans Flask
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-
     location / {{
         proxy_pass http://127.0.0.1:8080;
 
         proxy_set_header Host               $host;
-        # Remplace X-Forwarded-For par l'IP cliente directe (anti-spoofing)
         proxy_set_header X-Forwarded-For    $remote_addr;
         proxy_set_header X-Forwarded-Proto  $scheme;
         proxy_set_header X-Forwarded-Host   $host;
@@ -622,8 +599,12 @@ server {{
     location = /error.html   {{ }}
     location = /main.css     {{ }}
     location = /error_bg.jpg {{ }}
+
+    listen 80;
+    listen [::]:80;
 }}
 '''
+
 
 
 # ── Fichier .env Docker ──────────────────────────────────────────────────────
@@ -883,8 +864,12 @@ def main() -> None:
         ok(f"security.txt mis à jour → {sec_txt}")
     try:
         os.chmod(secrets_path, 0o640)
+        # GID 1000 = appuser dans le conteneur Docker (défini dans le Dockerfile)
+        # root:appuser 640 → seul root (hôte) et appuser (conteneur) peuvent lire
+        os.chown(secrets_path, 0, 1000)
     except PermissionError:
-        warn("Impossible de chmod 640 (pas root ?). Faites-le manuellement.")
+        warn("Impossible de chmod/chown (pas root ?). Faites-le manuellement :")
+        warn(f"  sudo chown root:1000 {secrets_path} && sudo chmod 640 {secrets_path}")
     ok(f"app_secrets.py → {secrets_path}")
 
     # Affichage QR + clé + vérification interactive
