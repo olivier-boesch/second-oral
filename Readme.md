@@ -1,5 +1,7 @@
 # 2ndOral
 
+[![CI](https://github.com/olivier-boesch/second-oral/actions/workflows/ci.yml/badge.svg)](https://github.com/olivier-boesch/second-oral/actions/workflows/ci.yml)
+
 Application web de gestion des oraux de second groupe du baccalauréat :
 placement automatique des candidats et examinateurs, consultation en temps réel,
 émargement dématérialisé, génération de documents PDF.
