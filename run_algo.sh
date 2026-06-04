@@ -91,8 +91,10 @@ echo ""
 # --workdir /app  : algo.py est à la racine du projet (pas dans webserver/)
 # L'environnement DB_HOST=mariadb est hérité du service app
 # Le bind-mount .:/app fournit le code source
+# --user "$(id -u):$(id -g)" : même UID que l'appelant → peut écrire log.txt dans /app
 run docker compose run --rm \
     --workdir /app \
+    --user "$(id -u):$(id -g)" \
     -e DB_HOST=mariadb \
     app \
     python algo.py
