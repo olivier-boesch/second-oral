@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mentions légales — {{ centre }}</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+    {% include 'auth_icon.html' %}
+
+    <h1>Mentions légales</h1>
+
+    <h2>1. Éditeur du site</h2>
+    <p>
+        Ce site est édité par <strong>{{ centre }}</strong>{% if centre_address %}, {{ centre_address }}{% endif %},
+        dans le cadre de l'organisation des oraux de second groupe du baccalauréat{% if academie %},
+        sous l'autorité de l'<strong>{{ academie }}</strong>{% endif %}.
+    </p>
+    {% if director_name %}
+    <p><strong>Directeur de la publication&nbsp;:</strong> {{ director_name }}</p>
+    {% endif %}
+    <p>
+        <strong>Conception et développement&nbsp;:</strong>
+        <a href="https://www.linkedin.com/in/olivier-boesch/">Olivier Boesch</a>
+        — <a href="mailto:olivier.boesch@ac-aix-marseille.fr">olivier.boesch@ac-aix-marseille.fr</a>
+    </p>
+
+    <h2>2. Hébergement</h2>
+    {% if hebergeur %}
+    <p>{{ hebergeur }}</p>
+    {% else %}
+    <p><em>Informations d'hébergement non renseignées.</em></p>
+    {% endif %}
+
+    <h2>3. Politique de confidentialité — Protection des données personnelles (RGPD)</h2>
+
+    <h3>Responsable du traitement</h3>
+    <p>
+        {% if director_name %}{{ director_name }}, chef de centre{% endif %}{% if centre %} — {{ centre }}{% endif %}{% if centre_address %}, {{ centre_address }}{% endif %}.
+    </p>
+
+    <h3>Données collectées et finalités</h3>
+    <table>
+        <thead>
+            <tr><th>Catégorie</th><th>Données</th><th>Finalité</th><th>Base légale</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Candidats</td>
+                <td>Nom, prénom, numéro INE, établissement d'origine, matière(s) choisie(s), horaire et salle de passage</td>
+                <td>Organisation et suivi de l'oral de second groupe</td>
+                <td>Mission de service public (art. 6.1.e RGPD)</td>
+            </tr>
+            <tr>
+                <td>Examinateurs</td>
+                <td>Nom, prénom, établissement, salle attribuée, loge</td>
+                <td>Planification et émargement</td>
+                <td>Mission de service public (art. 6.1.e RGPD)</td>
+            </tr>
+            <tr>
+                <td>Logs d'audit</td>
+                <td>Horodatage, action effectuée (sans données personnelles supplémentaires)</td>
+                <td>Intégrité et traçabilité des opérations</td>
+                <td>Obligation légale (art. 6.1.c RGPD)</td>
+            </tr>
+            <tr>
+                <td>Session</td>
+                <td>Cookie de session technique (identifiant aléatoire)</td>
+                <td>Maintien de l'authentification</td>
+                <td>Intérêt légitime / strictement nécessaire</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Durée de conservation</h3>
+    <p>
+        Les données sont conservées le temps de la session d'examen en cours.
+        Elles doivent être supprimées au plus tard à la fin de l'année scolaire
+        ou dès que les résultats sont définitifs et les voies de recours expirées,
+        conformément aux règles d'archivage de l'Éducation nationale.
+    </p>
+
+    <h3>Destinataires des données</h3>
+    <p>
+        Les données sont accessibles uniquement aux personnes habilitées&nbsp;:
+        administrateur (chef de centre), examinateurs (leur salle uniquement),
+        surveillants de loge (leur loge uniquement), et candidats (leur fiche uniquement).
+        Elles ne sont transmises à aucun tiers.
+    </p>
+
+    <h3>Cookies</h3>
+    <p>
+        Ce site utilise un unique cookie de session technique, strictement nécessaire
+        au fonctionnement de l'authentification. Ce cookie ne contient aucune donnée
+        personnelle et n'est pas partagé avec des tiers. Il n'est pas soumis à
+        consentement préalable (directive ePrivacy, art. 5.3, exemption services
+        de communication électronique).
+    </p>
+
+    <h3>Vos droits</h3>
+    <p>
+        Conformément au RGPD (art. 15 à 22) et à la loi Informatique et Libertés,
+        vous disposez d'un droit d'accès, de rectification, d'effacement et de limitation
+        du traitement vous concernant. Pour exercer ces droits, contactez le directeur
+        de la publication à l'adresse du centre indiquée ci-dessus.
+    </p>
+    <p>
+        Vous pouvez également introduire une réclamation auprès de la
+        <a href="https://www.cnil.fr" rel="noopener noreferrer" target="_blank">CNIL</a>.
+    </p>
+
+    <h3>Délégué à la Protection des Données (DPD)</h3>
+    {% if dpd_email %}
+    <p>
+        Le DPD de l'académie peut être contacté à l'adresse&nbsp;:
+        <a href="mailto:{{ dpd_email }}">{{ dpd_email }}</a>.
+    </p>
+    {% else %}
+    <p><em>Coordonnées du DPD non renseignées.</em></p>
+    {% endif %}
+
+    {% include 'footer.html' %}
+</body>
+</html>

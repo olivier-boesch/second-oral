@@ -50,6 +50,12 @@ from app_secrets import (
 import app_secrets as _app_secrets
 # FQDN optionnel (ajouté par setup_new_site.py) — fallback sur valeur codée en dur
 FQDN = getattr(_app_secrets, "FQDN", "stex.mesoraux.fr")
+# Variables légales — optionnelles pour compatibilité avec les instances existantes
+DIRECTOR_NAME  = getattr(_app_secrets, "DIRECTOR_NAME",  "")
+CENTRE_ADDRESS = getattr(_app_secrets, "CENTRE_ADDRESS", "")
+ACADEMIE       = getattr(_app_secrets, "ACADEMIE",       "")
+HEBERGEUR      = getattr(_app_secrets, "HEBERGEUR",      "")
+DPD_EMAIL      = getattr(_app_secrets, "DPD_EMAIL",      "")
 from secrets import token_urlsafe
 from datetime import timedelta
 
@@ -1366,6 +1372,21 @@ def download():
 def about():
     return render_template("about.html", centre=CENTRE_EXAMEN,
                            hostname=HOSTNAME, username=get_username())
+
+
+@app.route('/mentions-legales')
+def mentions_legales():
+    return render_template(
+        "mentions_legales.html",
+        centre=CENTRE_EXAMEN,
+        fqdn=FQDN,
+        director_name=DIRECTOR_NAME,
+        centre_address=CENTRE_ADDRESS,
+        academie=ACADEMIE,
+        hebergeur=HEBERGEUR,
+        dpd_email=DPD_EMAIL,
+        username=get_username(),
+    )
 
 
 # ── Gestion de algo.py (admin) ────────────────────────────────────────────────

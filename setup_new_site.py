@@ -85,7 +85,12 @@ def random_base32(n_bytes: int = 80) -> str:
 def generate_app_secrets(fqdn: str, centre: str, db_user: str,
                          db_password: str, db_name: str,
                          db_host: str = "localhost",
-                         digital_sign: bool = True) -> tuple[str, str]:
+                         digital_sign: bool = True,
+                         director_name: str = "",
+                         centre_address: str = "",
+                         academie: str = "",
+                         hebergeur: str = "",
+                         dpd_email: str = "") -> tuple[str, str]:
     """
     Génère le contenu de app_secrets.py et retourne (contenu, clé_otp).
     """
@@ -111,6 +116,13 @@ FQDN = "{fqdn}"
 
 # Signature dématérialisée (émargement en ligne des examinateurs)
 DIGITAL_SIGN = {str(digital_sign)}
+
+# ── Mentions légales et RGPD ──────────────────────────────────────────────────
+DIRECTOR_NAME  = "{director_name}"
+CENTRE_ADDRESS = "{centre_address}"
+ACADEMIE       = "{academie}"
+HEBERGEUR      = "{hebergeur}"
+DPD_EMAIL      = "{dpd_email}"
 
 # ── Authentification admin (TOTP) ─────────────────────────────────────────────
 # Conserver cette clé et la configurer dans votre application TOTP
@@ -241,7 +253,10 @@ def show_otp_setup(otp_key: str, centre: str, output_dir: Path) -> None:
 # ── PDF administrateur ───────────────────────────────────────────────────────
 
 def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
-                       output_dir: Path) -> Path | None:
+                       output_dir: Path,
+                       director_name: str = "",
+                       academie: str = "",
+                       dpd_email: str = "") -> Path | None:
     """
     Génère un PDF confidentiel pour l'administrateur contenant :
     - Titre 2ndOral + centre d'examen
@@ -249,6 +264,7 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
     - QR code TOTP (à scanner avec Aegis / Google Authenticator)
     - Clé TOTP brute (saisie manuelle)
     - URI TOTP complète
+    - Démarches légales RGPD à effectuer par le chef de centre
     """
     try:
         import datetime as _dt
@@ -437,6 +453,83 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
     story.append(Spacer(1, 3 * mm))
     story.append(Paragraph("URI TOTP complète", st_label))
     story.append(Paragraph(uri, st_uri))
+
+    # ── Démarches légales ─────────────────────────────────────────────────────
+    story.append(Paragraph("Démarches légales (RGPD)", st_section))
+
+    if director_name or academie:
+        who = director_name or "le chef de centre"
+        acad = f" ({academie})" if academie else ""
+        story.append(Paragraph(
+            f"En tant que directeur de publication{acad}, "
+            f"<b>{who}</b> est responsable des traitements de données "
+            "effectués via cette application.",
+            ps('legal_intro', fontSize=9, textColor=C_TEXT,
+               spaceAfter=3 * mm),
+        ))
+
+    steps = [
+        (
+            "1 — Registre des traitements",
+            "Vérifier auprès du Délégué à la Protection des Données (DPD) "
+            "de votre académie que ce traitement figure bien au registre "
+            "académique (art. 30 RGPD). Si ce n'est pas le cas, le signaler "
+            "pour inscription.",
+        ),
+        (
+            "2 — Information des personnes concernées",
+            "La page /mentions-legales du site remplit l'obligation d'information "
+            "(art. 13 RGPD) envers les candidats et les examinateurs. "
+            "Vérifier qu'elle est accessible et que les coordonnées du DPD y "
+            "figurent correctement.",
+        ),
+        (
+            "3 — Durée de conservation",
+            "Les données doivent être supprimées à l'issue de la session d'examen, "
+            "une fois les résultats définitifs et les délais de recours expirés. "
+            "Planifier la suppression de la base de données avant la fin de "
+            "l'année scolaire.",
+        ),
+        (
+            "4 — Accès et habilitations",
+            "S'assurer que seules les personnes habilitées disposent des codes "
+            "d'accès (examinateurs, surveillants de loge). Détruire les papillons "
+            "après les épreuves.",
+        ),
+        (
+            "5 — Incident de sécurité",
+            "En cas de violation de données (accès non autorisé, perte, "
+            "divulgation), notifier le DPD dans les meilleurs délais. "
+            "La CNIL doit être informée sous 72 h si la violation présente "
+            "un risque pour les personnes (art. 33 RGPD).",
+        ),
+    ]
+
+    dpd_line = (
+        f"Contact DPD : {dpd_email}" if dpd_email
+        else "Contact DPD : à renseigner dans /mentions-legales"
+    )
+    steps.append(("DPD et CNIL", dpd_line + "  —  www.cnil.fr"))
+
+    step_data = [[Paragraph(f"<b>{title}</b>", ps(
+                     f'st_{i}', fontSize=8, textColor=C_PRIMARY)),
+                  Paragraph(body, ps(
+                     f'sb_{i}', fontSize=8, textColor=C_TEXT))]
+                 for i, (title, body) in enumerate(steps)]
+
+    step_table = Table(step_data, colWidths=[42 * mm, W - 42 * mm])
+    step_table.setStyle(TableStyle([
+        ('FONTSIZE',      (0, 0), (-1, -1), 8),
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 2.5 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5 * mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 3 * mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 3 * mm),
+        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [C_SURFACE, C_WHITE]),
+        ('GRID',          (0, 0), (-1, -1), 0.3, C_SURFACE2),
+        ('ROUNDEDCORNERS', [2 * mm]),
+    ]))
+    story.append(step_table)
 
     # ── Note de sécurité ──────────────────────────────────────────────────────
     story.append(HRFlowable(width=W, thickness=1, color=C_SURFACE2,
@@ -661,12 +754,17 @@ def main() -> None:
     parser.add_argument("--db-host",        help="Hôte MariaDB", default="localhost")
     parser.add_argument("--nginx-dir",      help="Dossier sites-available nginx",
                         default="/etc/nginx/sites-available")
-    parser.add_argument("--certbot-email",  help="Email pour Let's Encrypt")
-    parser.add_argument("--no-certbot",      action="store_true",
+    parser.add_argument("--certbot-email",    help="Email pour Let's Encrypt")
+    parser.add_argument("--no-certbot",       action="store_true",
                         help="Ne pas lancer certbot")
-    parser.add_argument("--no-digital-sign", action="store_true",
+    parser.add_argument("--no-digital-sign",  action="store_true",
                         help="Désactiver la signature dématérialisée")
-    parser.add_argument("--yes",            action="store_true",
+    parser.add_argument("--director-name",    help="Nom du directeur de publication (chef de centre)")
+    parser.add_argument("--centre-address",   help="Adresse postale du centre d'examen")
+    parser.add_argument("--academie",         help="Académie de rattachement (ex: Académie d'Aix-Marseille)")
+    parser.add_argument("--hebergeur",        help="Nom et adresse de l'hébergeur (ex: OVHcloud SAS, 2 rue Kellermann, 59100 Roubaix)")
+    parser.add_argument("--dpd-email",        help="Email du Délégué à la Protection des Données de l'académie")
+    parser.add_argument("--yes",              action="store_true",
                         help="Confirmer sans demander")
     args = parser.parse_args()
 
@@ -684,6 +782,25 @@ def main() -> None:
     )
     fqdn = f"{subdomain}.{domain}"
     centre = args.name or ask("Nom du centre d'examen (ex: Lycée Saint Exupéry - Marseille)")
+
+    hdr("Informations légales (mentions légales et RGPD)")
+    director_name   = args.director_name  or ask(
+        "Nom complet du directeur de publication (chef de centre d'examen)",
+    )
+    centre_address  = args.centre_address or ask(
+        "Adresse postale du centre (ex: 13 avenue du Lycée, 13001 Marseille)",
+    )
+    academie        = args.academie        or ask(
+        "Académie de rattachement (ex: Académie d'Aix-Marseille)",
+    )
+    hebergeur       = args.hebergeur       or ask(
+        "Hébergeur — nom et adresse (ex: OVHcloud SAS, 2 rue Kellermann, 59100 Roubaix)",
+    )
+    dpd_email       = args.dpd_email       or ask(
+        "Email du DPD de l'académie (ex: dpd@ac-aix-marseille.fr)",
+        validator=lambda s: "@" in s,
+    )
+
     db_user = args.db_user or ask("Utilisateur MariaDB", default="secondoral")
     db_name = args.db_name or ask("Nom de la base de données", default="SecondOral")
     db_host = args.db_host
@@ -703,6 +820,10 @@ def main() -> None:
     hdr("Récapitulatif")
     print(f"  Domaine        : {BOLD}{fqdn}{NC}")
     print(f"  Centre         : {centre}")
+    print(f"  Directeur pub. : {director_name}")
+    print(f"  Adresse        : {centre_address}")
+    print(f"  Académie       : {academie}")
+    print(f"  DPD            : {dpd_email}")
     print(f"  MariaDB        : {db_user}@{db_host}/{db_name}")
     print(f"  Signature      : {'✔ activée' if digital_sign else '✘ désactivée'}")
     print(f"  Répertoire     : {PROJECT_ROOT}")
@@ -724,7 +845,8 @@ def main() -> None:
         warn(f"Ancien fichier sauvegardé → {bak}")
 
     content, otp_key = generate_app_secrets(
-        fqdn, centre, db_user, db_password, db_name, db_host, digital_sign
+        fqdn, centre, db_user, db_password, db_name, db_host, digital_sign,
+        director_name, centre_address, academie, hebergeur, dpd_email,
     )
     secrets_path.write_text(content, encoding="utf-8")
     try:
@@ -738,7 +860,8 @@ def main() -> None:
     show_otp_setup(otp_key, centre, PROJECT_ROOT)
 
     # PDF administrateur
-    pdf = generate_admin_pdf(otp_key, fqdn, centre, PROJECT_ROOT)
+    pdf = generate_admin_pdf(otp_key, fqdn, centre, PROJECT_ROOT,
+                             director_name, academie, dpd_email)
     if pdf:
         ok(f"PDF administrateur généré → {pdf}")
         warn("Imprimez ce document et supprimez le fichier numérique.")
