@@ -198,7 +198,8 @@ def build_totp_uri(otp_key: str, issuer: str = "2ndOral",
     )
 
 
-def show_otp_setup(otp_key: str, centre: str, output_dir: Path) -> None:
+def show_otp_setup(otp_key: str, centre: str, output_dir: Path,
+                   subdomain: str = "2ndOral") -> None:
     """
     Affiche les informations de configuration TOTP :
       - QR code dans le terminal (si segno est disponible)
@@ -206,8 +207,7 @@ def show_otp_setup(otp_key: str, centre: str, output_dir: Path) -> None:
       - Clé brute pour saisie manuelle
       - Vérification interactive optionnelle (si pyotp est disponible)
     """
-    issuer = "2ndOral"
-    uri = build_totp_uri(otp_key, issuer=issuer)
+    uri = build_totp_uri(otp_key, issuer=subdomain)
 
     print()
 
@@ -896,7 +896,7 @@ def main() -> None:
 
     # Affichage QR + clé + vérification interactive
     hdr("Configuration TOTP (authentification admin)")
-    show_otp_setup(otp_key, centre, PROJECT_ROOT)
+    show_otp_setup(otp_key, centre, PROJECT_ROOT, subdomain=subdomain)
 
     # PDF administrateur
     pdf = generate_admin_pdf(otp_key, fqdn, centre, PROJECT_ROOT,
