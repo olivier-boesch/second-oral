@@ -65,6 +65,23 @@
         .templates-list { list-style: none; padding: 0; }
         .templates-list li { margin: .3em 0; }
 
+        /* Rapport de validation CSV */
+        .validation-report { margin-top: .8em; }
+        .val-stats { display: flex; gap: 1em; flex-wrap: wrap; margin-bottom: .6em; }
+        .val-stat  { background: #ede9fe; border-radius: 4px;
+                     padding: .25em .7em; font-size: .85em; }
+        .val-ok    { color: #155724; font-weight: bold; }
+        .val-issue-list { list-style: none; padding: 0; margin: .4em 0; }
+        .val-issue-list li { font-size: .83em; padding: .2em .5em .2em 1.5em;
+                             position: relative; border-radius: 3px; margin: .15em 0; }
+        .val-issue-list li::before { position: absolute; left: .3em; }
+        .val-err  { background: #fde8e8; color: #721c24; }
+        .val-err::before  { content: "✘"; }
+        .val-warn { background: #fff3cd; color: #856404; }
+        .val-warn::before { content: "⚠"; }
+        .val-section-title { font-size: .8em; font-weight: bold; color: #555;
+                             margin: .5em 0 .15em 0; text-transform: uppercase; }
+
         /* Paramètres algo */
         .params-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8em 1.5em; }
         @media (max-width: 600px) { .params-grid { grid-template-columns: 1fr; } }
@@ -124,6 +141,7 @@
         </p>
         <p id="upload-feedback" class="upload-feedback"></p>
     </form>
+    <div id="validation-report" class="validation-report" style="display:none"></div>
 </div>
 
 {# ── 1b. Téléchargement des CSV existants ─────────────────────────────────── #}
@@ -247,6 +265,7 @@
             {% if is_running %}En cours…{% else %}Inactif{% endif %}
         </span>
     </p>
+    <div id="prelaunch-report" class="validation-report" style="margin-bottom:.8em"></div>
     <p>
         <button id="run-btn" {% if is_running %}disabled{% endif %} onclick="lancerAlgo()">
             ▶ Lancer algo.py
@@ -360,10 +379,11 @@
 <script>
 "use strict";
 
-const SSE_BASE    = "{{ url_for('sse.stream') }}";
-const RUN_URL     = "{{ url_for('algo_run') }}";
-const UPLOAD_URL  = "{{ url_for('algo_upload_csv') }}";
-const PARAMS_URL  = "{{ url_for('algo_save_params') }}";
+const SSE_BASE      = "{{ url_for('sse.stream') }}";
+const RUN_URL       = "{{ url_for('algo_run') }}";
+const UPLOAD_URL    = "{{ url_for('algo_upload_csv') }}";
+const PARAMS_URL    = "{{ url_for('algo_save_params') }}";
+const VALIDATE_URL  = "{{ url_for('algo_validate_csv') }}";
 const BATCH_BASE = "/generate-doc-batch/";
 const EXISTS_BASE = "{{ url_for('algo_doc_exists', filename='__fn__') }}".replace('__fn__', '');
 const CSRF = "{{ csrf_token }}";
@@ -435,7 +455,7 @@ function setRunning(running) {
 }
 
 // ── Lancement de algo.py ─────────────────────────────────────────────────────
-function lancerAlgo() {
+function _doLancerAlgo() {
     logEl.innerHTML = '';
     appendLog('=== Envoi de la requête de lancement… ===', 'log-sep');
     setRunning(true);
@@ -455,6 +475,16 @@ function lancerAlgo() {
         });
 }
 
+function lancerAlgo() {
+    validerAvantLancement(ok => {
+        if (ok) {
+            _doLancerAlgo();
+        } else {
+            appendLog('=== Lancement annulé : des erreurs ont été détectées dans les fichiers CSV. ===', 'log-err');
+        }
+    });
+}
+
 // ── Upload CSV ───────────────────────────────────────────────────────────────
 document.getElementById('upload-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -464,16 +494,19 @@ document.getElementById('upload-form').addEventListener('submit', (e) => {
     fetch(UPLOAD_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: formData })
         .then(r => r.json())
         .then(d => {
-            if (d.ok && d.uploaded.length) {
+            const reportEl = document.getElementById('validation-report');
+            if (d.uploaded && d.uploaded.length) {
                 fb.style.color = '#155724';
                 fb.textContent = `✔ Fichiers reçus : ${d.uploaded.join(', ')}`;
-                if (d.uploaded.length) setTimeout(() => location.reload(), 1200);
-            } else if (d.errors.length) {
+            } else if (d.errors && d.errors.length) {
                 fb.style.color = '#721c24';
                 fb.textContent = `✘ ${d.errors.join(' | ')}`;
             } else {
                 fb.style.color = '#383d41';
                 fb.textContent = 'Aucun fichier sélectionné.';
+            }
+            if (d.validation) {
+                renderReport(d.validation, reportEl);
             }
         })
         .catch(() => { fb.style.color = 'red'; fb.textContent = 'Erreur réseau.'; });
@@ -540,6 +573,77 @@ function checkAlgoFiles() {
     checkFile('papillons_loges.pdf',        'actions-papillons-loges');
 }
 
+// ── Rendu du rapport de validation ───────────────────────────────────────────
+function renderReport(report, container) {
+    container.style.display = '';
+    container.innerHTML = '';
+
+    // Statistiques
+    if (report.stats && (report.stats.candidats || report.stats.profs || report.stats.matieres)) {
+        const stats = document.createElement('div');
+        stats.className = 'val-stats';
+        const s = report.stats;
+        if (s.matieres)  stats.innerHTML += `<span class="val-stat">📚 ${s.matieres} matière(s)</span>`;
+        if (s.profs)     stats.innerHTML += `<span class="val-stat">👩‍🏫 ${s.profs} examinateur(s)</span>`;
+        if (s.candidats) stats.innerHTML += `<span class="val-stat">🎓 ${s.candidats} candidat(s)</span>`;
+        container.appendChild(stats);
+    }
+
+    if (report.ok && report.warnings.length === 0) {
+        const ok = document.createElement('p');
+        ok.className = 'val-ok';
+        ok.textContent = '✔ Fichiers valides — aucun problème détecté.';
+        container.appendChild(ok);
+        return;
+    }
+
+    const FILE_LABELS = { candidats: 'candidats.csv', profs: 'profs_total.csv', preps: 'preps.csv' };
+
+    function renderGroup(issues, cssClass) {
+        // Regrouper par fichier
+        const byFile = {};
+        for (const iss of issues) {
+            const label = FILE_LABELS[iss.file] || iss.file;
+            (byFile[label] = byFile[label] || []).push(iss);
+        }
+        for (const [fname, items] of Object.entries(byFile)) {
+            const title = document.createElement('p');
+            title.className = 'val-section-title';
+            title.textContent = fname;
+            container.appendChild(title);
+            const ul = document.createElement('ul');
+            ul.className = 'val-issue-list';
+            for (const iss of items) {
+                const li = document.createElement('li');
+                li.className = cssClass;
+                li.textContent = iss.row ? `Ligne ${iss.row} — ${iss.message}` : iss.message;
+                ul.appendChild(li);
+            }
+            container.appendChild(ul);
+        }
+    }
+
+    if (report.errors.length)   renderGroup(report.errors,   'val-err');
+    if (report.warnings.length) renderGroup(report.warnings, 'val-warn');
+}
+
+// ── Validation pré-lancement ─────────────────────────────────────────────────
+function validerAvantLancement(callback) {
+    const container = document.getElementById('prelaunch-report');
+    container.innerHTML = '<p style="font-size:.85em;color:#555">⏳ Vérification des fichiers…</p>';
+    container.style.display = '';
+    fetch(VALIDATE_URL)
+        .then(r => r.json())
+        .then(report => {
+            renderReport(report, container);
+            callback(report.ok);
+        })
+        .catch(() => {
+            container.innerHTML = '<p style="color:red;font-size:.85em">Erreur lors de la validation.</p>';
+            callback(true); // ne bloque pas si la route échoue
+        });
+}
+
 // ── Sauvegarde des paramètres algo ───────────────────────────────────────────
 function sauvegarderParams() {
     const fb = document.getElementById('params-feedback');
@@ -571,6 +675,8 @@ function sauvegarderParams() {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 checkAlgoFiles();
+// Rapport de validation affiché dès l'ouverture de la page
+validerAvantLancement(() => {});
 
 {% if is_running %}
 connectAlgoSSE();

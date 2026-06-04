@@ -1437,23 +1437,59 @@ def gestion_algo():
 @app.route("/gestion/algo/upload", methods=["POST"])
 @admin_required
 def algo_upload_csv():
-    """Upload des fichiers CSV vers data/."""
+    """Upload des fichiers CSV vers data/ avec validation immédiate."""
+    from csv_validator import normalize_csv, validate_all
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    uploaded, errors = [], []
+    uploaded, upload_errors = [], []
+
     for field, target_name in _ALLOWED_CSV.items():
         f = request.files.get(field)
         if not f or not f.filename:
             continue
         if not f.filename.lower().endswith(".csv"):
-            errors.append(f"{field} : extension .csv requise")
+            upload_errors.append(f"{target_name} : extension .csv requise")
+            continue
+        raw = f.read()
+        try:
+            rows, delim = normalize_csv(raw)
+        except Exception as e:
+            upload_errors.append(f"{target_name} : impossible de lire le fichier ({e})")
+            continue
+        if not rows:
+            upload_errors.append(f"{target_name} : fichier vide")
             continue
         dest = _DATA_DIR / target_name
         if dest.exists():
             dest.rename(dest.with_suffix(".csv.bak"))
-        f.save(str(dest))
+        dest.write_bytes(raw)
         uploaded.append(target_name)
-        app.logger.info(f"CSV upload: {target_name}")
-    return jsonify({"ok": not errors, "uploaded": uploaded, "errors": errors})
+        app.logger.info(f"CSV upload: {target_name} ({len(rows)} lignes, sep='{delim}')")
+
+    # Validation croisée sur les fichiers présents après upload
+    report = validate_all(
+        _DATA_DIR / "candidats.csv"   if (_DATA_DIR / "candidats.csv").exists()   else None,
+        _DATA_DIR / "profs_total.csv" if (_DATA_DIR / "profs_total.csv").exists() else None,
+        _DATA_DIR / "preps.csv"       if (_DATA_DIR / "preps.csv").exists()       else None,
+    )
+    return jsonify({
+        "ok":       not upload_errors,
+        "uploaded": uploaded,
+        "errors":   upload_errors,
+        "validation": report,
+    })
+
+
+@app.route("/gestion/algo/validate")
+@admin_required
+def algo_validate_csv():
+    """Rapport de validation complet des CSV existants (pré-lancement)."""
+    from csv_validator import validate_all
+    report = validate_all(
+        _DATA_DIR / "candidats.csv"   if (_DATA_DIR / "candidats.csv").exists()   else None,
+        _DATA_DIR / "profs_total.csv" if (_DATA_DIR / "profs_total.csv").exists() else None,
+        _DATA_DIR / "preps.csv"       if (_DATA_DIR / "preps.csv").exists()       else None,
+    )
+    return jsonify(report)
 
 
 @app.route("/gestion/algo/params", methods=["POST"])

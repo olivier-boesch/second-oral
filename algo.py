@@ -97,11 +97,23 @@ log.addHandler(fh)
 
 
 def charger_fichier_comme_liste(filename: str) -> list:
-    """charge un contenu csv comme une liste de dict"""
-    with open(filename, "r") as f:
-        data = DictReader(f, delimiter=";")
-        list_data = [r for r in data]
-    return list_data
+    """Charge un CSV comme liste de dicts.
+    Tolère BOM UTF-8, encodage latin-1, séparateur ',' ou ';', espaces parasites.
+    """
+    from pathlib import Path as _Path
+    import sys as _sys
+    _root = str(_Path(__file__).resolve().parent)
+    if _root not in _sys.path:
+        _sys.path.insert(0, _root)
+    try:
+        from webserver.csv_validator import normalize_csv_file
+        rows, _ = normalize_csv_file(filename)
+        return rows
+    except Exception:
+        # Fallback original si le module est indisponible
+        with open(filename, "r", encoding="utf-8-sig") as f:
+            data = DictReader(f, delimiter=";")
+            return [r for r in data]
 
 
 def chercher_par_nom(liste: list[Union["Candidat", "Examinateur", "Matiere"]], nom: str) -> Union["Candidat", "Examinateur", "Matiere"]:
