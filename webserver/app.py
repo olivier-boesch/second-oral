@@ -1397,6 +1397,20 @@ _ALLOWED_CSV = {
     "profs":     "profs_total.csv",
     "preps":     "preps.csv",
 }
+_ALGO_PARAMS_FILE = _DATA_DIR / "algo_params.json"
+_ALGO_PARAMS_DEFAULTS = {
+    "heure_debut": "08:10",
+    "creneaux":    13,
+    "n_run":       1000,
+    "ecart_mini":  80,
+}
+
+def _load_algo_params() -> dict:
+    try:
+        import json as _json
+        return {**_ALGO_PARAMS_DEFAULTS, **_json.loads(_ALGO_PARAMS_FILE.read_text())}
+    except Exception:
+        return dict(_ALGO_PARAMS_DEFAULTS)
 
 
 @app.route("/gestion/algo")
@@ -1415,6 +1429,7 @@ def gestion_algo():
         username=get_username(),
         is_running=_is_running(),
         csv_status=csv_status,
+        algo_params=_load_algo_params(),
         csrf_token=generate_csrf(),
     )
 
@@ -1441,6 +1456,39 @@ def algo_upload_csv():
     return jsonify({"ok": not errors, "uploaded": uploaded, "errors": errors})
 
 
+@app.route("/gestion/algo/params", methods=["POST"])
+@admin_required
+def algo_save_params():
+    """Sauvegarde les paramètres de l'algorithme dans data/algo_params.json."""
+    import json as _json
+    data = request.get_json(silent=True) or {}
+    params = dict(_ALGO_PARAMS_DEFAULTS)
+    try:
+        h, m   = str(data.get("heure_debut", "08:10")).split(":")
+        params["heure_debut"] = f"{int(h):02d}:{int(m):02d}"
+        params["creneaux"]    = max(1, min(30, int(data.get("creneaux",   13))))
+        params["n_run"]       = max(1, min(100_000, int(data.get("n_run", 1000))))
+        params["ecart_mini"]  = max(10, min(240, int(data.get("ecart_mini", 80))))
+    except (ValueError, KeyError):
+        return jsonify({"ok": False, "reason": "invalid_params"}), 400
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _ALGO_PARAMS_FILE.write_text(_json.dumps(params))
+    app.logger.info(f"algo params saved: {params}")
+    return jsonify({"ok": True, "params": params})
+
+
+@app.route("/gestion/algo/download-csv/<key>")
+@admin_required
+def algo_download_csv(key):
+    """Télécharge un des fichiers CSV de data/."""
+    if key not in _ALLOWED_CSV:
+        abort(404)
+    path = _DATA_DIR / _ALLOWED_CSV[key]
+    if not path.exists():
+        abort(404)
+    return send_from_directory(str(_DATA_DIR), _ALLOWED_CSV[key], as_attachment=True)
+
+
 @app.route("/gestion/algo/run", methods=["POST"])
 @admin_required
 def algo_run():
@@ -1460,7 +1508,8 @@ def algo_run():
         redis_client.publish(channel="algo_output",
                              message=json.dumps(msg.to_dict()))
 
-    started = _run(_publish, db_host=os.environ.get("DB_HOST", "localhost"))
+    started = _run(_publish, db_host=os.environ.get("DB_HOST", "localhost"),
+                   params=_load_algo_params())
     app.logger.info(f"algo.py: {'démarré' if started else 'déjà en cours'}")
     return jsonify({"ok": started})
 

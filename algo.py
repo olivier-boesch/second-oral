@@ -26,17 +26,33 @@ from webserver.reports import (
 
 colorama.init(autoreset=True)
 
-# paramètres de run
-N_run = 1_000  # nombre d'essais
-ECART_MINI_CANDIDAT = timedelta(hours=1, minutes=20)
-HEURE_DEBUT = time(hour=8, minute=10)
+# paramètres de run — surchargés par variables d'environnement si présentes
+import os as _os
+
+def _env_int(key, default):
+    try:
+        return int(_os.environ.get(key, default))
+    except (ValueError, TypeError):
+        return default
+
+def _env_time(key, default_h, default_m):
+    raw = _os.environ.get(key, "")
+    try:
+        h, m = raw.split(":")
+        return time(hour=int(h), minute=int(m))
+    except Exception:
+        return time(hour=default_h, minute=default_m)
+
+N_run               = _env_int("ALGO_N_RUN",    1_000)
+ECART_MINI_CANDIDAT = timedelta(minutes=_env_int("ALGO_ECART_MINI", 80))
+HEURE_DEBUT         = _env_time("ALGO_HEURE_DEBUT", 8, 10)
+CRENEAUX            = _env_int("ALGO_CRENEAUX", 13)
 
 # données
 DATA_DIR = 'data'
 ELVS_FILE = join(DATA_DIR, "candidats.csv")
 PROFS_FILE = join(DATA_DIR, "profs_total.csv")
 PREPS_FILE = join(DATA_DIR, 'preps.csv')
-CRENEAUX = 13
 OK_CHAR = "\U00002714"  # ✔
 NOK_CHAR = "\U00002718"  # ✘
 WARNING_CHAR = "\U0001F534"  # 🔴

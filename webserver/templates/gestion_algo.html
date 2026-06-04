@@ -64,6 +64,27 @@
         /* Templates CSV */
         .templates-list { list-style: none; padding: 0; }
         .templates-list li { margin: .3em 0; }
+
+        /* Paramètres algo */
+        .params-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8em 1.5em; }
+        @media (max-width: 600px) { .params-grid { grid-template-columns: 1fr; } }
+        .param-row { display: flex; flex-direction: column; gap: .25em; }
+        .param-label { font-size: .9em; font-weight: bold;
+                       display: flex; align-items: center; gap: .35em; }
+        .param-input { padding: .35em .6em; border: 1px solid #c9b8f5;
+                       border-radius: 4px; font-size: .95em; width: 100%; box-sizing: border-box; }
+        .param-hint  { font-size: .78em; color: #666; }
+        .info-icon   { display: inline-flex; align-items: center; justify-content: center;
+                       width: 1.1em; height: 1.1em; border-radius: 50%;
+                       background: #c9b8f5; color: #3d2fa0; font-size: .75em;
+                       font-weight: bold; cursor: help; flex-shrink: 0; }
+        .params-advanced { margin-top: 1em; padding: .8em; border-radius: 6px;
+                           background: #fff8e1; border: 1px solid #ffe082; }
+        .params-advanced summary { cursor: pointer; font-weight: bold;
+                                   font-size: .9em; color: #856404; }
+        .params-advanced .params-grid { margin-top: .8em; }
+        .params-disclaimer { font-size: .8em; color: #856404; margin: .4em 0 .8em 0; }
+        #params-feedback { font-size: .85em; min-height: 1.2em; margin-top: .5em; }
     </style>
 </head>
 <body class="body-for-sticky">
@@ -105,6 +126,33 @@
     </form>
 </div>
 
+{# ── 1b. Téléchargement des CSV existants ─────────────────────────────────── #}
+{% if csv_status.candidats or csv_status.profs or csv_status.preps %}
+<div class="algo-section">
+    <h2>⬇ Télécharger les fichiers CSV actuels</h2>
+    <ul class="templates-list">
+        {% if csv_status.candidats %}
+        <li>
+            <a href="{{ url_for('algo_download_csv', key='candidats') }}">candidats.csv</a>
+            <small>— fichier actuellement utilisé</small>
+        </li>
+        {% endif %}
+        {% if csv_status.profs %}
+        <li>
+            <a href="{{ url_for('algo_download_csv', key='profs') }}">profs_total.csv</a>
+            <small>— fichier actuellement utilisé</small>
+        </li>
+        {% endif %}
+        {% if csv_status.preps %}
+        <li>
+            <a href="{{ url_for('algo_download_csv', key='preps') }}">preps.csv</a>
+            <small>— fichier actuellement utilisé</small>
+        </li>
+        {% endif %}
+    </ul>
+</div>
+{% endif %}
+
 {# ── 2. Modèles CSV ───────────────────────────────────────────────────────── #}
 <div class="algo-section">
     <h2>📄 Modèles de fichiers CSV</h2>
@@ -130,7 +178,68 @@
     </ul>
 </div>
 
-{# ── 3. Lancement et log ──────────────────────────────────────────────────── #}
+{# ── 3. Paramètres de l'algorithme ───────────────────────────────────────── #}
+<div class="algo-section">
+    <h2>⚙ Paramètres de l'algorithme</h2>
+    <p style="font-size:.88em; color:#555;">Ces paramètres sont sauvegardés et utilisés au prochain lancement.</p>
+
+    <div class="params-grid">
+        <div class="param-row">
+            <label class="param-label" for="p-heure-debut">
+                Heure de début
+                <span class="info-icon" title="Heure du premier créneau de la journée. Format HH:MM (ex : 08:10).">?</span>
+            </label>
+            <input class="param-input" type="time" id="p-heure-debut" name="heure_debut"
+                   value="{{ algo_params.heure_debut }}">
+            <span class="param-hint">Premier créneau de passage de la journée</span>
+        </div>
+        <div class="param-row">
+            <label class="param-label" for="p-creneaux">
+                Nombre de créneaux
+                <span class="info-icon" title="Nombre de créneaux horaires dans la journée. Chaque créneau accueille un candidat par salle. Augmenter ce nombre allonge la journée.">?</span>
+            </label>
+            <input class="param-input" type="number" id="p-creneaux" name="creneaux"
+                   min="1" max="30" value="{{ algo_params.creneaux }}">
+            <span class="param-hint">Nombre de passages par salle dans la journée</span>
+        </div>
+    </div>
+
+    <details class="params-advanced">
+        <summary>⚠ Paramètres avancés</summary>
+        <p class="params-disclaimer">
+            Ces paramètres influencent la qualité et la durée du calcul.
+            Modifiez-les uniquement si vous savez ce que vous faites.
+            Des valeurs extrêmes peuvent produire des résultats incorrects ou bloquer le serveur.
+        </p>
+        <div class="params-grid">
+            <div class="param-row">
+                <label class="param-label" for="p-n-run">
+                    Nombre d'essais (N_run)
+                    <span class="info-icon" title="Nombre de tentatives de placement effectuées. L'algorithme conserve le meilleur résultat. Plus cette valeur est élevée, meilleur est le placement — mais le calcul est plus long. Valeur recommandée : 1000.">?</span>
+                </label>
+                <input class="param-input" type="number" id="p-n-run" name="n_run"
+                       min="1" max="100000" value="{{ algo_params.n_run }}">
+                <span class="param-hint">Recommandé : 1000 — au-delà, le gain est faible</span>
+            </div>
+            <div class="param-row">
+                <label class="param-label" for="p-ecart-mini">
+                    Écart minimum entre 2 passages (min)
+                    <span class="info-icon" title="Durée minimale (en minutes) entre deux oraux d'un même candidat (dans deux matières différentes). Évite qu'un candidat passe deux fois d'affilée sans temps de récupération. Valeur par défaut : 80 min.">?</span>
+                </label>
+                <input class="param-input" type="number" id="p-ecart-mini" name="ecart_mini"
+                       min="10" max="240" value="{{ algo_params.ecart_mini }}">
+                <span class="param-hint">En minutes — par défaut 80 min (1 h 20)</span>
+            </div>
+        </div>
+    </details>
+
+    <p style="margin-top:.9em;">
+        <button onclick="sauvegarderParams()">💾 Sauvegarder les paramètres</button>
+    </p>
+    <p id="params-feedback"></p>
+</div>
+
+{# ── 4. Lancement et log ──────────────────────────────────────────────────── #}
 <div class="algo-section">
     <h2>⚙ Lancement</h2>
     <p>
@@ -251,9 +360,10 @@
 <script>
 "use strict";
 
-const SSE_BASE   = "{{ url_for('sse.stream') }}";
-const RUN_URL    = "{{ url_for('algo_run') }}";
-const UPLOAD_URL = "{{ url_for('algo_upload_csv') }}";
+const SSE_BASE    = "{{ url_for('sse.stream') }}";
+const RUN_URL     = "{{ url_for('algo_run') }}";
+const UPLOAD_URL  = "{{ url_for('algo_upload_csv') }}";
+const PARAMS_URL  = "{{ url_for('algo_save_params') }}";
 const BATCH_BASE = "/generate-doc-batch/";
 const EXISTS_BASE = "{{ url_for('algo_doc_exists', filename='__fn__') }}".replace('__fn__', '');
 const CSRF = "{{ csrf_token }}";
@@ -428,6 +538,35 @@ function checkFile(filename, actionsId) {
 function checkAlgoFiles() {
     checkFile('papillons_examinateurs.pdf', 'actions-papillons-exam');
     checkFile('papillons_loges.pdf',        'actions-papillons-loges');
+}
+
+// ── Sauvegarde des paramètres algo ───────────────────────────────────────────
+function sauvegarderParams() {
+    const fb = document.getElementById('params-feedback');
+    const payload = {
+        heure_debut: document.getElementById('p-heure-debut').value,
+        creneaux:    parseInt(document.getElementById('p-creneaux').value,    10),
+        n_run:       parseInt(document.getElementById('p-n-run').value,       10),
+        ecart_mini:  parseInt(document.getElementById('p-ecart-mini').value,  10),
+    };
+    fb.textContent = 'Sauvegarde…';
+    fb.style.color = '#555';
+    fetch(PARAMS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            fb.style.color = '#155724';
+            fb.textContent = '✔ Paramètres sauvegardés.';
+        } else {
+            fb.style.color = '#721c24';
+            fb.textContent = `✘ Erreur : ${d.reason || 'inconnue'}`;
+        }
+    })
+    .catch(() => { fb.style.color = 'red'; fb.textContent = 'Erreur réseau.'; });
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────

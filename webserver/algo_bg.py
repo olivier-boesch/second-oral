@@ -31,13 +31,15 @@ def is_running() -> bool:
         return _process is not None and _process.poll() is None
 
 
-def run_algo(publish_fn: Callable[[str], None], db_host: str = None) -> bool:
+def run_algo(publish_fn: Callable[[str], None], db_host: str = None,
+             params: dict = None) -> bool:
     """
     Lance algo.py dans un thread séparé.
 
     :param publish_fn: callable(data_str) qui publie une ligne sur le canal SSE.
                        data_str est un JSON : {"line": "...", "done": false}.
     :param db_host:    Hôte MariaDB (surcharge la valeur de app_secrets.py).
+    :param params:     Paramètres algo (n_run, ecart_mini, heure_debut, creneaux).
     :returns: True si lancé, False si algo tourne déjà.
     """
     global _process
@@ -49,6 +51,11 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str = None) -> bool:
         env = dict(os.environ)
         if db_host:
             env["DB_HOST"] = db_host
+        if params:
+            if "n_run"       in params: env["ALGO_N_RUN"]       = str(params["n_run"])
+            if "ecart_mini"  in params: env["ALGO_ECART_MINI"]  = str(params["ecart_mini"])
+            if "heure_debut" in params: env["ALGO_HEURE_DEBUT"] = str(params["heure_debut"])
+            if "creneaux"    in params: env["ALGO_CRENEAUX"]    = str(params["creneaux"])
         # Force le mode non-bufférisé : chaque ligne est envoyée immédiatement
         # sans attendre le remplissage du buffer stdout Python (crucial pour le
         # streaming temps-réel vers le log console).
