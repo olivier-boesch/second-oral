@@ -23,6 +23,7 @@ import getpass
 import os
 import re
 import secrets
+import socket
 import subprocess
 import sys
 import time
@@ -558,9 +559,24 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
     return pdf_path
 
 
+# ── Détection du port disponible ──────────────────────────────────────────────
+
+def find_free_port(start: int = 8080) -> int:
+    """Retourne le premier port TCP libre sur 127.0.0.1 à partir de start."""
+    for port in range(start, 65536):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind(("127.0.0.1", port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError(f"Aucun port TCP libre trouvé à partir de {start}")
+
+
 # ── Génération de la config nginx ─────────────────────────────────────────────
 
-def generate_nginx_conf(fqdn: str) -> str:
+def generate_nginx_conf(fqdn: str, app_port: int = 8080) -> str:
     """Config HTTP uniquement — certbot ajoutera le bloc HTTPS et les directives ssl_*."""
     static_dir = PROJECT_ROOT / 'webserver' / 'static'
     return f'''\
@@ -575,7 +591,7 @@ server {{
     root {static_dir};
 
     location / {{
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:{app_port};
 
         proxy_set_header Host               $host;
         proxy_set_header X-Forwarded-For    $remote_addr;
@@ -610,7 +626,7 @@ server {{
 # ── Fichier .env Docker ──────────────────────────────────────────────────────
 
 def generate_env_file(db_user: str, db_password: str,
-                      db_name: str) -> tuple[str, str]:
+                      db_name: str, app_port: int = 8080) -> tuple[str, str]:
     """
     Génère le contenu du fichier .env Docker et retourne (contenu, root_password).
     Le mot de passe root MariaDB est généré aléatoirement et n'est utilisé
@@ -623,6 +639,7 @@ def generate_env_file(db_user: str, db_password: str,
         f"DB_NAME={db_name}\n"
         f"DB_USER={db_user}\n"
         f"DB_PASSWORD={db_password}\n"
+        f"APP_PORT={app_port}\n"
     )
     return content, db_root_password
 
@@ -768,6 +785,8 @@ def main() -> None:
     parser.add_argument("--academie",         help="Académie de rattachement (ex: Académie d'Aix-Marseille)")
     parser.add_argument("--hebergeur",        help="Nom et adresse de l'hébergeur (ex: OVHcloud SAS, 2 rue Kellermann, 59100 Roubaix)")
     parser.add_argument("--dpd-email",        help="Email du Délégué à la Protection des Données de l'académie")
+    parser.add_argument("--app-port",         type=int, default=None,
+                        help="Port hôte du conteneur nginx (défaut: premier port libre ≥ 8080)")
     parser.add_argument("--yes",              action="store_true",
                         help="Confirmer sans demander")
     args = parser.parse_args()
@@ -821,6 +840,8 @@ def main() -> None:
         ).strip().lower()
         digital_sign = ds not in ("n", "non", "no")
 
+    app_port = args.app_port if args.app_port is not None else find_free_port(8080)
+
     hdr("Récapitulatif")
     print(f"  Domaine        : {BOLD}{fqdn}{NC}")
     print(f"  Centre         : {centre}")
@@ -829,6 +850,7 @@ def main() -> None:
     print(f"  Académie       : {academie}")
     print(f"  DPD            : {dpd_email}")
     print(f"  MariaDB        : {db_user}@{db_host}/{db_name}")
+    print(f"  Port app       : {app_port}")
     print(f"  Signature      : {'✔ activée' if digital_sign else '✘ désactivée'}")
     print(f"  Répertoire     : {PROJECT_ROOT}")
     print()
@@ -886,7 +908,7 @@ def main() -> None:
     # ── 1b. Fichier .env Docker ───────────────────────────────────────────────
     hdr("Génération du fichier .env Docker")
     env_path = PROJECT_ROOT / ".env"
-    env_content, db_root_password = generate_env_file(db_user, db_password, db_name)
+    env_content, db_root_password = generate_env_file(db_user, db_password, db_name, app_port)
 
     if env_path.exists():
         env_bak = env_path.with_suffix(".env.bak")
@@ -902,7 +924,7 @@ def main() -> None:
 
     # ── 2. Configuration nginx ────────────────────────────────────────────────
     hdr("Configuration nginx")
-    nginx_content = generate_nginx_conf(fqdn)
+    nginx_content = generate_nginx_conf(fqdn, app_port)
 
     # Sauvegarde locale (toujours)
     local_conf = PROJECT_ROOT / "nginx-conf" / fqdn

@@ -38,7 +38,7 @@ services:
       - app
     ports:
       # Accessible uniquement depuis localhost : le nginx hôte se connecte ici
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:${APP_PORT:-8080}:80"
     volumes:
       - ./docker/nginx/second_oral.conf:/etc/nginx/conf.d/default.conf:ro
       # Assets statiques servis directement (hôte, lecture seule)
