@@ -559,6 +559,38 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
     return pdf_path
 
 
+# ── Permissions nginx ────────────────────────────────────────────────────────
+
+def fix_nginx_traversal(static_dir: Path) -> None:
+    """
+    S'assure que nginx (www-data) peut traverser chaque répertoire du chemin
+    jusqu'à static_dir en ajoutant le bit o+x là où il manque.
+    Sans ce bit, nginx retourne 403 même si les fichiers sont lisibles.
+    """
+    path = static_dir.resolve()
+    fixed = []
+    checked = []
+    for parent in reversed([path] + list(path.parents)):
+        if parent == Path('/'):
+            continue
+        mode = parent.stat().st_mode
+        if not (mode & 0o001):  # bit x manquant pour "others"
+            try:
+                parent.chmod(mode | 0o001)
+                fixed.append(parent)
+            except PermissionError:
+                warn(f"Permission refusée pour chmod o+x {parent}")
+                warn(f"  Faites-le manuellement : sudo chmod o+x {parent}")
+        else:
+            checked.append(parent)
+
+    if fixed:
+        for p in fixed:
+            ok(f"chmod o+x {p}  (nginx peut maintenant traverser ce dossier)")
+    else:
+        ok("Permissions de traversal nginx : OK")
+
+
 # ── Détection du port disponible ──────────────────────────────────────────────
 
 def find_free_port(start: int = 8080) -> int:
@@ -956,6 +988,10 @@ def main() -> None:
             warn(f"Copiez manuellement : sudo cp {local_conf} {dest_conf}")
     else:
         warn(f"Dossier {nginx_dir} introuvable. Config locale disponible dans nginx-conf/")
+
+    # ── 2b. Permissions de traversal nginx ───────────────────────────────────
+    hdr("Permissions nginx")
+    fix_nginx_traversal(PROJECT_ROOT / "webserver" / "static")
 
     # ── 3. Certbot ────────────────────────────────────────────────────────────
     if not args.no_certbot:
