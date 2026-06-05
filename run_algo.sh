@@ -85,6 +85,15 @@ ok "MariaDB prête."
 
 # ── 3. Exécution de algo.py ───────────────────────────────────────────────────
 header "Exécution de algo.py"
+
+# Le volume Docker nommé static_docs est root:root 755 sur les déploiements
+# existants. On corrige les permissions une fois avant d'exécuter algo.py.
+if ! $DRY_RUN; then
+    docker compose run --rm --user root app \
+        sh -c "mkdir -p /app/webserver/static/docs && chown 1000:1000 /app/webserver/static/docs" \
+        2>/dev/null || true
+fi
+
 info "Lancement dans le conteneur Docker (image : secondoral-app)..."
 echo ""
 

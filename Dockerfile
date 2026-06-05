@@ -27,6 +27,12 @@ RUN apt-get purge -y --auto-remove gcc
 # Utilisateur non-root dédié (UID 1000 pour compatibilité avec les volumes hôte)
 RUN groupadd --gid 1000 appuser && useradd --uid 1000 --gid 1000 --no-create-home appuser
 
+# Crée le répertoire des PDFs générés avec les bons droits avant de passer à appuser.
+# Le volume Docker nommé static_docs est initialisé à partir de ce dossier ;
+# sans cette étape il serait root:root 755 et appuser ne pourrait pas y écrire.
+RUN mkdir -p /app/webserver/static/docs \
+    && chown appuser:appuser /app/webserver/static/docs
+
 # Point d'entrée : gunicorn depuis le dossier webserver (monté en volume)
 WORKDIR /app/webserver
 
