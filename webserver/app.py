@@ -118,7 +118,8 @@ else:
     # modernes ; 'unsafe-inline' reste comme fallback pour les anciens.
     csp = {
         'default-src': "'self'",
-        'script-src':  "'self' 'unsafe-inline' 'strict-dynamic'",
+        'script-src':      "'self' 'unsafe-inline' 'strict-dynamic'",
+        'script-src-attr': "'unsafe-inline'",
         'style-src':   "'self' 'unsafe-inline'",
         'img-src':     "'self' data:",
         'base-uri':    "'self'",
@@ -178,8 +179,10 @@ def _record_auth_failure(role: str, identifier: str) -> None:
 @app.context_processor
 def _inject_csp_nonce():
     """Rend csp_nonce disponible dans les templates (généré par Talisman)."""
-    from flask import g
-    return {'csp_nonce': getattr(g, 'csp_nonce', '')}
+    # Talisman stocke le nonce dans request.csp_nonce (via before_request),
+    # pas dans g.csp_nonce. Lire depuis request pour que {{ csp_nonce }}
+    # dans les templates reçoive la valeur correcte.
+    return {'csp_nonce': getattr(request, 'csp_nonce', '')}
 
 
 @app.after_request
