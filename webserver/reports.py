@@ -445,11 +445,6 @@ def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
                   name, id_label, id_value, pwd_value, url=''):
     """Dessine un papillon (slip de connexion) à la position (x, y) sur le canvas."""
     pad = 3 * mm
-    # Bordure
-    c_canvas.setStrokeColorRGB(0.4, 0.35, 0.8)
-    c_canvas.setLineWidth(1)
-    c_canvas.roundRect(x + 1 * mm, y + 1 * mm,
-                       slip_w - 2 * mm, slip_h - 2 * mm, 2 * mm)
 
     # Bande d'en-tête colorée — coins du haut arrondis pour suivre la bordure
     # (un roundRect arrondirait aussi les coins du bas, qui doivent rester
@@ -463,6 +458,13 @@ def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
     c_canvas.setFillColorRGB(0.84, 0.81, 0.96)
     c_canvas.roundRect(band_x, band_y, band_w, band_h, band_radius, fill=1, stroke=0)
     c_canvas.rect(band_x, band_y, band_w, band_h / 2, fill=1, stroke=0)
+    
+    # Bordure
+    c_canvas.setStrokeColorRGB(0.4, 0.35, 0.8)
+    c_canvas.setLineWidth(1)
+    c_canvas.roundRect(x + 1 * mm, y + 1 * mm,
+                       slip_w - 2 * mm, slip_h - 2 * mm, 2 * mm)
+    
     c_canvas.setFillColorRGB(0, 0, 0)
 
     # Titre
