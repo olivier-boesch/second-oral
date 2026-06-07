@@ -214,6 +214,24 @@ Les boutons **Télécharger** servent le dernier fichier produit par algo.py.
 - Les identifiants de connexion apparaissent aussi sur la fiche web du candidat
   (visible par l'admin et le candidat lui-même une fois connecté)
 
+### Archiver les données de fin de session
+
+Depuis l'accueil admin → **« Archiver la session (zip) »** (`/gestion/archive`),
+une page de confirmation détaille le contenu avant de proposer le téléchargement
+d'une archive zip regroupant les données à conserver, conformément au principe
+de minimisation RGPD :
+
+| Fichier | Contenu |
+|---|---|
+| `planning_oraux.csv` | Planning final des oraux (candidat, matière, salle, examinateur, horaires) |
+| `emargements.csv` | Preuves de signature des examinateurs (métadonnées seulement, sans les images) |
+| `journal_audit.json` | Journal d'audit chaîné par hash (intégrité vérifiable, cf. `/gestion/verify-logs`) |
+| `documents/` | PDF déjà générés (papillons, fiches — signatures incluses) |
+| `LISEZMOI.txt` | Manifeste : contenu de l'archive, date et auteur de la génération |
+
+**Volontairement exclus** de l'archive : mots de passe, clés de connexion,
+et fichiers CSV bruts d'inscription (`data/candidats.csv`, `profs_total.csv`, `preps.csv`).
+
 ---
 
 ## Référence des scripts
@@ -280,7 +298,7 @@ python -m pytest tests/integration/
 
 Le pipeline GitHub Actions (`.github/workflows/ci.yml`) exécute à chaque push sur `main` :
 1. **`pip-audit`** — détection des CVE connues dans les dépendances
-2. **Tests** — 108 tests unitaires + intégration avec couverture
+2. **Tests** — 114 tests unitaires + intégration avec couverture
 
 ---
 

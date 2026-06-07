@@ -9,10 +9,12 @@ Gestion des oraux de second groupe :
   - Signature dématérialisée
   - Génération de documents PDF
 """
+import csv
 import json
 import os
 import re
 import tempfile
+import zipfile
 from pathlib import Path
 from datetime import datetime
 from functools import wraps
@@ -23,7 +25,7 @@ import pyotp
 import segno
 from flask import (
     Flask, render_template, request, redirect, abort,
-    session, jsonify, url_for, make_response, send_from_directory, g,
+    session, jsonify, url_for, make_response, send_from_directory, send_file, g,
 )
 from flask_compress import Compress
 from flask_limiter import Limiter, ExemptionScope
@@ -36,7 +38,7 @@ from flask_wtf import FlaskForm
 from flask_wtf.csrf import generate_csrf
 from wtforms.validators import DataRequired
 from PIL import Image
-from io import BytesIO
+from io import BytesIO, StringIO
 from base64 import b64encode, b64decode
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
@@ -1352,6 +1354,101 @@ def verify_logs():
         logs=logs,
         username=get_username(),
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Archive de fin de session (RGPD : export des données à conserver)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _csv_bytes(fieldnames, rows):
+    """Sérialise une liste de dicts en CSV (séparateur ';', BOM UTF-8 pour Excel)."""
+    buf = StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, delimiter=';', extrasaction='ignore')
+    writer.writeheader()
+    writer.writerows(rows)
+    return ('﻿' + buf.getvalue()).encode('utf-8')
+
+
+@app.route('/gestion/archive')
+@admin_required
+@nocache
+def archive_page():
+    """
+    Page de confirmation avant la génération de l'archive de fin de session.
+    Liste précisément ce que contiendra le zip pour validation par l'admin
+    avant téléchargement (RGPD : minimisation — ni mots de passe, ni CSV bruts).
+    """
+    docs_dir = Path(app.root_path) / 'static' / 'docs'
+    documents = sorted(p.name for p in docs_dir.glob('*.pdf')) if docs_dir.is_dir() else []
+    return render_template(
+        'archive.html',
+        centre=CENTRE_EXAMEN,
+        documents=documents,
+        username=get_username(),
+        url_of_page=request.url,
+    )
+
+
+@app.route('/gestion/archive/download')
+@admin_required
+@nocache
+def archive_download():
+    """
+    Génère et sert l'archive zip de fin de session.
+    Contenu : planning final, preuves d'émargement (sans les images, déjà
+    présentes dans les PDF), journal d'audit chaîné par hash, et les PDF déjà
+    générés (papillons, fiches — signatures incluses).
+    Volontairement absents : mots de passe, clés de connexion, CSV bruts d'inscription.
+    """
+    now = datetime.now()
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        planning = db_get(db_facility_web.SELECT_DOC_ARCHIVE_PLANNING, no_list_auto=False)
+        zf.writestr('planning_oraux.csv', _csv_bytes(
+            ['candidat', 'ine', 'matiere', 'examinateur', 'salle',
+             'heure_sujet', 'heure_oral', 'heure_fin', 'modifie'],
+            planning,
+        ))
+
+        emargements = db_get(db_facility_web.SELECT_DOC_ARCHIVE_EMARGEMENTS, no_list_auto=False)
+        zf.writestr('emargements.csv', _csv_bytes(
+            ['candidat', 'ine', 'examinateur', 'salle', 'heure_oral',
+             'signe', 'heure_emargement', 'hash_emargement'],
+            emargements,
+        ))
+
+        logs = db_get(db_facility_web.SELECT_ALL_LOGS, no_list_auto=False)
+        zf.writestr('journal_audit.json',
+                    json.dumps(logs, ensure_ascii=False, indent=2, default=str).encode('utf-8'))
+
+        docs_dir = Path(app.root_path) / 'static' / 'docs'
+        if docs_dir.is_dir():
+            for pdf in sorted(docs_dir.glob('*.pdf')):
+                zf.write(pdf, arcname=f'documents/{pdf.name}')
+
+        manifest = (
+            f"Archive de fin de session — {CENTRE_EXAMEN}\n"
+            f"Générée le {now:%d/%m/%Y à %H:%M} par {get_username() or 'admin'}\n\n"
+            "Contenu :\n"
+            "  - planning_oraux.csv  : planning final des oraux "
+            "(candidat, matière, salle, examinateur, horaires)\n"
+            "  - emargements.csv     : preuves de signature des examinateurs "
+            "(sans les images — incluses dans documents/)\n"
+            "  - journal_audit.json  : journal d'audit chaîné par hash "
+            "(intégrité vérifiable, cf. /gestion/verify-logs)\n"
+            "  - documents/          : PDF déjà générés "
+            "(papillons, fiches candidats/salles/loges — signatures incluses)\n\n"
+            "Volontairement absents de cette archive (minimisation RGPD) :\n"
+            "  - mots de passe et clés de connexion (candidats, examinateurs, loges)\n"
+            "  - fichiers CSV bruts d'inscription (data/candidats.csv, profs_total.csv, preps.csv)\n"
+        )
+        zf.writestr('LISEZMOI.txt', manifest.encode('utf-8'))
+
+    buf.seek(0)
+    filename = f"archive_{secure_filename(CENTRE_EXAMEN)}_{now:%Y%m%d}.zip"
+    app.logger.info(f"Archive de fin de session générée par {get_username()}")
+    return send_file(buf, mimetype='application/zip',
+                     as_attachment=True, download_name=filename)
 
 
 @app.route('/generate-screen-batch', methods=['GET'])

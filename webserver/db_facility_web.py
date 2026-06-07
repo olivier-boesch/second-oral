@@ -333,7 +333,33 @@ WHERE Oral.candidat = %s
 ORDER BY Oral.heure_sujet
 """
 
-# ---------- Logs
+# ---------- Archive de fin de session (RGPD : données à conserver uniquement)
+
+SELECT_DOC_ARCHIVE_PLANNING = """
+SELECT Candidat.nom AS candidat, Candidat.numero AS ine,
+       Matiere.nom AS matiere, Examinateur.nom AS examinateur,
+       Examinateur.salle AS salle, Oral.heure_sujet AS heure_sujet,
+       Oral.heure_oral AS heure_oral, Oral.heure_fin AS heure_fin,
+       Oral.mis_a_jour AS modifie
+FROM Oral
+    JOIN Candidat ON Oral.candidat = Candidat.id
+    JOIN Examinateur ON Oral.examinateur = Examinateur.id
+    JOIN Matiere ON Examinateur.matiere = Matiere.id
+ORDER BY Oral.heure_sujet, Examinateur.salle
+"""
+
+SELECT_DOC_ARCHIVE_EMARGEMENTS = """
+SELECT Candidat.nom AS candidat, Candidat.numero AS ine,
+       Examinateur.nom AS examinateur, Examinateur.salle AS salle,
+       Oral.heure_oral AS heure_oral,
+       (Oral.emargement != '') AS signe,
+       Oral.heure_emargement AS heure_emargement,
+       Oral.hash_emargement AS hash_emargement
+FROM Oral
+    JOIN Candidat ON Oral.candidat = Candidat.id
+    JOIN Examinateur ON Oral.examinateur = Examinateur.id
+ORDER BY Examinateur.salle, Oral.heure_oral
+"""
 
 # ---------- SSE — résolution des canaux
 

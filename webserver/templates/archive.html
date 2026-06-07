@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Archive de fin de session</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+    <h1>Archive de fin de session</h1>
+    <div>
+        <a href="{{ url_for('index_gestion') }}">Liste des oraux</a><br>
+        <a href="{{ url_for('verify_logs') }}">Vérifier l'intégrité des données</a><br>
+    </div>
+    <p>
+        Cette page permet de générer une archive (fichier zip) regroupant les données
+        à conserver à l'issue de la session, conformément aux règles de minimisation
+        et de conservation des données personnelles (RGPD).
+    </p>
+
+    <h2>Contenu de l'archive</h2>
+    <ul>
+        <li><strong>planning_oraux.csv</strong> — planning final des oraux (candidat, matière, salle, examinateur, horaires)</li>
+        <li><strong>emargements.csv</strong> — preuves de signature des examinateurs (sans les images, déjà incluses dans les PDF ci-dessous)</li>
+        <li><strong>journal_audit.json</strong> — journal d'audit chaîné par hash (intégrité vérifiable, voir <a href="{{ url_for('verify_logs') }}">Vérifier l'intégrité des données</a>)</li>
+        <li>
+            <strong>documents/</strong> — PDF déjà générés (signatures incluses) :
+            {% if documents %}
+            <ul>
+                {% for doc in documents %}
+                <li>{{ doc }}</li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <em>aucun document PDF disponible pour le moment</em>
+            {% endif %}
+        </li>
+        <li><strong>LISEZMOI.txt</strong> — résumé du contenu de l'archive et date de génération</li>
+    </ul>
+
+    <h2>Volontairement absents de cette archive</h2>
+    <p>
+        Par souci de minimisation des données, l'archive <strong>ne contient pas</strong> :
+    </p>
+    <ul>
+        <li>les mots de passe ni les clés de connexion (candidats, examinateurs, loges)</li>
+        <li>les fichiers CSV bruts d'inscription (listes d'inscription importées en amont)</li>
+    </ul>
+
+    <p class="centered">
+        <a href="{{ url_for('archive_download') }}">
+            ⬇ Télécharger l'archive (zip)
+        </a>
+    </p>
+
+    {% include 'footer.html' %}
+</body>
+</html>

@@ -1,6 +1,8 @@
 """Tests d'intégration Flask — routes de app.py (DB mockée, sans Redis réel)."""
 
 import json
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -182,3 +184,113 @@ class TestCandidatRoutes:
         r = client.get("/candidat")
         # Peut retourner 200 ou redirect selon l'état de la session
         assert r.status_code in (200, 302, 404)
+
+
+# ── Archive de fin de session (zip) ───────────────────────────────────────────
+
+class TestArchiveRoutes:
+    PLANNING_ROW = {
+        "candidat": "Dupont Jean", "ine": "111111111AA", "matiere": "Maths",
+        "examinateur": "Martin", "salle": "101", "heure_sujet": "08:00",
+        "heure_oral": "08:30", "heure_fin": "08:50", "modifie": None,
+    }
+    EMARGEMENT_ROW = {
+        "candidat": "Dupont Jean", "ine": "111111111AA", "examinateur": "Martin",
+        "salle": "101", "heure_oral": "08:30", "signe": 1,
+        "heure_emargement": "08:50", "hash_emargement": "abc123",
+    }
+    LOG_ROW = {
+        "id": 1, "timestamp": "2026-06-01 10:00:00", "table_name": "Oral",
+        "action_data": {"action": "update"}, "hash": "deadbeef", "ok": True,
+    }
+
+    def test_archive_page_redirects_without_session(self, client):
+        r = client.get("/gestion/archive")
+        assert r.status_code == 302
+        assert "/login" in r.headers["Location"]
+
+    def test_archive_download_redirects_without_session(self, client):
+        r = client.get("/gestion/archive/download")
+        assert r.status_code == 302
+        assert "/login" in r.headers["Location"]
+
+    def test_archive_page_ok(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = []
+        r = admin_client.get("/gestion/archive")
+        assert r.status_code == 200
+        body = r.data.decode("utf-8")
+        assert "planning_oraux.csv" in body
+        assert "emargements.csv" in body
+        assert "journal_audit.json" in body
+        # RGPD : la page doit rappeler ce qui est volontairement exclu
+        assert "mots de passe" in body
+
+    def test_archive_download_returns_zip(self, admin_client, db_mock):
+        db_mock.make_sql_select.side_effect = [
+            [self.PLANNING_ROW],     # SELECT_DOC_ARCHIVE_PLANNING
+            [self.EMARGEMENT_ROW],   # SELECT_DOC_ARCHIVE_EMARGEMENTS
+            [self.LOG_ROW],          # SELECT_ALL_LOGS
+        ]
+        r = admin_client.get("/gestion/archive/download")
+        assert r.status_code == 200
+        assert r.mimetype == "application/zip"
+        assert r.headers["Content-Disposition"].startswith("attachment")
+        assert ".zip" in r.headers["Content-Disposition"]
+
+        with zipfile.ZipFile(BytesIO(r.data)) as zf:
+            names = zf.namelist()
+            assert "planning_oraux.csv" in names
+            assert "emargements.csv" in names
+            assert "journal_audit.json" in names
+            assert "LISEZMOI.txt" in names
+
+            planning_csv = zf.read("planning_oraux.csv").decode("utf-8-sig")
+            assert "Dupont Jean" in planning_csv
+            assert ";" in planning_csv
+
+            emargements_csv = zf.read("emargements.csv").decode("utf-8-sig")
+            assert "Martin" in emargements_csv
+
+            audit = json.loads(zf.read("journal_audit.json").decode("utf-8"))
+            assert audit[0]["table_name"] == "Oral"
+
+            manifest = zf.read("LISEZMOI.txt").decode("utf-8")
+            assert "Centre Test" in manifest
+            assert "mots de passe" in manifest
+
+    def test_archive_download_excludes_raw_csv_and_secrets(self, admin_client, db_mock):
+        """RGPD : minimisation — ni CSV bruts, ni mots de passe/clés dans l'archive."""
+        db_mock.make_sql_select.side_effect = [
+            [self.PLANNING_ROW], [self.EMARGEMENT_ROW], [self.LOG_ROW],
+        ]
+        r = admin_client.get("/gestion/archive/download")
+        with zipfile.ZipFile(BytesIO(r.data)) as zf:
+            names = zf.namelist()
+            for forbidden in ("candidats.csv", "profs_total.csv", "preps.csv",
+                              "password", "login_key"):
+                assert all(forbidden not in n for n in names)
+
+            planning_csv = zf.read("planning_oraux.csv").decode("utf-8-sig")
+            emargements_csv = zf.read("emargements.csv").decode("utf-8-sig")
+            assert "password" not in planning_csv
+            assert "login_key" not in planning_csv
+            assert "password" not in emargements_csv
+
+    def test_archive_download_includes_pdf_documents(self, admin_client, db_mock,
+                                                       flask_app, tmp_path, monkeypatch):
+        """Les PDF déjà générés (papillons, fiches) doivent être inclus dans documents/."""
+        db_mock.make_sql_select.side_effect = [
+            [self.PLANNING_ROW], [self.EMARGEMENT_ROW], [self.LOG_ROW],
+        ]
+        docs_dir = tmp_path / "static" / "docs"
+        docs_dir.mkdir(parents=True)
+        pdf_path = docs_dir / "papillons_examinateurs.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 fake content")
+
+        monkeypatch.setattr(flask_app, "root_path", str(tmp_path))
+        r = admin_client.get("/gestion/archive/download")
+        assert r.status_code == 200
+        with zipfile.ZipFile(BytesIO(r.data)) as zf:
+            names = zf.namelist()
+            assert "documents/papillons_examinateurs.pdf" in names
+            assert zf.read("documents/papillons_examinateurs.pdf") == b"%PDF-1.4 fake content"
