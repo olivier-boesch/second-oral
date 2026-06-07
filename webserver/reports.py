@@ -27,6 +27,9 @@ from reportlab.platypus import (
 from reportlab.platypus.doctemplate import SimpleDocTemplate
 
 pdfmetrics.registerFont(TTFont('BodyFont', 'PoppinsLatin-Regular.ttf'))
+# Police à empattements pour les papillons : les empattements distinguent
+# mieux les caractères ambigus des mots de passe générés (1/l/I, 0/O...).
+pdfmetrics.registerFont(TTFont('PapillonFont', 'DejaVuSerif.ttf'))
 
 WARNING_CHAR = "(!)"
 
@@ -455,22 +458,22 @@ def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
     c_canvas.setFillColorRGB(0, 0, 0)
 
     # Titre
-    c_canvas.setFont("BodyFont", 7)
+    c_canvas.setFont("PapillonFont", 7)
     c_canvas.drawCentredString(x + slip_w / 2, y + slip_h - 6 * mm, title_line1)
     if title_line2:
-        c_canvas.setFont("BodyFont", 6)
+        c_canvas.setFont("PapillonFont", 6)
         c_canvas.drawCentredString(x + slip_w / 2, y + slip_h - 9.5 * mm, title_line2)
 
     # Nom
-    c_canvas.setFont("BodyFont", 9)
+    c_canvas.setFont("PapillonFont", 9)
     c_canvas.drawString(x + pad, y + slip_h - 16 * mm, name[:35])
 
     # Identifiant
-    c_canvas.setFont("BodyFont", 7)
+    c_canvas.setFont("PapillonFont", 7)
     c_canvas.drawString(x + pad, y + slip_h - 22 * mm, f"{id_label} : {id_value}")
 
     # Mot de passe
-    c_canvas.setFont("BodyFont", 7)
+    c_canvas.setFont("PapillonFont", 7)
     c_canvas.drawString(x + pad, y + slip_h - 27 * mm,
                         f"Mot de passe : {pwd_value}")
 
@@ -491,7 +494,7 @@ def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
             )
         except Exception:
             pass
-        c_canvas.setFont("BodyFont", 5)
+        c_canvas.setFont("PapillonFont", 5)
         c_canvas.drawString(x + pad, y + 3 * mm, url[:45])
 
 
