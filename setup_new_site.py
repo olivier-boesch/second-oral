@@ -635,6 +635,29 @@ def ensure_app_system_user(name: str = APP_SYSTEM_USER) -> None:
              f"&& useradd --gid {name} --system --no-create-home {name}")
 
 
+# ── Répertoire de données (bind-monté dans le conteneur) ─────────────────────
+
+def ensure_data_dir(data_dir: Path) -> None:
+    """
+    Crée data/ si besoin et s'assure qu'il appartient au compte système dédié
+    (cf. APP_SYSTEM_USER). Ce dossier est bind-monté dans le conteneur
+    (cf. docker-compose.yml : « .:/app ») et « appuser » — dont l'UID/GID
+    correspond à APP_SYSTEM_USER côté hôte — doit pouvoir y écrire (upload
+    des CSV via /gestion/algo/upload, cf. webserver/app.py:algo_upload_csv).
+    Sans ce chown, le dossier appartient à root et l'upload échoue avec
+    PermissionError.
+    """
+    data_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.chown(data_dir, user=APP_SYSTEM_USER, group=APP_SYSTEM_USER)
+        for path in data_dir.rglob("*"):
+            shutil.chown(path, user=APP_SYSTEM_USER, group=APP_SYSTEM_USER)
+        ok(f"data/ appartient à {APP_SYSTEM_USER}:{APP_SYSTEM_USER} (récursif)")
+    except (PermissionError, LookupError):
+        warn("Impossible de chown data/ (pas root ?). Faites-le manuellement :")
+        warn(f"  sudo chown -R {APP_SYSTEM_USER}:{APP_SYSTEM_USER} {data_dir}")
+
+
 # ── Détection du port disponible ──────────────────────────────────────────────
 
 def find_free_port(start: int = 8080) -> int:
@@ -984,6 +1007,7 @@ def main() -> None:
         )
         ok(f"security.txt mis à jour → {sec_txt}")
     ensure_app_system_user()
+    ensure_data_dir(PROJECT_ROOT / "data")
     try:
         os.chmod(secrets_path, 0o640)
         # Le groupe doit correspondre à celui de « appuser » dans le conteneur
