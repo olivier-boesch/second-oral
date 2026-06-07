@@ -244,10 +244,17 @@ def _sse_channel_allowed(channel: str) -> bool:
         return True
     if channel == 'general':
         return True  # diffusion générale, sans donnée personnelle
-    if channel.startswith('salle_'):
-        return session.get('user') == channel[len('salle_'):]
-    if channel.startswith('loge_'):
-        return session.get('loge') == channel[len('loge_'):]
+    # Personnel (examinateur connecté ou surveillant de loge) : les routes
+    # salle()/loge() les laissent déjà consulter n'importe quelle fiche
+    # salle/loge via is_authenticated() (cf. commentaire "on laisse
+    # l'examinateur voir toutes les loges pour l'instant") — l'autorisation
+    # SSE doit suivre la même règle, sinon le flux temps réel se retrouve
+    # bloqué (403) dès qu'un examinateur ou surveillant consulte une fiche
+    # qui n'est pas la sienne. Seul le candidat reste restreint à son propre
+    # canal (seul cas où une donnée personnelle individuelle est en jeu).
+    is_personnel = 'user' in session or 'loge' in session
+    if channel.startswith('salle_') or channel.startswith('loge_'):
+        return is_personnel
     if channel.startswith('candidat_'):
         return session.get('candidat') == channel[len('candidat_'):]
     if channel.startswith('sign_'):

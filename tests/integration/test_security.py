@@ -110,15 +110,24 @@ class TestSSEChannelAuthorization:
     def test_candidat_can_subscribe_to_own_channel(self, flask_app):
         assert self._allowed(flask_app, {"candidat": "0123456789A"}, "candidat_0123456789A")
 
-    def test_examinateur_cannot_subscribe_to_another_salle_channel(self, flask_app):
-        assert not self._allowed(flask_app, {"user": "101"}, "salle_999")
-
-    def test_examinateur_can_subscribe_to_own_salle_channel(self, flask_app):
+    def test_examinateur_can_subscribe_to_any_salle_channel(self, flask_app):
+        """Les routes salle()/loge() laissent déjà le personnel consulter
+        n'importe quelle fiche (is_authenticated()) : l'autorisation SSE doit
+        suivre la même règle, sinon le flux temps réel reste bloqué (403) dès
+        qu'un examinateur regarde une salle qui n'est pas la sienne."""
         assert self._allowed(flask_app, {"user": "101"}, "salle_101")
+        assert self._allowed(flask_app, {"user": "101"}, "salle_999")
 
-    def test_loge_user_restricted_to_own_loge_channel(self, flask_app):
+    def test_loge_user_can_subscribe_to_any_loge_or_salle_channel(self, flask_app):
         assert self._allowed(flask_app, {"loge": "Loge A"}, "loge_Loge A")
-        assert not self._allowed(flask_app, {"loge": "Loge A"}, "loge_Loge B")
+        assert self._allowed(flask_app, {"loge": "Loge A"}, "loge_Loge B")
+        assert self._allowed(flask_app, {"loge": "Loge A"}, "salle_101")
+
+    def test_candidat_cannot_subscribe_to_salle_or_loge_channel(self, flask_app):
+        """Seul le personnel (examinateur, loge, admin) consulte les fiches
+        salle/loge — un candidat n'a aucune raison d'y être abonné."""
+        assert not self._allowed(flask_app, {"candidat": "0123456789A"}, "salle_101")
+        assert not self._allowed(flask_app, {"candidat": "0123456789A"}, "loge_Loge A")
 
     def test_non_admin_cannot_subscribe_to_algo_output(self, flask_app):
         assert not self._allowed(flask_app, {"user": "101"}, "algo_output")
