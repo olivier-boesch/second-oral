@@ -442,7 +442,7 @@ def liste_fiches_candidats(candidats, file_dir='.', filename_root='candidat_',
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
-                  name, id_label, id_value, pwd_value, url=''):
+                  name, id_label, id_value, pwd_value, url='', qr_size=20 * mm):
     """Dessine un papillon (slip de connexion) à la position (x, y) sur le canvas."""
     pad = 3 * mm
 
@@ -488,7 +488,6 @@ def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
                         f"Mot de passe : {pwd_value}")
 
     # QR code + URL texte (coin inférieur droit)
-    qr_size = 14 * mm
     if url:
         try:
             qr_io = BytesIO()
@@ -509,7 +508,7 @@ def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
 
 
 def _build_papillons_pdf(items, filename, title1, title2, id_label,
-                        get_id, get_name, get_pwd, get_url):
+                        get_id, get_name, get_pwd, get_url, qr_size=14 * mm):
     """
     Moteur générique de génération de papillons.
 
@@ -519,6 +518,7 @@ def _build_papillons_pdf(items, filename, title1, title2, id_label,
     :param title2: deuxième ligne du titre (souvent le nom du centre)
     :param id_label: libellé de l'identifiant (ex. 'Salle', 'INE')
     :param get_id/get_name/get_pwd/get_url: callables item → valeur
+    :param qr_size: taille du QR code sur chaque papillon
     """
     W, H = pagesizes.portrait(pagesizes.A4)
     buffer = BytesIO()
@@ -546,7 +546,7 @@ def _build_papillons_pdf(items, filename, title1, title2, id_label,
             c_canvas, x, y, slip_w, slip_h,
             title1, title2,
             get_name(item), id_label, get_id(item),
-            get_pwd(item), get_url(item),
+            get_pwd(item), get_url(item), qr_size=qr_size,
         )
 
     c_canvas.save()
@@ -598,6 +598,7 @@ def liste_papillons_candidats(candidats, filename='static/docs/papillons_candida
         get_name=lambda d: d['nom'],
         get_pwd=lambda d: d['login_key'],
         get_url=lambda d: f"{base_url}/c/{d['ine']}" if base_url else "",
+        qr_size=18 * mm,
     )
 
 
