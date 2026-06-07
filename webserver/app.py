@@ -185,6 +185,15 @@ def _inject_csp_nonce():
     return {'csp_nonce': getattr(request, 'csp_nonce', '')}
 
 
+@app.context_processor
+def _inject_candidat_nom():
+    """
+    Rend le nom du candidat connecté disponible dans tous les templates —
+    RGPD : l'en-tête (auth_icon.html) doit afficher son nom, jamais son INE.
+    """
+    return {'candidat_nom': get_candidat_nom()}
+
+
 @app.after_request
 def _security_headers(response):
     """#8 — Headers de sécurité complémentaires non couverts par Talisman."""
@@ -353,6 +362,22 @@ def is_student_user(ine=None):
     if ine is not None:
         return session['candidat'] == str(ine)
     return True
+
+
+def get_candidat_nom():
+    """
+    Renvoie le nom (et jamais l'INE) du candidat connecté, ou None.
+    Résultat mis en cache dans le contexte de requête (flask.g).
+    """
+    if '_candidat_nom' in g:
+        return g._candidat_nom
+    ine = session.get('candidat')
+    if not ine:
+        g._candidat_nom = None
+        return None
+    infos = db_get(db_facility_web.SELECT_CANDIDAT_AUTH, ine, no_list_auto=False)
+    g._candidat_nom = infos[0]['nom'] if infos else None
+    return g._candidat_nom
 
 
 def get_username(complete=True):
