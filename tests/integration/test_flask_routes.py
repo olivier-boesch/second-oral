@@ -233,13 +233,14 @@ class TestArchiveRoutes:
         assert "/login" in r.headers["Location"]
 
     def test_archive_page_ok(self, admin_client, db_mock):
-        db_mock.make_sql_select.return_value = []
+        db_mock.make_sql_select.return_value = [{"id": 1, "salle": "101"}]
         r = admin_client.get("/gestion/archive")
         assert r.status_code == 200
         body = r.data.decode("utf-8")
         assert "planning_oraux.csv" in body
         assert "emargements.csv" in body
         assert "journal_audit.json" in body
+        assert "Salle 101" in body
         # RGPD : la page doit rappeler ce qui est volontairement exclu
         assert "mots de passe" in body
 
@@ -295,24 +296,34 @@ class TestArchiveRoutes:
             assert "login_key" not in planning_csv
             assert "password" not in emargements_csv
 
-    def test_archive_download_includes_pdf_documents(self, admin_client, db_mock,
-                                                       flask_app, tmp_path, monkeypatch):
-        """Les PDF déjà générés (papillons, fiches) doivent être inclus dans documents/."""
+    def test_archive_download_only_includes_salle_sheets(self, admin_client, db_mock,
+                                                          flask_app, tmp_path, monkeypatch):
+        """`documents/` ne doit contenir QUE les fiches de salle — les autres PDF
+        générables à la demande (papillons, fiches candidats/loges, liste
+        générale) seraient en trop dans une archive de minimisation RGPD."""
+        import app as app_module
+        monkeypatch.setattr(app_module.reports, "liste_salle_oraux", lambda *a, **kw: None)
+
         db_mock.make_sql_select.side_effect = [
             [], [self.PLANNING_ROW], [self.EMARGEMENT_ROW], [self.LOG_ROW],
         ]
         docs_dir = tmp_path / "static" / "docs"
         docs_dir.mkdir(parents=True)
-        pdf_path = docs_dir / "papillons_examinateurs.pdf"
-        pdf_path.write_bytes(b"%PDF-1.4 fake content")
+        kept = ["salle-101-Martin.pdf", "liste_salles.pdf"]
+        excluded = ["papillons_examinateurs.pdf", "candidat_0123456789A.pdf",
+                    "liste_candidats.pdf", "loge-LogeA.pdf", "liste_oraux.pdf"]
+        for name in kept + excluded:
+            (docs_dir / name).write_bytes(b"%PDF-1.4 fake content")
 
         monkeypatch.setattr(flask_app, "root_path", str(tmp_path))
         r = admin_client.get("/gestion/archive/download")
         assert r.status_code == 200
         with zipfile.ZipFile(BytesIO(r.data)) as zf:
             names = zf.namelist()
-            assert "documents/papillons_examinateurs.pdf" in names
-            assert zf.read("documents/papillons_examinateurs.pdf") == b"%PDF-1.4 fake content"
+            for name in kept:
+                assert f"documents/{name}" in names
+            for name in excluded:
+                assert f"documents/{name}" not in names
 
     def test_archive_download_regenerates_all_salle_sheets(self, admin_client, db_mock,
                                                             monkeypatch):

@@ -1470,12 +1470,16 @@ def archive_page() -> ResponseReturnValue:
     Liste précisément ce que contiendra le zip pour validation par l'admin
     avant téléchargement (RGPD : minimisation — ni mots de passe, ni CSV bruts).
     """
-    docs_dir = Path(app.root_path) / 'static' / 'docs'
-    documents = sorted(p.name for p in docs_dir.glob('*.pdf')) if docs_dir.is_dir() else []
+    # Les fiches de salle sont (re)générées au moment du téléchargement — on
+    # liste donc les salles concernées plutôt que les fichiers déjà présents
+    # dans static/docs (qui pourraient être incomplets ou obsolètes).
+    salles = sorted(
+        s['salle'] for s in db_get(db_facility_web.SELECT_DOC_LISTE_SALLES, no_list_auto=False)
+    )
     return render_template(
         'archive.html',
         centre=CENTRE_EXAMEN,
-        documents=documents,
+        salles=salles,
         username=get_username(),
         url_of_page=request.url,
     )
@@ -1489,8 +1493,12 @@ def archive_download() -> ResponseReturnValue:
     Génère et sert l'archive zip de fin de session.
     - planning_oraux.csv / emargements.csv : exports CSV (sans les images de signature)
     - journal_audit.json : logs chaînés par hash (intégrité vérifiable)
-    - documents/ : PDF déjà générés (papillons, fiches — signatures incluses)
-    - Volontairement absents : mots de passe, clés de connexion, CSV bruts d'inscription.
+    - documents/ : fiches d'émargement de toutes les salles, régénérées à la
+      volée (signatures des candidats incluses) — seuls PDF retenus, pour
+      limiter l'archive aux preuves d'émargement réellement nécessaires
+    - Volontairement absents : mots de passe, clés de connexion, CSV bruts
+      d'inscription, et les autres PDF générables à la demande (papillons,
+      fiches candidats/loges, liste générale).
     """
     now = datetime.now()
 
@@ -1505,6 +1513,15 @@ def archive_download() -> ResponseReturnValue:
             db_facility_web.SELECT_DOC_LISTE_SALLES_ORAUX, s['id'], no_list_auto=False
         )
     reports.liste_salle_oraux(salles, 'static/docs', 'salle', centre_examen=CENTRE_EXAMEN)
+
+    # static/docs/ accumule aussi des PDF générés à la demande (papillons,
+    # fiches candidats/loges, liste générale...) qui n'ont rien à faire dans
+    # cette archive — minimisation RGPD oblige, on ne retient que les fiches
+    # de salle (preuve d'émargement) que l'on vient de régénérer ci-dessus.
+    docs_dir = Path(app.root_path) / 'static' / 'docs'
+    fiches_salles = sorted(
+        list(docs_dir.glob('salle-*.pdf')) + list(docs_dir.glob('liste_salles.pdf'))
+    ) if docs_dir.is_dir() else []
 
     buf = BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -1526,10 +1543,8 @@ def archive_download() -> ResponseReturnValue:
         zf.writestr('journal_audit.json',
                     json.dumps(logs, ensure_ascii=False, indent=2, default=str).encode('utf-8'))
 
-        docs_dir = Path(app.root_path) / 'static' / 'docs'
-        if docs_dir.is_dir():
-            for pdf in sorted(docs_dir.glob('*.pdf')):
-                zf.write(pdf, arcname=f'documents/{pdf.name}')
+        for pdf in fiches_salles:
+            zf.write(pdf, arcname=f'documents/{pdf.name}')
 
         manifest = (
             f"Archive de fin de session — {CENTRE_EXAMEN}\n"
@@ -1541,12 +1556,14 @@ def archive_download() -> ResponseReturnValue:
             "(sans les images — incluses dans documents/)\n"
             "  - journal_audit.json  : journal d'audit chaîné par hash "
             "(intégrité vérifiable, cf. /gestion/verify-logs)\n"
-            "  - documents/          : PDF déjà générés "
-            "(papillons, fiches candidats/salles/loges — signatures incluses)\n\n"
+            "  - documents/          : fiches d'émargement de toutes les salles "
+            "(régénérées à la volée, signatures des candidats incluses)\n\n"
             "Volontairement absents de cette archive (minimisation RGPD) :\n"
             "  - mots de passe et clés de connexion (candidats, examinateurs, loges)\n"
             "  - fichiers CSV bruts d'inscription "
             "(data/candidats.csv, profs_total.csv, preps.csv)\n"
+            "  - autres PDF générables à la demande depuis la page algo "
+            "(papillons, fiches candidats/loges, liste générale des oraux)\n"
         )
         zf.writestr('LISEZMOI.txt', manifest.encode('utf-8'))
 

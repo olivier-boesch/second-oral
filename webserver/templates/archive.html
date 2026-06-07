@@ -24,15 +24,15 @@
         <li><strong>emargements.csv</strong> — preuves de signature des examinateurs (sans les images, déjà incluses dans les PDF ci-dessous)</li>
         <li><strong>journal_audit.json</strong> — journal d'audit chaîné par hash (intégrité vérifiable, voir <a href="{{ url_for('verify_logs') }}">Vérifier l'intégrité des données</a>)</li>
         <li>
-            <strong>documents/</strong> — PDF déjà générés (signatures incluses) :
-            {% if documents %}
+            <strong>documents/</strong> — fiches d'émargement de toutes les salles, régénérées au moment du téléchargement (signatures des candidats incluses) :
+            {% if salles %}
             <ul>
-                {% for doc in documents %}
-                <li>{{ doc }}</li>
+                {% for salle in salles %}
+                <li>Salle {{ salle }}</li>
                 {% endfor %}
             </ul>
             {% else %}
-            <em>aucun document PDF disponible pour le moment</em>
+            <em>aucune salle disponible pour le moment</em>
             {% endif %}
         </li>
         <li><strong>LISEZMOI.txt</strong> — résumé du contenu de l'archive et date de génération</li>
@@ -45,6 +45,7 @@
     <ul>
         <li>les mots de passe ni les clés de connexion (candidats, examinateurs, loges)</li>
         <li>les fichiers CSV bruts d'inscription (listes d'inscription importées en amont)</li>
+        <li>les autres PDF générables à la demande depuis la page algo (papillons, fiches candidats/loges, liste générale des oraux)</li>
     </ul>
 
     <p class="centered">
