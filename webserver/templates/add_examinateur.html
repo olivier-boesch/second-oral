@@ -9,6 +9,7 @@
 {% include 'auth_icon.html' %}
 <h1>Ajout d'examinateur</h1>
 <form class="classic" action="{{ url_for('add_examinateur') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <fieldset>
         <legend>Information de l'examinateur</legend>
         <p>

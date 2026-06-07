@@ -5,7 +5,7 @@
     <title>Mes Oraux - {{centre }} - Loge {{ data['salle'] }}</title>
     {% include 'style.html' %}
     <script nonce="{{ csp_nonce }}">
-        let data = {{ students_ine | safe }};
+        let data = {{ students_ine | tojson }};
     </script>
     {% include 'script_reload.html' %}
 </head>

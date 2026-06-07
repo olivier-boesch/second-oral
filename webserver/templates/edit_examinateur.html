@@ -15,6 +15,7 @@
     <fieldset>
         <legend>Informations de l'examinateur</legend>
         <p>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="id" value="{{ donnees_examinateur['id'] }}">
             <input type="hidden" name="link_back" value="{{ link_back }}">
         </p>

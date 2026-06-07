@@ -159,7 +159,7 @@ HOSTNAME = check_output(['hostname']).decode('utf8').strip('\\n')
 DB_SALT = '{db_salt}'
 
 # ── Mots de passe ─────────────────────────────────────────────────────────────
-PASSWORD_LENGTH = 8
+PASSWORD_LENGTH = 12
 PASSWORD_PEPPER = '{pwd_pepper}'
 PASSWORD_SALT   = '{pwd_salt}'
 
@@ -172,12 +172,28 @@ def verify_log_item(log_item, previous_hash=''):
     return sha256(data_to_hash.encode()).hexdigest() == log_item['hash']
 
 
-def hash_password(password):
+def _derive_salt(identifier):
+    """
+    Dérive un sel propre à `identifier` (INE, nom de salle, nom de loge...) à
+    partir du sel global de l'application. Combiné au poivre (lui aussi
+    propre à l'instance), cela évite qu'un sel statique unique ne s'applique
+    à tous les comptes — deux comptes avec le même mot de passe produisent
+    ainsi des empreintes différentes, et une table arc-en-ciel précalculée
+    pour un compte ne peut pas être réutilisée pour un autre.
+    """
+    return sha256(f"{{PASSWORD_SALT}}:{{identifier}}".encode('utf8')).hexdigest().encode('utf8')
+
+
+def hash_password(password, identifier=''):
     return b64encode(
         scrypt(
             password=(password + PASSWORD_PEPPER).encode('utf8'),
-            salt=PASSWORD_SALT.encode('utf8'),
-            n=2048, r=8, p=2,
+            salt=_derive_salt(identifier),
+            n=2 ** 15, r=8, p=2,
+            # OpenSSL refuse silencieusement les paramètres dont l'empreinte
+            # mémoire (~128 * n * r * p octets) dépasse sa limite par défaut
+            # (32 Mo) — on la relève explicitement pour ce coût plus élevé.
+            maxmem=128 * 1024 * 1024,
         )
     ).decode('utf8')
 
@@ -186,9 +202,9 @@ def generate_password(password_len=PASSWORD_LENGTH):
     return ''.join(choice(ascii_letters + digits) for _ in range(password_len))
 
 
-def check_password(password, hash_value):
+def check_password(password, identifier, hash_value):
     from hmac import compare_digest
-    return compare_digest(hash_password(password), hash_value)
+    return compare_digest(hash_password(password, identifier), hash_value)
 '''
     return content, otp_key
 

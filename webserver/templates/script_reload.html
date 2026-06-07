@@ -2,7 +2,7 @@
 (function () {
     "use strict";
 
-    const SSE_URL = "{{ url_for('sse.stream') }}?channel=general";
+    const SSE_URL = "{{ url_for('sse.stream') }}?channel={{ (sse_channel | default('general')) | urlencode }}";
     let source = null;
 
     function connect() {

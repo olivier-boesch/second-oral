@@ -10,7 +10,11 @@
     <h1>Edition des Oraux de second groupe</h1>
     <div>
         <a href="{{ url_for('liste_examinateurs') }}">Liste des examinateurs</a><br>
-        <a href="{{ url_for('reload_pages', link_back='/gestion') }}">Recharger toutes les pages ouvertes</a><br>
+        <form method="post" action="{{ url_for('reload_pages') }}" style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="link_back" value="/gestion">
+            <button type="submit" class="link-button">Recharger toutes les pages ouvertes</button>
+        </form><br>
         <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="liste_oraux", id_doc=0) }}">Liste générale des oraux (pdf)</a><br>
         <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_candidats", id_doc=0) }}">Fiches des candidats (pdf)</a><br>
         <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_salles", id_doc=0) }}">Fiches des salles (pdf)</a><br>

@@ -44,10 +44,11 @@ _TEST_SALT   = "testsalt2"
 _TEST_OTP    = "JBSWY3DPEHPK3PXP"   # clé base32 valide
 
 
-def _hash_pw(pw: str) -> str:
+def _hash_pw(pw: str, identifier: str = "") -> str:
+    salt = sha256(f"{_TEST_SALT}:{identifier}".encode("utf8")).hexdigest()
     return b64encode(scrypt(
         password=(pw + _TEST_PEPPER).encode("utf8"),
-        salt=_TEST_SALT.encode("utf8"),
+        salt=salt.encode("utf8"),
         n=2048, r=8, p=2,
     )).decode("utf8")
 
@@ -80,8 +81,8 @@ if "app_secrets" not in sys.modules:
     _as.HEBERGEUR        = "TestHost SAS"
     _as.DPD_EMAIL        = "dpd@test.fr"
     _as.hash_password    = _hash_pw
-    _as.check_password   = lambda pw, h: _hash_pw(pw) == h
-    _as.generate_password = lambda n=8: "TestPass"
+    _as.check_password   = lambda pw, identifier, h: _hash_pw(pw, identifier) == h
+    _as.generate_password = lambda n=12: "TestPass1234"
     _as.verify_log_item  = _verify_log
     sys.modules["app_secrets"] = _as
 

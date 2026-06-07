@@ -254,22 +254,24 @@ et fichiers CSV bruts d'inscription (`data/candidats.csv`, `profs_total.csv`, `p
 | Mesure | Détail |
 |---|---|
 | **SQL** | Paramètres liés `%s` / `%(name)s` — aucune interpolation |
-| **Mots de passe** | `scrypt(n=2048, r=8, p=2)` + pepper + sel, encodé base64 ; comparaison via `hmac.compare_digest` (protection timing attack) |
+| **Mots de passe** | `scrypt(n=2**15, r=8, p=2)` + pepper + sel dérivé par compte (INE / salle / loge), encodé base64 ; comparaison via `hmac.compare_digest` (protection timing attack) |
 | **TOTP admin** | `pyotp`, fenêtre ±1 intervalle, rate limit 10 req/min |
-| **CSRF** | Flask-WTF sur tous les formulaires |
+| **CSRF** | `CSRFProtect` (Flask-WTF) enregistré globalement — vérifie le jeton sur toute requête mutante (POST/PUT/PATCH/DELETE) |
 | **CSP** | `default-src 'self'`, nonce par requête + `'strict-dynamic'` sur `script-src`, `form-action 'self'`, `base-uri 'self'` via Flask-Talisman |
 | **Sessions** | `HttpOnly`, `Secure`, `SameSite=Lax` ; expiration 8 h ; `session.clear()` avant chaque login (protection fixation de session) |
 | **INE en session** | Stocké en Redis (TTL 5 min, token aléatoire) — jamais en clair dans le cookie |
-| **Rate limiting** | Flask-Limiter + Redis ; 10 req/min sur les routes de login |
-| **Alerting auth** | Compteur d'échecs par IP (fenêtre 5 min) ; `WARNING` gunicorn après 5 tentatives |
+| **Rate limiting** | Flask-Limiter + Redis ; 10 req/min sur toutes les routes de connexion (`login`, `login-examinateur`, `login-candidat`, `login-loge`) |
+| **Alerting auth** | Compteur d'échecs par IP (fenêtre glissante de 5 min, purgée des entrées obsolètes) ; `WARNING` gunicorn après 5 tentatives — sans journaliser le mot de passe ni le code OTP soumis |
 | **HSTS** | `max-age=31536000; includeSubDomains; preload` côté Talisman et nginx |
 | **TLS** | TLS 1.2+ uniquement ; suites ECDHE/DHE-GCM/CHACHA20 ; `ssl_session_tickets off` ; redirection HTTP→HTTPS |
 | **Headers** | `Referrer-Policy: strict-origin-when-cross-origin`, `Cross-Origin-Opener-Policy: same-origin`, `X-Content-Type-Options: nosniff` |
 | **Permissions-Policy** | `camera`, `microphone`, `geolocation`, `payment`, `usb` désactivés |
 | **Open redirect** | Toutes les URLs `link_back` validées (même domaine) — encodage simple via `url_for` |
-| **IDOR** | `/generate-doc-one` protégé — auth obligatoire (fiche candidat, salle, loge) |
+| **IDOR** | `/generate-doc-one` protégé — auth obligatoire (fiche candidat, salle, loge) ; canaux SSE soumis à autorisation par session (cf. ligne SSE) |
 | **Path traversal** | `/download` : regex `^[\w\-. ]+\.pdf$` + `send_from_directory` |
-| **SSE** | Auth requise (`before_request`) + connexion Redis sans socket timeout (gevent) |
+| **SSE** | Auth requise (`before_request`) **et** autorisation par canal (`_sse_channel_allowed` — un candidat/loge/examinateur ne peut s'abonner qu'à ses propres canaux ; `general` ne diffuse aucune donnée personnelle) + connexion Redis sans socket timeout (gevent) |
+| **Actions mutantes** | `delete-examinateur` / `reload-pages` exposées uniquement en POST (+ CSRF) — jamais déclenchables par un simple lien GET |
+| **Tokens en logs** | Tokens de signature tronqués (`_redact_token`) avant journalisation — jamais en clair (fenêtre de validité de 5 min) |
 | **Noms examinateurs** | Dropdown `/login-examinateur` : numéro de salle uniquement, pas de noms |
 | **Server header** | `server_tokens off` sur nginx hôte et Docker |
 | **IP client réelle** | nginx hôte remplace `X-Forwarded-For` par `$remote_addr` (anti-spoofing) ; nginx Docker le transmet intact ; `ProxyFix(x_for=1)` dans Flask |

@@ -36,7 +36,7 @@ from wtforms.fields.simple import PasswordField, SubmitField, StringField, Hidde
 from flask_sse import sse
 from flask_talisman import Talisman
 from flask_wtf import FlaskForm
-from flask_wtf.csrf import generate_csrf
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from wtforms.validators import DataRequired
 from PIL import Image
 from io import BytesIO, StringIO
@@ -151,6 +151,10 @@ else:
 
 Compress(app)
 app.secret_key = APP_SECRET_KEY
+# Active la vérification CSRF sur toutes les requêtes mutantes (POST/PUT/PATCH/
+# DELETE) : sans cet enregistrement, les jetons csrf_token rendus dans les
+# formulaires ne sont jamais validés côté serveur.
+CSRFProtect(app)
 
 app.register_blueprint(sse, url_prefix='/stream')
 limiter.exempt(
@@ -172,6 +176,12 @@ def _record_auth_failure(role: str, identifier: str) -> None:
     timestamps = [t for t in _auth_failures.get(ip, []) if now - t < window]
     timestamps.append(now)
     _auth_failures[ip] = timestamps
+    # Purge les IP qui n'ont plus d'échec récent — sans cela, _auth_failures
+    # grossit indéfiniment (une entrée par IP ayant un jour échoué) et n'est
+    # jamais libéré avant le redémarrage du serveur.
+    for stale_ip in [k for k, v in _auth_failures.items()
+                     if not any(now - t < window for t in v)]:
+        del _auth_failures[stale_ip]
     count = len(timestamps)
     if count >= _AUTH_FAIL_THRESHOLD:
         app.logger.warning(
@@ -219,14 +229,46 @@ def _check_session_expiry():
             session['_ts'] = _time.time()
 
 
+def _sse_channel_allowed(channel: str) -> bool:
+    """
+    Vrai si la session courante peut s'abonner au canal SSE demandé.
+
+    Le nom du canal est entièrement choisi par le client via `?channel=...`
+    (cf. flask_sse, qui ne fait lui-même aucune vérification d'autorisation).
+    Sans ce contrôle, n'importe quel utilisateur authentifié — y compris un
+    candidat — pourrait s'abonner aux canaux d'autrui (ex. `candidat_<ine>`
+    d'un autre candidat) et récupérer des données personnelles diffusées
+    dessus (IDOR / fuite RGPD).
+    """
+    if is_admin_user():
+        return True
+    if channel == 'general':
+        return True  # diffusion générale, sans donnée personnelle
+    if channel.startswith('salle_'):
+        return session.get('user') == channel[len('salle_'):]
+    if channel.startswith('loge_'):
+        return session.get('loge') == channel[len('loge_'):]
+    if channel.startswith('candidat_'):
+        return session.get('candidat') == channel[len('candidat_'):]
+    if channel.startswith('sign_'):
+        # Le nom du canal embarque le token de signature à usage unique
+        # (capacité secrète générée aléatoirement) : le connaître équivaut à
+        # le posséder. Accessible à tout utilisateur déjà authentifié.
+        return True
+    return False  # canal inconnu (dont 'algo_output', 'sse') → admin uniquement
+
+
 @app.before_request
 def protect_sse():
-    """Le flux SSE est réservé aux utilisateurs authentifiés."""
+    """Le flux SSE est réservé aux utilisateurs authentifiés et autorisés sur le canal demandé."""
     if request.path.startswith('/stream'):
         if ('user' not in session
                 and 'candidat' not in session
                 and 'loge' not in session):
             abort(401)
+        channel = request.args.get('channel') or 'sse'
+        if not _sse_channel_allowed(channel):
+            abort(403)
 
 app._db = db_facility_web.DbInterface()  # type: ignore[attr-defined]
 app._otp = pyotp.TOTP(LOGIN_KEY)  # type: ignore[attr-defined]
@@ -411,6 +453,19 @@ def admin_required(f):
 # Gestion des tokens de signature
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _redact_token(token):
+    """
+    Tronque un token sensible pour la journalisation : un token de signature
+    donne un accès temporaire NON authentifié — le journaliser en clair
+    permettrait à quiconque a accès aux logs de l'utiliser pendant sa
+    fenêtre de validité (5 minutes). On ne garde qu'un préfixe, suffisant
+    pour corréler les entrées de log entre elles sans exposer le secret.
+    """
+    if not token:
+        return token
+    return token[:6] + "…"
+
+
 def generate_token(id_oral):
     """Génère un token de signature et le stocke en base."""
     tk = token_urlsafe(16)
@@ -420,7 +475,7 @@ def generate_token(id_oral):
         'oral': id_oral,
     }
     db_update(db_facility_web.INSERT_TOKEN_SIGNATURE, **d)
-    app.logger.info(f"Token: généré ({tk}) pour l'oral {id_oral}")
+    app.logger.info(f"Token: généré ({_redact_token(tk)}) pour l'oral {id_oral}")
     return tk
 
 
@@ -442,7 +497,7 @@ def check_token(token, id_oral):
     oral_ok = str(id_oral) == str(row['oral'])
     valid = time_ok and oral_ok
     db_update(db_facility_web.DELETE_TOKEN_SIGNATURE, token=token)
-    app.logger.info(f"Token: vérifié et supprimé ({token}), valide={valid}")
+    app.logger.info(f"Token: vérifié et supprimé ({_redact_token(token)}), valide={valid}")
     return valid
 
 
@@ -452,10 +507,10 @@ def clear_outdated_tokens(id_oral=None):
     for res in results:
         if datetime.fromisoformat(res['time_limit']) <= datetime.now():
             db_update(db_facility_web.DELETE_TOKEN_SIGNATURE, token=res['token'])
-            app.logger.info(f"Token: expiré supprimé ({res['token']})")
+            app.logger.info(f"Token: expiré supprimé ({_redact_token(res['token'])})")
         elif id_oral is not None and str(res['oral']) == str(id_oral):
             db_update(db_facility_web.DELETE_TOKEN_SIGNATURE, token=res['token'])
-            app.logger.info(f"Token: oral {id_oral} supprimé ({res['token']})")
+            app.logger.info(f"Token: oral {id_oral} supprimé ({_redact_token(res['token'])})")
 
 
 def image_normalize(img, size=(300, 300)):
@@ -669,9 +724,7 @@ def loge(id_loge: str) -> ResponseReturnValue:
     donnees_loge['oraux'] = db_get(
         db_facility_web.SELECT_ORAUX_LOGE, id_loge, no_list_auto=False
     )
-    students_ine_list = (
-        "[" + ",".join([repr(item['ine']) for item in donnees_loge['oraux']]) + "]"
-    )
+    students_ine_list = [item['ine'] for item in donnees_loge['oraux']]
     return render_template(
         "loge.html",
         data=donnees_loge,
@@ -792,6 +845,7 @@ def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturn
 
 @app.route('/login-examinateur', methods=['GET', 'POST'])
 @nocache
+@limiter.limit("10 per minute")
 def login_examinateur() -> ResponseReturnValue:
     """Connexion d'un examinateur par numéro de salle + mot de passe."""
     form = LoginExaminateurForm()
@@ -822,7 +876,7 @@ def login_examinateur() -> ResponseReturnValue:
     passwd = form.password.data
     infos = db_get(db_facility_web.SELECT_PASSWORD_CHECK_SALLE,
                    salle, no_list_auto=False)
-    if len(infos) == 1 and check_password(passwd, infos[0]['password_hash']):
+    if len(infos) == 1 and check_password(passwd, salle, infos[0]['password_hash']):
         session.clear()
         session['user'] = salle
         session['_ts'] = __import__('time').time()
@@ -881,9 +935,7 @@ def salle(id_salle: str) -> ResponseReturnValue:
     donnees_salle['oraux'] = db_get(
         db_facility_web.SELECT_ORAUX_SALLE, donnees_salle['id'], no_list_auto=False
     )
-    students_ine_list = (
-        "[" + ",".join([repr(item['ine']) for item in donnees_salle['oraux']]) + "]"
-    )
+    students_ine_list = [item['ine'] for item in donnees_salle['oraux']]
     # L'admin peut émarger sur n'importe quelle salle
     is_userpage = is_admin_user() or (session.get('user') == donnees_salle['salle'])
     return render_template(
@@ -923,7 +975,10 @@ def sign() -> ResponseReturnValue:
                 return abort(403)
             token_key = user
         app.logger.info(f"Signature: {token_key} id_oral={form.id_oral.data}")
-        session['token_emargement'] = hash_password(token_key + str(form.id_oral.data))
+        # Usage interne en tant que MAC (pas un mot de passe stocké) — pas
+        # d'identifiant de sel par compte ici, l'id_oral fait déjà partie de
+        # l'entrée hachée.
+        session['token_emargement'] = hash_password(token_key + str(form.id_oral.data), '')
         data = db_get(db_facility_web.SELECT_SIGNATURE_ORAL, form.id_oral.data)
         return render_template("sign.html", centre=CENTRE_EXAMEN, data=data, form=form)
 
@@ -938,7 +993,9 @@ def sign() -> ResponseReturnValue:
         if link != token_key:
             session.pop('token_emargement', None)
             return abort(403)
-    expected_token = hash_password(token_key + id_oral) if token_key and id_oral else None
+    expected_token = (
+        hash_password(token_key + id_oral, '') if token_key and id_oral else None
+    )
     if stored_token != expected_token:
         session.pop('token_emargement', None)
         return abort(403)
@@ -966,7 +1023,7 @@ def request_token(id_oral: str) -> ResponseReturnValue:
         return abort(403)
     token = generate_token(id_oral)
     image = qr(url_for('sign_other_device', token=token, _external=True), scale=5)
-    app.logger.info(f"Token: demandé pour signature autre appareil ({token})")
+    app.logger.info(f"Token: demandé pour signature autre appareil ({_redact_token(token)})")
     return jsonify({'token': token, 'image': image})
 
 
@@ -1012,6 +1069,7 @@ def sign_other_device(token: str) -> ResponseReturnValue:
 
 @app.route("/login", methods=["GET", "POST"])
 @nocache
+@limiter.limit("10 per minute")
 def login() -> ResponseReturnValue:
     """Connexion administrateur par code TOTP."""
     form = LoginAdminForm()
@@ -1030,7 +1088,7 @@ def login() -> ResponseReturnValue:
         app.logger.info("admin: connecté")
         return redirect(url or url_for("index"))
 
-    app.logger.warning(f"admin: échec connexion code={passcode}")
+    app.logger.warning("admin: échec connexion (code OTP incorrect)")
     _record_auth_failure("admin", "totp")
     if url:
         return redirect(url_for('login', link_back=quote(url)))
@@ -1054,6 +1112,7 @@ def logout() -> ResponseReturnValue:
 
 @app.route('/login-candidat', methods=['GET', 'POST'])
 @nocache
+@limiter.limit("10 per minute")
 def login_candidat() -> ResponseReturnValue:
     """Connexion d'un candidat par INE + mot de passe du papillon."""
     form = LoginCandidatForm()
@@ -1077,7 +1136,7 @@ def login_candidat() -> ResponseReturnValue:
     candidat_info = db_get(db_facility_web.SELECT_CANDIDAT_AUTH,
                            ine, no_list_auto=False)
     if (len(candidat_info) == 1
-            and check_password(password, candidat_info[0]['password_hash'])):
+            and check_password(password, ine, candidat_info[0]['password_hash'])):
         session.clear()
         session['candidat'] = ine
         session['_ts'] = __import__('time').time()
@@ -1125,7 +1184,7 @@ def login_loge() -> ResponseReturnValue:
     passwd = form.password.data
     infos = db_get(db_facility_web.SELECT_PASSWORD_CHECK_LOGE,
                    loge_nom, no_list_auto=False)
-    if len(infos) == 1 and check_password(passwd, infos[0]['password_hash']):
+    if len(infos) == 1 and check_password(passwd, loge_nom, infos[0]['password_hash']):
         session.clear()
         session['loge'] = loge_nom
         session['_ts'] = __import__('time').time()
@@ -1151,12 +1210,14 @@ def logout_loge() -> ResponseReturnValue:
 # Routes — Administration (admin uniquement)
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.route('/gestion/reload-pages', methods=['GET'])
+@app.route('/gestion/reload-pages', methods=['POST'])
 @admin_required
 @nocache
 def reload_pages() -> ResponseReturnValue:
     """Force le rechargement de toutes les pages ouvertes (notification SSE)."""
-    link = _safe_redirect_url(request.args.get("link_back"))
+    # #2 — Action mutante : POST + CSRF (un GET aurait été déclenchable par un
+    # simple lien, contournant SameSite=Lax sur une navigation top-level).
+    link = _safe_redirect_url(request.form.get("link_back"))
     sse.publish(" ", type='reload_page', channel='general')
     app.logger.info("SSE: rechargement de toutes les pages")
     if link is None:
@@ -1215,7 +1276,12 @@ def edit_oral() -> ResponseReturnValue:
                 d['examinateur'],
                 no_list_auto=False,
             )
-            sse.publish(data=ine, type="data_updated", channel='general')
+            # #3 — Le canal 'general' est ouvert à tous les utilisateurs
+            # authentifiés (y compris candidats et loges) : ne jamais y
+            # diffuser de donnée personnelle (INE). Les destinataires
+            # légitimes sont notifiés via les canaux ciblés ci-dessous, qui
+            # sont désormais soumis à autorisation (cf. _sse_channel_allowed).
+            sse.publish(data='', type="data_updated", channel='general')
             if exam:
                 sse.publish(data=ine, type="data_updated",
                             channel=f"salle_{exam[0]['salle']}")
@@ -1308,12 +1374,14 @@ def edit_examinateur() -> ResponseReturnValue:
     )
 
 
-@app.route('/gestion/delete-examinateur')
+@app.route('/gestion/delete-examinateur', methods=['POST'])
 @admin_required
 @nocache
 def delete_examinateur() -> ResponseReturnValue:
     """Suppression d'un examinateur."""
-    id_examinateur = request.args.get('id_examinateur', None)
+    # #2 — Action mutante : POST + CSRF (cf. reload_pages — même raisonnement,
+    # une suppression ne doit jamais être déclenchable par un simple lien).
+    id_examinateur = request.form.get('id_examinateur', None)
     if id_examinateur is None:
         abort(404, "Pas d'examinateur avec ce numéro")
     db_update(db_facility_web.DELETE_EXAMINATEUR, id=id_examinateur)

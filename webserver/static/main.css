@@ -77,6 +77,25 @@ a:hover {
     text-underline-offset: 3px;
 }
 
+/* Bouton stylé comme un lien — pour les actions qui doivent être des
+   formulaires POST (et non des liens GET) tout en gardant l'apparence d'un
+   lien dans le texte. */
+.link-button {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    cursor: pointer;
+    color: var(--primary);
+    text-decoration: none;
+}
+.link-button:hover {
+    text-decoration: underline;
+    text-decoration-style: dashed;
+    text-underline-offset: 3px;
+}
+
 img { vertical-align: middle; }
 
 /* ── En-tête fixe ────────────────────────────────────────── */

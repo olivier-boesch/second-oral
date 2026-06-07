@@ -189,7 +189,7 @@ class Candidat:
             'tiers_temps': 1 if self.tiers_temps else 0,
             'etablissement': self.etablissement,
             'login_key': self.login_key,
-            'password_hash': hash_password(self.login_key),
+            'password_hash': hash_password(self.login_key, self.numero),
         }
 
     @property
@@ -288,7 +288,7 @@ class Examinateur:
             'salle': self.salle,
             'loge': self.loge,
             'etablissements': ','.join(self.etablissements),
-            'password_hash': hash_password(self.mot_de_passe),
+            'password_hash': hash_password(self.mot_de_passe, self.salle),
         }
 
     def recherche_creneau(self, creneau_reference: int | None, ecart_mini: int, candidat: Candidat) -> int | None:
@@ -589,7 +589,7 @@ class AlgoOne:
         for examinateur in self.liste_examinateurs:
             if examinateur.loge not in loges_mdp:
                 loges_mdp[examinateur.loge] = generate_password()
-        loges_hashes = {nom: hash_password(mdp) for nom, mdp in loges_mdp.items()}
+        loges_hashes = {nom: hash_password(mdp, nom) for nom, mdp in loges_mdp.items()}
         db.save_loges(loges_hashes)
         liste_loges = sorted(
             [(nom, mdp) for nom, mdp in loges_mdp.items()],
