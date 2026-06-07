@@ -13,7 +13,7 @@
         <a href="{{ url_for('liste_examinateurs') }}">Liste des examinateurs</a><br>
         <form method="post" action="{{ url_for('reload_pages') }}" style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="link_back" value="/gestion">
+            <input type="hidden" name="link_back" value="{{ url_of_page }}">
             <button type="submit" class="link-button">Recharger toutes les pages ouvertes</button>
         </form><br>
         <a href="#" onclick="open_url('{{ url_for('generate_screen_batch', type_doc="liste_oraux", id_doc=0) }}');">Liste générale des oraux (pdf)</a><br>

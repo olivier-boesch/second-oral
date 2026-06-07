@@ -1445,6 +1445,7 @@ def verify_logs() -> ResponseReturnValue:
         logs_integrity_ok=ok,
         logs=logs,
         username=get_username(),
+        url_of_page=request.url,
     )
 
 
