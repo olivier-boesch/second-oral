@@ -245,6 +245,7 @@ class TestArchiveRoutes:
 
     def test_archive_download_returns_zip(self, admin_client, db_mock):
         db_mock.make_sql_select.side_effect = [
+            [],                      # SELECT_DOC_LISTE_SALLES (régénération des fiches)
             [self.PLANNING_ROW],     # SELECT_DOC_ARCHIVE_PLANNING
             [self.EMARGEMENT_ROW],   # SELECT_DOC_ARCHIVE_EMARGEMENTS
             [self.LOG_ROW],          # SELECT_ALL_LOGS
@@ -279,7 +280,7 @@ class TestArchiveRoutes:
     def test_archive_download_excludes_raw_csv_and_secrets(self, admin_client, db_mock):
         """RGPD : minimisation — ni CSV bruts, ni mots de passe/clés dans l'archive."""
         db_mock.make_sql_select.side_effect = [
-            [self.PLANNING_ROW], [self.EMARGEMENT_ROW], [self.LOG_ROW],
+            [], [self.PLANNING_ROW], [self.EMARGEMENT_ROW], [self.LOG_ROW],
         ]
         r = admin_client.get("/gestion/archive/download")
         with zipfile.ZipFile(BytesIO(r.data)) as zf:
@@ -298,7 +299,7 @@ class TestArchiveRoutes:
                                                        flask_app, tmp_path, monkeypatch):
         """Les PDF déjà générés (papillons, fiches) doivent être inclus dans documents/."""
         db_mock.make_sql_select.side_effect = [
-            [self.PLANNING_ROW], [self.EMARGEMENT_ROW], [self.LOG_ROW],
+            [], [self.PLANNING_ROW], [self.EMARGEMENT_ROW], [self.LOG_ROW],
         ]
         docs_dir = tmp_path / "static" / "docs"
         docs_dir.mkdir(parents=True)
@@ -312,3 +313,45 @@ class TestArchiveRoutes:
             names = zf.namelist()
             assert "documents/papillons_examinateurs.pdf" in names
             assert zf.read("documents/papillons_examinateurs.pdf") == b"%PDF-1.4 fake content"
+
+    def test_archive_download_regenerates_all_salle_sheets(self, admin_client, db_mock,
+                                                            monkeypatch):
+        """L'export ne doit pas se fier aux fiches de salle déjà présentes dans
+        static/docs (générées au fil de l'eau, salle par salle, donc
+        potentiellement incomplètes) : il doit toutes les régénérer — elles
+        portent les preuves d'émargement (signatures) des candidats."""
+        import app as app_module
+        import db_facility_web as db_facility_web_module
+
+        salles = [
+            {"id": 1, "salle": "101", "nom": "Martin", "matiere": "Maths", "loge": "Loge A"},
+            {"id": 2, "salle": "102", "nom": "Durand", "matiere": "Physique", "loge": "Loge A"},
+        ]
+        oraux_par_salle = {1: [self.PLANNING_ROW], 2: []}
+
+        def fake_select(query, *args, **kwargs):
+            if query is db_facility_web_module.SELECT_DOC_LISTE_SALLES:
+                return salles
+            if query is db_facility_web_module.SELECT_DOC_LISTE_SALLES_ORAUX:
+                return oraux_par_salle[args[0]]
+            if query is db_facility_web_module.SELECT_DOC_ARCHIVE_PLANNING:
+                return [self.PLANNING_ROW]
+            if query is db_facility_web_module.SELECT_DOC_ARCHIVE_EMARGEMENTS:
+                return [self.EMARGEMENT_ROW]
+            if query is db_facility_web_module.SELECT_ALL_LOGS:
+                return [self.LOG_ROW]
+            return []
+
+        db_mock.make_sql_select.side_effect = fake_select
+
+        regenerated = []
+        monkeypatch.setattr(
+            app_module.reports, "liste_salle_oraux",
+            lambda liste, *a, **kw: regenerated.extend(liste) or "static/docs/liste_salles.pdf",
+        )
+
+        r = admin_client.get("/gestion/archive/download")
+        assert r.status_code == 200
+        assert [s["id"] for s in regenerated] == [1, 2]
+        assert regenerated[0]["oraux"] == [self.PLANNING_ROW]
+        assert regenerated[1]["oraux"] == []

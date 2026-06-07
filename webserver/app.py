@@ -1493,6 +1493,19 @@ def archive_download() -> ResponseReturnValue:
     - Volontairement absents : mots de passe, clés de connexion, CSV bruts d'inscription.
     """
     now = datetime.now()
+
+    # Régénère systématiquement toutes les fiches de salle (et la liste
+    # concaténée) avant export : on ne peut pas se fier à ce qui se trouve
+    # déjà dans static/docs (généré au fil de l'eau, salle par salle), au
+    # risque d'omettre des salles de l'archive — alors qu'elles portent les
+    # preuves d'émargement (images de signature) des candidats.
+    salles = db_get(db_facility_web.SELECT_DOC_LISTE_SALLES, no_list_auto=False)
+    for s in salles:
+        s['oraux'] = db_get(
+            db_facility_web.SELECT_DOC_LISTE_SALLES_ORAUX, s['id'], no_list_auto=False
+        )
+    reports.liste_salle_oraux(salles, 'static/docs', 'salle', centre_examen=CENTRE_EXAMEN)
+
     buf = BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         planning = db_get(db_facility_web.SELECT_DOC_ARCHIVE_PLANNING, no_list_auto=False)

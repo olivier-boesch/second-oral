@@ -226,7 +226,7 @@ de minimisation RGPD :
 | `planning_oraux.csv` | Planning final des oraux (candidat, matière, salle, examinateur, horaires) |
 | `emargements.csv` | Preuves de signature des examinateurs (métadonnées seulement, sans les images) |
 | `journal_audit.json` | Journal d'audit chaîné par hash (intégrité vérifiable, cf. `/gestion/verify-logs`) |
-| `documents/` | PDF déjà générés (papillons, fiches — signatures incluses) |
+| `documents/` | PDF déjà générés : papillons, fiches candidats/salles/loges — les fiches de salle embarquent les images de signature des candidats (preuve d'émargement) |
 | `LISEZMOI.txt` | Manifeste : contenu de l'archive, date et auteur de la génération |
 
 **Volontairement exclus** de l'archive : mots de passe, clés de connexion,

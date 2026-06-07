@@ -26,8 +26,16 @@ import pytest
 # ── Chemins ───────────────────────────────────────────────────────────────────
 
 WEBSERVER_DIR = Path(__file__).resolve().parents[2] / "webserver"
-if str(WEBSERVER_DIR) not in sys.path:
-    sys.path.insert(0, str(WEBSERVER_DIR))
+# Replace toujours webserver/ en tête de sys.path : pytest réinsère la racine
+# du projet à cet endroit lors de la résolution des packages de test, ce qui
+# ferait sinon résoudre `import reports`/`import db_facility_web` (modules
+# présents à la fois en racine et dans webserver/) vers les modules racine —
+# alors qu'en production (CWD = /app/webserver) ce sont ceux de webserver/ qui
+# sont chargés. Sans ce forçage, app.py importerait par exemple le `reports.py`
+# racine (façade limitée pour algo.py) au lieu de webserver/reports.py.
+while str(WEBSERVER_DIR) in sys.path:
+    sys.path.remove(str(WEBSERVER_DIR))
+sys.path.insert(0, str(WEBSERVER_DIR))
 
 # ── 1. Module dev (dev_on=True) ───────────────────────────────────────────────
 # Déclenche le chemin de configuration sans Talisman, SERVER_NAME ni Redis obligatoire.
