@@ -648,6 +648,10 @@ server {{
     location = /main.css     {{ }}
     location = /error_bg.jpg {{ }}
 
+    # Les navigateurs demandent /favicon.ico à la racine (pas via /static/) :
+    # servi directement par nginx depuis {static_dir}/favicon.ico (root ci-dessus).
+    location = /favicon.ico  {{ }}
+
     listen 80;
     listen [::]:80;
 }}
