@@ -1,4 +1,3 @@
 #!/usr/bin/zsh
-source .venv/bin/activate
-python verify_logs.py
-deactivate
+
+docker compose exec --workdir /app app python verify_logs.py

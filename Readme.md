@@ -242,7 +242,7 @@ et fichiers CSV bruts d'inscription (`data/candidats.csv`, `profs_total.csv`, `p
 | `run_algo.sh --dry-run` | Affiche les commandes sans les exécuter | |
 | `setup_new_site.py` | `sudo python setup_new_site.py` | Configuration complète : secrets, QR TOTP, .env, nginx, certbot, Docker, DB |
 | `verify_logs.py` | `python verify_logs.py` | Vérifie l'intégrité de la chaîne de hash des logs |
-| `verify_logs` | `./verify_logs` | Wrapper shell pour `verify_logs.py` (avec venv) |
+| `verify_logs` | `./verify_logs` | Wrapper shell — exécute `verify_logs.py` dans le conteneur `app` (`docker compose exec`) |
 | `2fa.sh` | `./2fa.sh` | Re-teste la clé OTP existante (QR + vérification interactive) |
 | `login_key_generator.py` | `python login_key_generator.py` | Génère une nouvelle clé OTP base32 |
 | `update_python_packages` | `./update_python_packages` | Met à jour les paquets Python du venv hôte |
