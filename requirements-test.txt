@@ -1,5 +1,6 @@
 pytest>=8.0
 pytest-cov>=5.0
+mypy>=1.10
 # Dépendances minimales pour les tests unitaires (pas de DB ni Redis nécessaires)
 pyotp
 segno

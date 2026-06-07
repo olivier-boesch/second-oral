@@ -94,4 +94,4 @@ class TestMypy:
             [sys.executable, "-m", "mypy", "--ignore-missing-imports", str(APP_PY)],
             capture_output=True, text=True, cwd=str(APP_PY.parent),
         )
-        assert "Success: no issues found" in result.stdout, result.stdout
+        assert "Success: no issues found" in result.stdout, result.stdout + result.stderr
