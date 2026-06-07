@@ -451,29 +451,37 @@ def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
     c_canvas.roundRect(x + 1 * mm, y + 1 * mm,
                        slip_w - 2 * mm, slip_h - 2 * mm, 2 * mm)
 
-    # Bande d'en-tête colorée
+    # Bande d'en-tête colorée — coins du haut arrondis pour suivre la bordure
+    # (un roundRect arrondirait aussi les coins du bas, qui doivent rester
+    # droits pour s'aligner avec le corps du papillon ; on les aplatit en
+    # recouvrant la moitié inférieure de la bande d'un rectangle classique).
+    band_radius = 2 * mm
+    band_x = x + 1 * mm
+    band_y = y + slip_h - 10 * mm - 1 * mm
+    band_w = slip_w - 2 * mm
+    band_h = 10 * mm
     c_canvas.setFillColorRGB(0.84, 0.81, 0.96)
-    c_canvas.rect(x + 1 * mm, y + slip_h - 10 * mm - 1 * mm,
-                  slip_w - 2 * mm, 10 * mm, fill=1, stroke=0)
+    c_canvas.roundRect(band_x, band_y, band_w, band_h, band_radius, fill=1, stroke=0)
+    c_canvas.rect(band_x, band_y, band_w, band_h / 2, fill=1, stroke=0)
     c_canvas.setFillColorRGB(0, 0, 0)
 
     # Titre
-    c_canvas.setFont("PapillonFont", 7)
+    c_canvas.setFont("PapillonFont", 9)
     c_canvas.drawCentredString(x + slip_w / 2, y + slip_h - 6 * mm, title_line1)
     if title_line2:
-        c_canvas.setFont("PapillonFont", 6)
+        c_canvas.setFont("PapillonFont", 8)
         c_canvas.drawCentredString(x + slip_w / 2, y + slip_h - 9.5 * mm, title_line2)
 
     # Nom
-    c_canvas.setFont("PapillonFont", 9)
+    c_canvas.setFont("PapillonFont", 12)
     c_canvas.drawString(x + pad, y + slip_h - 16 * mm, name[:35])
 
     # Identifiant
-    c_canvas.setFont("PapillonFont", 7)
+    c_canvas.setFont("PapillonFont", 10)
     c_canvas.drawString(x + pad, y + slip_h - 22 * mm, f"{id_label} : {id_value}")
 
     # Mot de passe
-    c_canvas.setFont("PapillonFont", 7)
+    c_canvas.setFont("PapillonFont", 11)
     c_canvas.drawString(x + pad, y + slip_h - 27 * mm,
                         f"Mot de passe : {pwd_value}")
 
@@ -494,7 +502,7 @@ def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
             )
         except Exception:
             pass
-        c_canvas.setFont("PapillonFont", 5)
+        c_canvas.setFont("PapillonFont", 6)
         c_canvas.drawString(x + pad, y + 3 * mm, url[:45])
 
 
