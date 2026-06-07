@@ -20,5 +20,27 @@
     </svg>
     {{ username }}
   </a>
+  {% elif session.get('candidat') %}
+  <a class="site-header__user"
+     href="{{ url_for('logout_candidat') }}"
+     title="Se déconnecter">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+    </svg>
+    {{ data['nom'] if data is defined and data.get('nom') else session['candidat'] }}
+  </a>
+  {% elif session.get('loge') %}
+  <a class="site-header__user"
+     href="{{ url_for('logout_loge') }}"
+     title="Se déconnecter">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+    </svg>
+    {{ data['salle'] if data is defined and data.get('salle') else session['loge'] }}
+  </a>
   {% endif %}
 </header>
