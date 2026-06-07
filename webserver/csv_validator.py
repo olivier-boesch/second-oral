@@ -244,7 +244,7 @@ def validate_all(candidats_path: Path | None,
     # ── preps (doit être validé en premier pour fournir les matières aux autres) ──
     if not preps_path or not Path(preps_path).exists():
         issues.append(_err("preps", None, "Fichier preps.csv absent."))
-        preps_rows = []
+        preps_rows: list[dict] = []
     else:
         preps_rows, _ = normalize_csv_file(preps_path)
         issues.extend(validate_preps(preps_rows))

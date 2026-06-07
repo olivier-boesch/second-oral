@@ -124,6 +124,15 @@ def flask_app():
     return _flask_app
 
 
+@pytest.fixture(autouse=True)
+def _reset_db_mock():
+    """Réinitialise le mock DB avant chaque test (évite les fuites de side_effect)."""
+    _db_mock.make_sql_select.side_effect = None
+    _db_mock.make_sql_select.return_value = []
+    _db_mock.make_sql_update.side_effect = None
+    _db_mock.make_sql_update.return_value = None
+
+
 @pytest.fixture()
 def client(flask_app):
     """Client de test Flask (session isolée par test)."""
@@ -143,8 +152,6 @@ def admin_client(flask_app):
 
 
 @pytest.fixture()
-def db_mock():
+def db_mock(_reset_db_mock):
     """Expose le mock DbInterface pour configurer des retours par test."""
-    _db_mock.make_sql_select.return_value = []
-    _db_mock.make_sql_update.return_value = None
     return _db_mock

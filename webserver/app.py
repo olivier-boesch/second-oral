@@ -27,6 +27,7 @@ from flask import (
     Flask, render_template, request, redirect, abort,
     session, jsonify, url_for, make_response, send_from_directory, send_file, g,
 )
+from flask.typing import ResponseReturnValue
 from flask_compress import Compress
 from flask_limiter import Limiter, ExemptionScope
 from flask_limiter.util import get_remote_address
@@ -107,7 +108,8 @@ else:
         default_limits=["1000 per day", "200 per hour"],
         storage_uri=_REDIS_URL,
     )
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+    app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
+        app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     gunicorn_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers = gunicorn_logger.handlers
@@ -226,8 +228,8 @@ def protect_sse():
                 and 'loge' not in session):
             abort(401)
 
-app._db = db_facility_web.DbInterface()
-app._otp = pyotp.TOTP(LOGIN_KEY)
+app._db = db_facility_web.DbInterface()  # type: ignore[attr-defined]
+app._otp = pyotp.TOTP(LOGIN_KEY)  # type: ignore[attr-defined]
 
 
 def _get_redis_pub_for_ine():
@@ -544,7 +546,8 @@ class SignatureOtherDeviceForm(FlaskForm):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.route("/")
-def index():
+def index() -> ResponseReturnValue:
+    """Page d'accueil — accès personnels (candidat/examinateur/loge) et administration."""
     return render_template(
         "index.html",
         url_of_page=request.url,
@@ -558,13 +561,15 @@ def index():
 
 @app.route('/c')
 @nocache
-def candidat_form_court():
+def candidat_form_court() -> ResponseReturnValue:
+    """Raccourci `/c` → redirige vers le formulaire de recherche par INE."""
     return redirect(url_for('candidat_form'))
 
 
 @app.route("/candidat", methods=["GET"])
 @nocache
-def candidat_form():
+def candidat_form() -> ResponseReturnValue:
+    """Formulaire de recherche d'un candidat par numéro INE."""
     num = request.args.get("num", type=int, default=0)
     if num != 0:
         return redirect(url_for('candidat', id_candidat=num))
@@ -574,13 +579,14 @@ def candidat_form():
 
 @app.route('/c/<id_candidat>')
 @nocache
-def candidat_court(id_candidat):
+def candidat_court(id_candidat: str) -> ResponseReturnValue:
+    """Raccourci `/c/<id>` → redirige vers la fiche du candidat."""
     return redirect(url_for('candidat', id_candidat=id_candidat))
 
 
 @app.route("/candidat/<id_candidat>")
 @nocache
-def candidat(id_candidat=None):
+def candidat(id_candidat: str | None = None) -> ResponseReturnValue:
     """Fiche candidat — RGPD : authentification requise."""
     # Candidat connecté : seulement sa propre fiche
     if is_student_user() and not is_student_user(id_candidat):
@@ -619,7 +625,7 @@ def candidat(id_candidat=None):
 
 @app.route("/loge")
 @nocache
-def loge_form():
+def loge_form() -> ResponseReturnValue:
     """Liste des loges — réservée au personnel (pas au public ni aux candidats)."""
     if not is_authenticated():
         return redirect(url_for('login_loge'))
@@ -636,13 +642,14 @@ def loge_form():
 
 @app.route('/l/<id_loge>')
 @nocache
-def loge_court(id_loge):
+def loge_court(id_loge: str) -> ResponseReturnValue:
+    """Raccourci `/l/<id>` → redirige vers la fiche de la loge."""
     return redirect(url_for('loge', id_loge=id_loge))
 
 
 @app.route("/loge/<id_loge>")
 @nocache
-def loge(id_loge):
+def loge(id_loge: str) -> ResponseReturnValue:
     """Fiche loge — RGPD : personnel uniquement."""
     if not is_authenticated() and not is_loge_user(id_loge):
         return redirect(url_for('login_loge', loge=id_loge))
@@ -678,7 +685,7 @@ def loge(id_loge):
 
 @app.route("/liste", methods=["GET"])
 @nocache
-def liste():
+def liste() -> ResponseReturnValue:
     """Liste générale — RGPD : personnel uniquement (pas les candidats)."""
     if not is_authenticated():
         return redirect(url_for('login', link_back=request.url))
@@ -698,7 +705,8 @@ def liste():
 
 @app.route('/generate-screen-one', methods=['GET'])
 @nocache
-def generate_screen_one():
+def generate_screen_one() -> ResponseReturnValue:
+    """Affiche l'écran d'attente pendant la génération d'un document PDF individuel."""
     type_doc = request.args.get('type_doc')
     id_doc = request.args.get('id_doc')
     app.logger.info(f"Document: génération écran pour {type_doc} id={id_doc}")
@@ -713,7 +721,7 @@ def generate_screen_one():
 
 @app.route('/generate-doc-one/<type_doc>-<id_doc>', methods=['GET'])
 @nocache
-def generate_doc_one(type_doc, id_doc=None):
+def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturnValue:
     """Génère un PDF individuel (fiche candidat, salle ou loge)."""
     if type_doc == 'fiche_candidat':
         # Auth obligatoire : IDOR — sans contrôle, les noms complets sont
@@ -784,7 +792,8 @@ def generate_doc_one(type_doc, id_doc=None):
 
 @app.route('/login-examinateur', methods=['GET', 'POST'])
 @nocache
-def login_examinateur():
+def login_examinateur() -> ResponseReturnValue:
+    """Connexion d'un examinateur par numéro de salle + mot de passe."""
     form = LoginExaminateurForm()
     if request.method == 'GET':
         salle = request.args.get('salle', None)
@@ -827,7 +836,7 @@ def login_examinateur():
 
 @app.route("/salle")
 @nocache
-def salle_form():
+def salle_form() -> ResponseReturnValue:
     """Liste des salles — réservée au personnel (pas au public ni aux candidats)."""
     if not is_authenticated():
         return redirect(url_for('login_examinateur'))
@@ -844,13 +853,14 @@ def salle_form():
 
 @app.route('/s/<id_salle>')
 @nocache
-def salle_court(id_salle):
+def salle_court(id_salle: str) -> ResponseReturnValue:
+    """Raccourci `/s/<id>` → redirige vers la fiche de la salle."""
     return redirect(url_for('salle', id_salle=id_salle))
 
 
 @app.route("/salle/<id_salle>")
 @nocache
-def salle(id_salle):
+def salle(id_salle: str) -> ResponseReturnValue:
     """Fiche salle — RGPD : personnel uniquement."""
     if not is_authenticated():
         return redirect(url_for('login_examinateur', salle=id_salle))
@@ -895,7 +905,8 @@ def salle(id_salle):
 
 @app.route("/sign", methods=['GET', 'POST'])
 @nocache
-def sign():
+def sign() -> ResponseReturnValue:
+    """Signature dématérialisée de l'émargement par l'examinateur (sur place)."""
     form = SignatureExaminateurForm()
     if request.method == 'GET':
         form.link_back.data = request.args.get('link_back', None)
@@ -949,7 +960,8 @@ def sign():
 
 @app.route('/request-token/<id_oral>')
 @nocache
-def request_token(id_oral):
+def request_token(id_oral: str) -> ResponseReturnValue:
+    """Génère un token de signature à usage unique + QR code (signature sur un autre appareil)."""
     if 'token_emargement' not in session:
         return abort(403)
     token = generate_token(id_oral)
@@ -960,7 +972,8 @@ def request_token(id_oral):
 
 @app.route("/sign-other-device/<token>", methods=['GET', 'POST'])
 @nocache
-def sign_other_device(token):
+def sign_other_device(token: str) -> ResponseReturnValue:
+    """Signature depuis un autre appareil via un token à usage unique (sans authentification)."""
     form = SignatureOtherDeviceForm()
     if request.method == 'GET':
         form.token.data = token
@@ -999,7 +1012,8 @@ def sign_other_device(token):
 
 @app.route("/login", methods=["GET", "POST"])
 @nocache
-def login():
+def login() -> ResponseReturnValue:
+    """Connexion administrateur par code TOTP."""
     form = LoginAdminForm()
     if request.method == "GET":
         # Flask décode déjà les query params — pas besoin de unquote() supplémentaire
@@ -1009,7 +1023,7 @@ def login():
 
     url = _safe_redirect_url(form.link_back.data)
     passcode = form.key.data
-    if app._otp.verify(otp=passcode, valid_window=1):
+    if app._otp.verify(otp=passcode, valid_window=1):  # type: ignore[attr-defined]
         session.clear()
         session['user'] = 'admin'
         session['_ts'] = __import__('time').time()
@@ -1025,7 +1039,8 @@ def login():
 
 @app.route("/logout")
 @nocache
-def logout():
+def logout() -> ResponseReturnValue:
+    """Déconnexion de l'utilisateur courant (admin ou examinateur)."""
     if 'user' in session:
         user = session.pop('user')
         app.logger.info(f"{user}: déconnecté")
@@ -1039,7 +1054,7 @@ def logout():
 
 @app.route('/login-candidat', methods=['GET', 'POST'])
 @nocache
-def login_candidat():
+def login_candidat() -> ResponseReturnValue:
     """Connexion d'un candidat par INE + mot de passe du papillon."""
     form = LoginCandidatForm()
     if request.method == 'GET':
@@ -1075,7 +1090,7 @@ def login_candidat():
 
 @app.route('/logout-candidat')
 @nocache
-def logout_candidat():
+def logout_candidat() -> ResponseReturnValue:
     """Déconnexion d'un candidat."""
     if 'candidat' in session:
         ine = session.pop('candidat')
@@ -1088,7 +1103,7 @@ def logout_candidat():
 @app.route('/login-loge', methods=['GET', 'POST'])
 @nocache
 @limiter.limit("10 per minute")
-def login_loge():
+def login_loge() -> ResponseReturnValue:
     """Connexion d'un surveillant de loge."""
     form = LoginLogeForm()
     liste_loges = db_get(db_facility_web.SELECT_LISTE_LOGES, no_list_auto=False)
@@ -1124,7 +1139,7 @@ def login_loge():
 
 @app.route('/logout-loge')
 @nocache
-def logout_loge():
+def logout_loge() -> ResponseReturnValue:
     """Déconnexion d'un surveillant de loge."""
     if 'loge' in session:
         loge_nom = session.pop('loge')
@@ -1139,7 +1154,8 @@ def logout_loge():
 @app.route('/gestion/reload-pages', methods=['GET'])
 @admin_required
 @nocache
-def reload_pages():
+def reload_pages() -> ResponseReturnValue:
+    """Force le rechargement de toutes les pages ouvertes (notification SSE)."""
     link = _safe_redirect_url(request.args.get("link_back"))
     sse.publish(" ", type='reload_page', channel='general')
     app.logger.info("SSE: rechargement de toutes les pages")
@@ -1151,7 +1167,8 @@ def reload_pages():
 @app.route("/gestion")
 @admin_required
 @nocache
-def index_gestion():
+def index_gestion() -> ResponseReturnValue:
+    """Page d'accueil de la gestion : liste des oraux et accès aux outils admin."""
     oraux = db_get(db_facility_web.SELECT_LISTE_ORAUX, no_list_auto=False)
     return render_template(
         "index_gestion.html",
@@ -1166,7 +1183,8 @@ def index_gestion():
 @app.route('/gestion/liste-examinateurs-json', methods=['GET'])
 @admin_required
 @nocache
-def liste_examinateurs_json():
+def liste_examinateurs_json() -> ResponseReturnValue:
+    """Liste JSON des examinateurs d'une matière (pour le formulaire d'édition d'oral)."""
     matiere = request.args.get('matiere', -1)
     if matiere == -1:
         abort(400)
@@ -1178,7 +1196,8 @@ def liste_examinateurs_json():
 @app.route("/gestion/edit-oral", methods=["GET", "POST"])
 @admin_required
 @nocache
-def edit_oral():
+def edit_oral() -> ResponseReturnValue:
+    """Édition d'un oral (horaires, examinateur) — admin uniquement."""
     if request.method == "POST":
         d = {
             'id': request.form.get('id'),
@@ -1239,7 +1258,8 @@ def edit_oral():
 @app.route('/gestion/liste-examinateurs')
 @admin_required
 @nocache
-def liste_examinateurs():
+def liste_examinateurs() -> ResponseReturnValue:
+    """Liste des examinateurs avec leurs salles, loges et nombre d'oraux."""
     examinateurs = db_get(db_facility_web.SELECT_LISTE_EXAMINATEURS, no_list_auto=False)
     return render_template(
         'liste_examinateurs.html',
@@ -1254,7 +1274,8 @@ def liste_examinateurs():
 @app.route("/gestion/edit-examinateur", methods=['GET', 'POST'])
 @admin_required
 @nocache
-def edit_examinateur():
+def edit_examinateur() -> ResponseReturnValue:
+    """Édition des informations d'un examinateur (nom, salle, loge, établissements)."""
     if request.method == "POST":
         d = {
             'id': request.form.get('id'),
@@ -1290,7 +1311,8 @@ def edit_examinateur():
 @app.route('/gestion/delete-examinateur')
 @admin_required
 @nocache
-def delete_examinateur():
+def delete_examinateur() -> ResponseReturnValue:
+    """Suppression d'un examinateur."""
     id_examinateur = request.args.get('id_examinateur', None)
     if id_examinateur is None:
         abort(404, "Pas d'examinateur avec ce numéro")
@@ -1301,7 +1323,8 @@ def delete_examinateur():
 @app.route('/gestion/add-examinateur', methods=['GET', 'POST'])
 @admin_required
 @nocache
-def add_examinateur():
+def add_examinateur() -> ResponseReturnValue:
+    """Ajout d'un nouvel examinateur."""
     if request.method == "POST":
         d = {
             'nom': request.form.get('nom'),
@@ -1327,7 +1350,8 @@ def add_examinateur():
 @app.route('/gestion/verify-logs')
 @admin_required
 @nocache
-def verify_logs():
+def verify_logs() -> ResponseReturnValue:
+    """Vérifie l'intégrité de la chaîne de hash des logs d'audit et l'affiche."""
     logs = db_get(db_facility_web.SELECT_ALL_LOGS, no_list_auto=False)
     previous_hash = ''
     ok = True
@@ -1360,7 +1384,7 @@ def verify_logs():
 # Archive de fin de session (RGPD : export des données à conserver)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _csv_bytes(fieldnames, rows):
+def _csv_bytes(fieldnames: list[str], rows: list[dict]) -> bytes:
     """Sérialise une liste de dicts en CSV (séparateur ';', BOM UTF-8 pour Excel)."""
     buf = StringIO()
     writer = csv.DictWriter(buf, fieldnames=fieldnames, delimiter=';', extrasaction='ignore')
@@ -1372,7 +1396,7 @@ def _csv_bytes(fieldnames, rows):
 @app.route('/gestion/archive')
 @admin_required
 @nocache
-def archive_page():
+def archive_page() -> ResponseReturnValue:
     """
     Page de confirmation avant la génération de l'archive de fin de session.
     Liste précisément ce que contiendra le zip pour validation par l'admin
@@ -1392,13 +1416,13 @@ def archive_page():
 @app.route('/gestion/archive/download')
 @admin_required
 @nocache
-def archive_download():
+def archive_download() -> ResponseReturnValue:
     """
     Génère et sert l'archive zip de fin de session.
-    Contenu : planning final, preuves d'émargement (sans les images, déjà
-    présentes dans les PDF), journal d'audit chaîné par hash, et les PDF déjà
-    générés (papillons, fiches — signatures incluses).
-    Volontairement absents : mots de passe, clés de connexion, CSV bruts d'inscription.
+    - planning_oraux.csv / emargements.csv : exports CSV (sans les images de signature)
+    - journal_audit.json : logs chaînés par hash (intégrité vérifiable)
+    - documents/ : PDF déjà générés (papillons, fiches — signatures incluses)
+    - Volontairement absents : mots de passe, clés de connexion, CSV bruts d'inscription.
     """
     now = datetime.now()
     buf = BytesIO()
@@ -1440,7 +1464,8 @@ def archive_download():
             "(papillons, fiches candidats/salles/loges — signatures incluses)\n\n"
             "Volontairement absents de cette archive (minimisation RGPD) :\n"
             "  - mots de passe et clés de connexion (candidats, examinateurs, loges)\n"
-            "  - fichiers CSV bruts d'inscription (data/candidats.csv, profs_total.csv, preps.csv)\n"
+            "  - fichiers CSV bruts d'inscription "
+            "(data/candidats.csv, profs_total.csv, preps.csv)\n"
         )
         zf.writestr('LISEZMOI.txt', manifest.encode('utf-8'))
 
@@ -1454,7 +1479,8 @@ def archive_download():
 @app.route('/generate-screen-batch', methods=['GET'])
 @admin_required
 @nocache
-def generate_screen_batch():
+def generate_screen_batch() -> ResponseReturnValue:
+    """Affiche l'écran d'attente pendant la génération d'un document PDF groupé."""
     type_doc = request.args.get('type_doc')
     id_doc = request.args.get('id_doc')
     return render_template(
@@ -1470,7 +1496,7 @@ def generate_screen_batch():
 @app.route('/generate-doc-batch/<type_doc>-<id_doc>', methods=['GET'])
 @admin_required
 @nocache
-def generate_doc_batch(type_doc, id_doc=None):
+def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseReturnValue:
     """Génère un PDF groupé (tous candidats, toutes salles ou toutes loges)."""
     if type_doc == 'liste_oraux':
         infos = db_get(db_facility_web.SELECT_DOC_LISTE_ORAUX, no_list_auto=False)
@@ -1530,7 +1556,7 @@ def generate_doc_batch(type_doc, id_doc=None):
 
 @app.route('/gestion/algo/doc-exists/<filename>')
 @admin_required
-def algo_doc_exists(filename):
+def algo_doc_exists(filename: str) -> ResponseReturnValue:
     """Indique si un PDF dans static/docs/ existe (utilisé par la page algo)."""
     if not re.match(r'^[\w\-. ]+\.pdf$', filename):
         abort(400)
@@ -1541,7 +1567,7 @@ def algo_doc_exists(filename):
 
 @app.route('/download')
 @nocache
-def download():
+def download() -> ResponseReturnValue:
     """
     Sert les fichiers PDF générés.
     - Les fiches candidats (candidat_*) sont publiques.
@@ -1565,13 +1591,15 @@ def download():
 
 
 @app.route('/about')
-def about():
+def about() -> ResponseReturnValue:
+    """Page « à propos » — crédits et description du projet."""
     return render_template("about.html", centre=CENTRE_EXAMEN,
                            hostname=HOSTNAME, username=get_username())
 
 
 @app.route('/mentions-legales')
-def mentions_legales():
+def mentions_legales() -> ResponseReturnValue:
+    """Mentions légales et politique de confidentialité (RGPD)."""
     return render_template(
         "mentions_legales.html",
         centre=CENTRE_EXAMEN,
@@ -1612,7 +1640,7 @@ def _load_algo_params() -> dict:
 @app.route("/gestion/algo")
 @admin_required
 @nocache
-def gestion_algo():
+def gestion_algo() -> ResponseReturnValue:
     """Page d'admin de algo.py : upload CSV, lancement, log en direct."""
     from algo_bg import is_running as _is_running
     csv_status = {
@@ -1632,7 +1660,7 @@ def gestion_algo():
 
 @app.route("/gestion/algo/upload", methods=["POST"])
 @admin_required
-def algo_upload_csv():
+def algo_upload_csv() -> ResponseReturnValue:
     """Upload des fichiers CSV vers data/ avec validation immédiate."""
     from csv_validator import normalize_csv, validate_all
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -1677,7 +1705,7 @@ def algo_upload_csv():
 
 @app.route("/gestion/algo/validate")
 @admin_required
-def algo_validate_csv():
+def algo_validate_csv() -> ResponseReturnValue:
     """Rapport de validation complet des CSV existants (pré-lancement)."""
     from csv_validator import validate_all
     report = validate_all(
@@ -1690,7 +1718,7 @@ def algo_validate_csv():
 
 @app.route("/gestion/algo/params", methods=["POST"])
 @admin_required
-def algo_save_params():
+def algo_save_params() -> ResponseReturnValue:
     """Sauvegarde les paramètres de l'algorithme dans data/algo_params.json."""
     import json as _json
     data = request.get_json(silent=True) or {}
@@ -1711,7 +1739,7 @@ def algo_save_params():
 
 @app.route("/gestion/algo/download-csv/<key>")
 @admin_required
-def algo_download_csv(key):
+def algo_download_csv(key: str) -> ResponseReturnValue:
     """Télécharge un des fichiers CSV de data/."""
     if key not in _ALLOWED_CSV:
         abort(404)
@@ -1723,7 +1751,7 @@ def algo_download_csv(key):
 
 @app.route("/gestion/algo/run", methods=["POST"])
 @admin_required
-def algo_run():
+def algo_run() -> ResponseReturnValue:
     """Lance algo.py en tâche de fond; la sortie est streamée via SSE."""
     from algo_bg import run_algo as _run, is_running as _is_running
     from flask_sse import Message, _get_redis_pub
@@ -1733,6 +1761,7 @@ def algo_run():
     # Résoudre l'URL Redis ICI (dans le contexte Flask) pour éviter
     # RuntimeError "Working outside of application context" dans le thread.
     redis_url = app.config.get("SSE_REDIS_URL") or app.config.get("REDIS_URL")
+    assert isinstance(redis_url, str)
     redis_client = _get_redis_pub(redis_url)
 
     def _publish(data: str) -> None:
@@ -1748,7 +1777,7 @@ def algo_run():
 
 @app.route("/gestion/algo/status")
 @admin_required
-def algo_status():
+def algo_status() -> ResponseReturnValue:
     """Statut JSON de algo.py."""
     from algo_bg import is_running as _is_running
     return jsonify({"running": _is_running()})

@@ -76,6 +76,10 @@ SELECT_PASSWORD_CHECK_SALLE = """
 SELECT nom, password_hash FROM Examinateur WHERE salle = %s
 """
 
+SELECT_PASSWORD_CHECK_LOGE = """
+SELECT nom, password_hash FROM Loge WHERE nom = %s
+"""
+
 # ---------- Liste générale
 
 SELECT_LISTE_ORAUX = """

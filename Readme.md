@@ -298,7 +298,8 @@ python -m pytest tests/integration/
 
 Le pipeline GitHub Actions (`.github/workflows/ci.yml`) exécute à chaque push sur `main` :
 1. **`pip-audit`** — détection des CVE connues dans les dépendances
-2. **Tests** — 114 tests unitaires + intégration avec couverture
+2. **Tests** — 124 tests unitaires + intégration avec couverture (dont vérification
+   automatisée des annotations de type, du PEP8 et de mypy sur `app.py`)
 
 ---
 

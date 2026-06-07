@@ -98,6 +98,24 @@ class TestLogin:
         with admin_client.session_transaction() as sess:
             assert "user" not in sess
 
+    def test_login_loge_post_uses_correct_query(self, client, db_mock):
+        """
+        Régression : login_loge() référence db_facility_web.SELECT_PASSWORD_CHECK_LOGE,
+        absent jusqu'ici de db_facility_web.py (AttributeError → 500 sur toute tentative
+        de connexion loge). La requête doit interroger la table Loge (et non Examinateur).
+        """
+        db_mock.make_sql_select.side_effect = [
+            [{"salle": "Loge A"}],   # SELECT_LISTE_LOGES (peuple le formulaire)
+            [{"nom": "Loge A", "password_hash": "wrong-hash"}],  # SELECT_PASSWORD_CHECK_LOGE
+        ]
+        r = client.post("/login-loge", data={"loge": "Loge A", "password": "bad"},
+                        follow_redirects=False)
+        # Mauvais mot de passe → redirect vers /login-loge (pas de 500)
+        assert r.status_code == 302
+        assert "/login-loge" in r.headers["Location"]
+        with client.session_transaction() as sess:
+            assert "loge" not in sess
+
 
 # ── Routes admin avec session ─────────────────────────────────────────────────
 

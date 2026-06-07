@@ -31,8 +31,8 @@ def is_running() -> bool:
         return _process is not None and _process.poll() is None
 
 
-def run_algo(publish_fn: Callable[[str], None], db_host: str = None,
-             params: dict = None) -> bool:
+def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
+             params: dict | None = None) -> bool:
     """
     Lance algo.py dans un thread séparé.
 
@@ -61,7 +61,7 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str = None,
         # streaming temps-réel vers le log console).
         env["PYTHONUNBUFFERED"] = "1"
 
-        _process = subprocess.Popen(
+        proc = subprocess.Popen(
             [sys.executable, str(ALGO_SCRIPT)],
             cwd=str(PROJECT_ROOT),
             stdout=subprocess.PIPE,
@@ -70,6 +70,7 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str = None,
             bufsize=1,
             env=env,
         )
+        _process = proc
 
     def _pub(line: str, *, done: bool = False, rc: int | None = None) -> None:
         payload: dict = {"line": line, "done": done}
@@ -81,10 +82,11 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str = None,
         global _process
         _pub("=== Démarrage de algo.py ===")
         try:
-            for line in _process.stdout:
+            assert proc.stdout is not None
+            for line in proc.stdout:
                 _pub(line.rstrip())
-            _process.wait()
-            rc = _process.returncode
+            proc.wait()
+            rc = proc.returncode
             status = "succès ✔" if rc == 0 else f"erreur (code {rc}) ✘"
             _pub(f"=== Terminé — {status} ===", done=True, rc=rc)
         except Exception as exc:
