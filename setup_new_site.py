@@ -23,6 +23,7 @@ import getpass
 import os
 import re
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -44,6 +45,14 @@ except ImportError:
     _HAS_PYOTP = False
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+
+# Compte système dédié, partagé par toutes les instances de l'app sur cette
+# machine. Doit avoir le même UID/GID que « appuser » dans le conteneur
+# Docker (cf. Dockerfile : groupadd/useradd --uid/--gid 1000 appuser), pour
+# que les fichiers du bind-mount (ex. app_secrets.py) restent lisibles par
+# le conteneur tout en appartenant à root côté hôte.
+APP_SYSTEM_USER = "secondoral"
+APP_SYSTEM_UID = 1000
 
 # ── Couleurs ANSI ─────────────────────────────────────────────────────────────
 GREEN = "\033[32m"; YELLOW = "\033[33m"; RED = "\033[31m"; BOLD = "\033[1m"; NC = "\033[0m"
@@ -591,6 +600,41 @@ def fix_nginx_traversal(static_dir: Path) -> None:
         ok("Permissions de traversal nginx : OK")
 
 
+# ── Compte système dédié à l'app ──────────────────────────────────────────────
+
+def ensure_app_system_user(name: str = APP_SYSTEM_USER) -> None:
+    """
+    S'assure qu'un utilisateur système (et son groupe) dédié aux instances de
+    l'app existe sur cette machine — le crée si besoin (UID/GID choisis
+    automatiquement par le système, dans la plage des comptes système).
+
+    Le reste du script référence ce compte par son nom (chown, build Docker) :
+    seul le code qui doit franchir la frontière hôte/conteneur — où les noms
+    n'ont pas de sens, seuls les UID/GID numériques comptent côté noyau —
+    résout ce nom en UID/GID (cf. docker_setup, build args APP_UID/APP_GID).
+    """
+    import pwd
+
+    try:
+        pwd.getpwnam(name)
+        return
+    except KeyError:
+        pass
+
+    try:
+        subprocess.run(["groupadd", "--system", name], check=True)
+        subprocess.run(
+            ["useradd", "--gid", name, "--system",
+             "--no-create-home", "--shell", "/usr/sbin/nologin", name],
+            check=True,
+        )
+        ok(f"Utilisateur système « {name} » créé")
+    except subprocess.CalledProcessError:
+        warn(f"Impossible de créer l'utilisateur système « {name} ».")
+        warn(f"  Créez-le manuellement : groupadd --system {name} "
+             f"&& useradd --gid {name} --system --no-create-home {name}")
+
+
 # ── Détection du port disponible ──────────────────────────────────────────────
 
 def find_free_port(start: int = 8080) -> int:
@@ -752,9 +796,28 @@ def docker_setup(db_root_password: str, db_name: str,
         warn("docker compose non disponible. Installez Docker Desktop ou Docker Engine.")
         return False
 
+    # Le conteneur a son propre /etc/passwd : impossible d'y résoudre le nom
+    # « secondoral » de l'hôte. On ne peut transmettre au Dockerfile que les
+    # UID/GID numériques du compte système dédié (cf. ensure_app_system_user),
+    # afin que « appuser » dans le conteneur partage les mêmes et puisse lire
+    # les fichiers du bind-mount qui lui appartiennent côté hôte (ex.
+    # app_secrets.py).
+    import pwd
+    try:
+        pw = pwd.getpwnam(APP_SYSTEM_USER)
+        app_uid, app_gid = pw.pw_uid, pw.pw_gid
+    except KeyError:
+        warn(f"Utilisateur système « {APP_SYSTEM_USER} » introuvable, "
+             f"utilisation de l'UID/GID par défaut ({APP_SYSTEM_UID}).")
+        app_uid = app_gid = APP_SYSTEM_UID
+
     hdr("Construction de l'image Docker")
     try:
-        _compose_check(["build", "--pull"])
+        _compose_check([
+            "build", "--pull",
+            "--build-arg", f"APP_UID={app_uid}",
+            "--build-arg", f"APP_GID={app_gid}",
+        ])
     except subprocess.CalledProcessError:
         err("La construction de l'image a échoué.")
         return False
@@ -920,14 +983,17 @@ def main() -> None:
             encoding="utf-8",
         )
         ok(f"security.txt mis à jour → {sec_txt}")
+    ensure_app_system_user()
     try:
         os.chmod(secrets_path, 0o640)
-        # GID 1000 = appuser dans le conteneur Docker (défini dans le Dockerfile)
-        # root:appuser 640 → seul root (hôte) et appuser (conteneur) peuvent lire
-        os.chown(secrets_path, 0, 1000)
-    except PermissionError:
+        # Le groupe doit correspondre à celui de « appuser » dans le conteneur
+        # Docker (cf. Dockerfile et ensure_app_system_user) :
+        # root:{APP_SYSTEM_USER} 640 → seul root (hôte) et appuser (conteneur)
+        # peuvent lire ce fichier.
+        shutil.chown(secrets_path, user="root", group=APP_SYSTEM_USER)
+    except (PermissionError, LookupError):
         warn("Impossible de chmod/chown (pas root ?). Faites-le manuellement :")
-        warn(f"  sudo chown root:1000 {secrets_path} && sudo chmod 640 {secrets_path}")
+        warn(f"  sudo chown root:{APP_SYSTEM_USER} {secrets_path} && sudo chmod 640 {secrets_path}")
     ok(f"app_secrets.py → {secrets_path}")
 
     # Affichage QR + clé + vérification interactive

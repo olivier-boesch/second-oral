@@ -24,8 +24,15 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 # Enlever gcc après la compilation (image plus légère)
 RUN apt-get purge -y --auto-remove gcc
 
-# Utilisateur non-root dédié (UID 1000 pour compatibilité avec les volumes hôte)
-RUN groupadd --gid 1000 appuser && useradd --uid 1000 --gid 1000 --no-create-home appuser
+# Utilisateur non-root dédié — son UID/GID doit correspondre à ceux du compte
+# système dédié sur l'hôte (cf. setup_new_site.py: ensure_app_system_user),
+# afin que appuser puisse lire les fichiers du bind-mount qui lui appartiennent
+# côté hôte (ex. app_secrets.py). Valeurs transmises via --build-arg par
+# `docker compose build` (setup_new_site.py: docker_setup) ; 1000 par défaut
+# pour les builds manuels.
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupadd --gid ${APP_GID} appuser && useradd --uid ${APP_UID} --gid ${APP_GID} --no-create-home appuser
 
 # Crée le répertoire des PDFs générés avec les bons droits avant de passer à appuser.
 # Le volume Docker nommé static_docs est initialisé à partir de ce dossier ;
