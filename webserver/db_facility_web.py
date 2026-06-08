@@ -373,7 +373,7 @@ SELECT salle, loge FROM Examinateur WHERE id = %s
 
 # ---------- Logs
 
-SELECT_ALL_LOGS = "SELECT * FROM Logs"
+SELECT_ALL_LOGS = "SELECT * FROM Logs ORDER BY id"
 
 
 class DbInterface:

@@ -301,8 +301,9 @@ python -m pytest tests/integration/
 
 Le pipeline GitHub Actions (`.github/workflows/ci.yml`) exécute à chaque push sur `main` :
 1. **`pip-audit`** — détection des CVE connues dans les dépendances
-2. **Tests** — 124 tests unitaires + intégration avec couverture (dont vérification
-   automatisée des annotations de type, du PEP8 et de mypy sur `app.py`)
+2. **Tests** — 162 tests unitaires + intégration avec couverture (dont vérification
+   automatisée des annotations de type, du PEP8 et de mypy sur `app.py`, et
+   non-régression des constats de l'audit de sécurité)
 
 ---
 
@@ -336,10 +337,12 @@ second_oral/
 │
 ├── tests/
 │   ├── unit/
+│   │   ├── test_code_quality.py    Annotations, PEP8 et mypy sur app.py
 │   │   ├── test_csv_validator.py   Tests unitaires du validateur CSV
 │   │   └── test_setup_utils.py     Tests unitaires des utilitaires de setup
 │   └── integration/
-│       └── test_flask_routes.py    Tests d'intégration Flask (DB mockée)
+│       ├── test_flask_routes.py    Tests d'intégration Flask (DB mockée)
+│       └── test_security.py        Non-régression des constats de l'audit sécurité
 │
 ├── .github/workflows/ci.yml     Pipeline CI : pip-audit + tests
 ├── docker-compose.yml           Stack : app, nginx, redis, mariadb

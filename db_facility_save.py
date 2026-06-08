@@ -114,7 +114,7 @@ SQL_BASE = [
     BEGIN
         DECLARE last_hash CHAR(64);
         DECLARE new_hash CHAR(64);
-        SELECT hash INTO last_hash FROM Logs ORDER BY id DESC LIMIT 1;
+        SELECT hash INTO last_hash FROM Logs ORDER BY id DESC LIMIT 1 FOR UPDATE;
         IF last_hash IS NULL THEN
             SET last_hash = '';
         END IF;

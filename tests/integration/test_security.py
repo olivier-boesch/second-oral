@@ -289,3 +289,81 @@ class TestSecretRedactionInLogs:
     def test_otp_code_not_logged_on_failure(self):
         source = APP_PY.read_text(encoding="utf-8")
         assert "code={passcode}" not in source
+
+
+# ── #8 — Fiabilité de la chaîne de hash des logs d'audit ──────────────────────
+
+ROOT_DIR = APP_PY.resolve().parents[1]
+DB_FACILITY_SAVE_PY = ROOT_DIR / "db_facility_save.py"
+
+
+class TestLogIntegrityChain:
+    """La vérification de la chaîne de hash des logs (route /gestion/verify-logs
+    et verify_logs.py) suppose un parcours strictement séquentiel par id, où
+    chaque hash dépend du hash de l'entrée précédente. Deux défauts pouvaient
+    produire de faux positifs de « chaîne compromise » :
+    - SELECT_ALL_LOGS ne triait pas par id (ordre de lecture non garanti) ;
+    - log_action lisait le dernier hash sans verrou, exposant la chaîne à une
+      course entre triggers déclenchés par des écritures concurrentes."""
+
+    def test_select_all_logs_orders_by_id(self):
+        from db_facility_web import SELECT_ALL_LOGS
+        assert "ORDER BY id" in SELECT_ALL_LOGS, (
+            "SELECT_ALL_LOGS doit trier par id pour que la vérification "
+            "séquentielle de la chaîne de hash soit fiable"
+        )
+
+    def test_log_action_locks_last_hash_row(self):
+        source = DB_FACILITY_SAVE_PY.read_text(encoding="utf-8")
+        proc_start = source.index("CREATE PROCEDURE log_action")
+        proc = source[proc_start:proc_start + 800]
+        assert "FOR UPDATE" in proc, (
+            "log_action doit verrouiller la dernière ligne de Logs (FOR UPDATE) "
+            "pour empêcher deux triggers concurrents de chaîner sur le même hash"
+        )
+
+    def test_verify_logs_route_checks_in_id_order_with_chained_hashes(
+            self, admin_client, db_mock, monkeypatch):
+        """La route doit vérifier chaque entrée avec le hash de la précédente,
+        dans l'ordre renvoyé par SELECT_ALL_LOGS (désormais trié par id)."""
+        import app as app_module
+
+        logs = [
+            {"id": 1, "action_data": "{}", "table_name": "Candidat", "hash": "h1"},
+            {"id": 2, "action_data": "{}", "table_name": "Candidat", "hash": "h2"},
+            {"id": 3, "action_data": "{}", "table_name": "Candidat", "hash": "h3"},
+        ]
+        db_mock.make_sql_select.return_value = logs
+
+        seen = []
+
+        def _spy(log_item, previous_hash=""):
+            seen.append((log_item["id"], previous_hash))
+            return True
+
+        monkeypatch.setattr(app_module, "verify_log_item", _spy)
+
+        r = admin_client.get("/gestion/verify-logs")
+        assert r.status_code == 200
+        assert seen == [(1, ""), (2, "h1"), (3, "h2")], (
+            "Chaque entrée doit être vérifiée avec le hash de l'entrée "
+            "précédente par id, en commençant par une chaîne vide"
+        )
+
+    def test_verify_logs_route_reports_compromised_on_mismatch(
+            self, admin_client, db_mock, monkeypatch):
+        import app as app_module
+
+        logs = [
+            {"id": 1, "action_data": "{}", "table_name": "Candidat", "hash": "h1"},
+            {"id": 2, "action_data": "{}", "table_name": "Candidat", "hash": "BAD"},
+        ]
+        db_mock.make_sql_select.return_value = logs
+        monkeypatch.setattr(
+            app_module, "verify_log_item",
+            lambda log_item, previous_hash="": log_item["hash"] != "BAD",
+        )
+
+        r = admin_client.get("/gestion/verify-logs")
+        assert r.status_code == 200
+        assert "❌" in r.get_data(as_text=True)
