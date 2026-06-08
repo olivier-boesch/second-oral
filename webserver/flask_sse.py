@@ -126,7 +126,11 @@ class ServerSentEventsBlueprint(Blueprint):
     def messages(self, channel='sse', heartbeat=15):
         """
         Générateur de :class:`Message` (ou ``None`` pour un battement de cœur)
-        depuis un canal Redis pub/sub.
+        depuis un ou plusieurs canaux Redis pub/sub.
+
+        :param channel: Nom de canal, ou liste/tuple de noms — utile pour
+                         qu'une page écoute à la fois son canal dédié et le
+                         canal ``'general'`` (ex. rechargement global admin).
 
         Sans nouveau message pendant ``heartbeat`` secondes, produit ``None`` :
         l'appelant peut alors émettre un commentaire SSE keep-alive, faute de
@@ -137,8 +141,9 @@ class ServerSentEventsBlueprint(Blueprint):
         changer son ``socket_timeout`` ; cela reste compatible avec le client
         sans timeout utilisé ici (cf. _get_redis_sub).
         """
+        channels = [channel] if isinstance(channel, str) else list(channel)
         pubsub = _get_redis_sub(self._redis_url()).pubsub()
-        pubsub.subscribe(channel)
+        pubsub.subscribe(*channels)
         try:
             while True:
                 pubsub_message = pubsub.get_message(
@@ -150,20 +155,21 @@ class ServerSentEventsBlueprint(Blueprint):
                     yield Message(**json.loads(pubsub_message['data']))
         finally:
             try:
-                pubsub.unsubscribe(channel)
+                pubsub.unsubscribe(*channels)
             except ConnectionError:
                 pass
 
     def stream(self):
         """
         Vue Flask qui streame des SSE.
-        Paramètre GET ``channel`` pour choisir le canal (défaut : ``'sse'``).
+        Paramètre GET ``channel`` : un nom de canal, ou plusieurs séparés par
+        des virgules (ex. ``?channel=candidat_123,general``). Défaut : ``'sse'``.
         """
-        channel = request.args.get('channel') or 'sse'
+        channels = [c for c in (request.args.get('channel') or 'sse').split(',') if c]
 
         @stream_with_context
         def generator():
-            for message in self.messages(channel=channel):
+            for message in self.messages(channel=channels):
                 yield ': heartbeat\n\n' if message is None else str(message)
 
         return current_app.response_class(

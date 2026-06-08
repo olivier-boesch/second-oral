@@ -273,8 +273,11 @@ def protect_sse():
                 and 'candidat' not in session
                 and 'loge' not in session):
             abort(401)
-        channel = request.args.get('channel') or 'sse'
-        if not _sse_channel_allowed(channel):
+        # Plusieurs canaux séparés par des virgules sont acceptés (ex.
+        # `candidat_<ine>,general` : une page écoute à la fois son canal
+        # dédié et le canal général de rechargement global) — cf. flask_sse.
+        channels = (request.args.get('channel') or 'sse').split(',')
+        if not all(_sse_channel_allowed(channel) for channel in channels):
             abort(403)
 
 app._db = db_facility_web.DbInterface()  # type: ignore[attr-defined]

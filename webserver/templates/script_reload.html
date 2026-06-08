@@ -2,7 +2,13 @@
 (function () {
     "use strict";
 
-    const SSE_URL = "{{ url_for('sse.stream') }}?channel={{ (sse_channel | default('general')) | urlencode }}";
+    {# Chaque page écoute son canal dédié (le cas échéant) ET le canal
+       'general', afin que le rechargement global déclenché par l'admin
+       (cf. /gestion/reload-pages) atteigne bien toutes les pages ouvertes,
+       pas seulement celles déjà sur 'general'. #}
+    {% set _channel = sse_channel | default('general') %}
+    {% set _channels = [_channel] if _channel == 'general' else [_channel, 'general'] %}
+    const SSE_URL = "{{ url_for('sse.stream') }}?channel={{ _channels | join(',') | urlencode }}";
     let source = null;
 
     function connect() {
