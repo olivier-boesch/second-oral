@@ -261,7 +261,7 @@ et les autres PDF générables à la demande (papillons, fiches candidats/loges,
 | **CSP** | `default-src 'self'`, nonce par requête + `'strict-dynamic'` sur `script-src`, `form-action 'self'`, `base-uri 'self'` via Flask-Talisman |
 | **Sessions** | `HttpOnly`, `Secure`, `SameSite=Lax` ; expiration 8 h ; `session.clear()` avant chaque login (protection fixation de session) |
 | **INE en session** | Stocké en Redis (TTL 5 min, token aléatoire) — jamais en clair dans le cookie |
-| **Rate limiting** | Flask-Limiter + Redis ; 10 req/min sur toutes les routes de connexion (`login`, `login-examinateur`, `login-candidat`, `login-loge`) |
+| **Rate limiting** | Flask-Limiter + Redis ; 10 req/min sur toutes les routes de connexion (`login`, `login-examinateur`, `login-candidat`, `login-loge`) ; 30 connexions/min sur le flux SSE (`/stream`) — limite dédiée (et non une exemption totale) pour ne pas pénaliser les reconnexions EventSource légitimes tout en empêchant un compte d'ouvrir un flot de connexions en boucle (chacune retient indéfiniment un greenlet + une souscription Redis) |
 | **Alerting auth** | Compteur d'échecs par IP (fenêtre glissante de 5 min, purgée des entrées obsolètes) ; `WARNING` gunicorn après 5 tentatives — sans journaliser le mot de passe ni le code OTP soumis |
 | **HSTS** | `max-age=31536000; includeSubDomains; preload` côté Talisman et nginx |
 | **TLS** | TLS 1.2+ uniquement ; suites ECDHE/DHE-GCM/CHACHA20 ; `ssl_session_tickets off` ; redirection HTTP→HTTPS |
