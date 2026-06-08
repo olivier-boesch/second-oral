@@ -29,7 +29,7 @@ from flask import (
 )
 from flask.typing import ResponseReturnValue
 from flask_compress import Compress
-from flask_limiter import Limiter, ExemptionScope
+from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from wtforms.fields.choices import SelectField
 from wtforms.fields.simple import PasswordField, SubmitField, StringField, HiddenField
@@ -157,10 +157,15 @@ app.secret_key = APP_SECRET_KEY
 CSRFProtect(app)
 
 app.register_blueprint(sse, url_prefix='/stream')
-limiter.exempt(
-    sse,
-    flags=ExemptionScope.DEFAULT | ExemptionScope.APPLICATION | ExemptionScope.ANCESTORS,
-)
+# Le flux SSE est un flux long-vivant : les limites par défaut (pensées pour
+# des requêtes courtes) gêneraient les reconnexions légitimes (plusieurs
+# onglets, ré-essais EventSource après coupure réseau/proxy, cf.
+# script_reload.html / sign.html). On applique donc une limite dédiée, large
+# mais bornée, plutôt qu'une exemption totale : sans elle, n'importe quel
+# compte authentifié pourrait ouvrir un flot de connexions en boucle, chacune
+# retenant indéfiniment un greenlet + une souscription Redis (DoS, cf.
+# flask_sse._get_redis_sub avec socket_timeout=None).
+limiter.limit("30 per minute", override_defaults=True)(sse)
 
 
 _AUTH_FAIL_THRESHOLD = 5   # échecs avant avertissement dans les logs
