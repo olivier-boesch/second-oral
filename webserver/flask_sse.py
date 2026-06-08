@@ -123,17 +123,30 @@ class ServerSentEventsBlueprint(Blueprint):
             channel=channel, message=json.dumps(message.to_dict())
         )
 
-    def messages(self, channel='sse'):
+    def messages(self, channel='sse', heartbeat=15):
         """
-        Générateur de :class:`Message` depuis un canal Redis pub/sub.
-        Utilise un client sans timeout socket pour que listen() bloque
-        indéfiniment sans déclencher de TimeoutError avec gevent.
+        Générateur de :class:`Message` (ou ``None`` pour un battement de cœur)
+        depuis un canal Redis pub/sub.
+
+        Sans nouveau message pendant ``heartbeat`` secondes, produit ``None`` :
+        l'appelant peut alors émettre un commentaire SSE keep-alive, faute de
+        quoi les proxys intermédiaires (nginx hôte, etc.) finissent par couper
+        les connexions inactives (proxy_read_timeout).
+
+        ``get_message(timeout=...)`` interroge le socket via ``select`` sans
+        changer son ``socket_timeout`` ; cela reste compatible avec le client
+        sans timeout utilisé ici (cf. _get_redis_sub).
         """
         pubsub = _get_redis_sub(self._redis_url()).pubsub()
         pubsub.subscribe(channel)
         try:
-            for pubsub_message in pubsub.listen():
-                if pubsub_message['type'] == 'message':
+            while True:
+                pubsub_message = pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=heartbeat,
+                )
+                if pubsub_message is None:
+                    yield None
+                elif pubsub_message['type'] == 'message':
                     yield Message(**json.loads(pubsub_message['data']))
         finally:
             try:
@@ -151,7 +164,7 @@ class ServerSentEventsBlueprint(Blueprint):
         @stream_with_context
         def generator():
             for message in self.messages(channel=channel):
-                yield str(message)
+                yield ': heartbeat\n\n' if message is None else str(message)
 
         return current_app.response_class(
             generator(),

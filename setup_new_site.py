@@ -719,6 +719,29 @@ server {{
         proxy_buffering off;
     }}
 
+    # ── SSE ───────────────────────────────────────────────────────────────────
+    # Connexions longue durée, souvent inactives (pas de message tant que rien
+    # ne change) : sans bloc dédié, le timeout de 120s ci-dessus coupe le flux
+    # toutes les ~2 minutes (cf. nginx interne docker/nginx/second_oral.conf).
+    location /stream {{
+        proxy_pass http://127.0.0.1:{app_port};
+
+        proxy_set_header Host               $host;
+        proxy_set_header X-Forwarded-For    $remote_addr;
+        proxy_set_header X-Forwarded-Proto  $scheme;
+        proxy_set_header X-Forwarded-Host   $host;
+        proxy_set_header X-Forwarded-Prefix /;
+
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
+        chunked_transfer_encoding on;
+
+        proxy_buffering    off;
+        proxy_cache        off;
+        proxy_read_timeout 3600s;
+        proxy_connect_timeout 10s;
+    }}
+
     location /static/ {{
         alias {static_dir}/;
         expires 7d;
