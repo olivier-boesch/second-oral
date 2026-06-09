@@ -6,6 +6,12 @@ Application web de gestion des oraux de second groupe du baccalauréat :
 placement automatique des candidats et examinateurs, consultation en temps réel,
 émargement dématérialisé, génération de documents PDF.
 
+## En production
+
+Déployé depuis 2023 sur un centre d'examen de l'académie d'Aix-Marseille.
+~180 candidats traités en une journée sur une instance.
+Utilisé chaque année lors des oraux de second groupe du baccalauréat.
+
 ---
 
 ## Sommaire
