@@ -7,6 +7,7 @@ import datetime
 import tempfile
 from io import BytesIO
 from os.path import join as path_join
+from pathlib import Path
 from base64 import b64decode
 
 from PIL import Image as PilImage, ImageDraw, ImageFont
@@ -26,10 +27,12 @@ from reportlab.platypus import (
 )
 from reportlab.platypus.doctemplate import SimpleDocTemplate
 
-pdfmetrics.registerFont(TTFont('BodyFont', 'PoppinsLatin-Regular.ttf'))
+_FONT_DIR = Path(__file__).resolve().parent / 'static'
+
+pdfmetrics.registerFont(TTFont('BodyFont', str(_FONT_DIR / 'PoppinsLatin-Regular.ttf')))
 # Police à empattements pour les papillons : les empattements distinguent
 # mieux les caractères ambigus des mots de passe générés (1/l/I, 0/O...).
-pdfmetrics.registerFont(TTFont('PapillonFont', 'DejaVuSerif.ttf'))
+pdfmetrics.registerFont(TTFont('PapillonFont', str(_FONT_DIR / 'DejaVuSerif.ttf')))
 
 WARNING_CHAR = "(!)"
 
@@ -244,7 +247,7 @@ def liste_loge_oraux(liste_loges, file_dir='.', filename_root='', centre_examen=
 
 def image_signature(img, horodatage):
     """Ajoute l'horodatage en surimpression sur une image de signature base64."""
-    font = ImageFont.truetype("PoppinsLatin-Regular.ttf", 25)
+    font = ImageFont.truetype(str(_FONT_DIR / 'PoppinsLatin-Regular.ttf'), 25)
     img_out = BytesIO()
     img_data = b64decode(img.split(",")[1])
     imagefile = BytesIO(img_data)

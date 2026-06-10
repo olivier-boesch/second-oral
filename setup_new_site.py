@@ -325,7 +325,7 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
     C_DANGER   = _rc.HexColor('#dc2626')
 
     # ── Police ────────────────────────────────────────────────────────────────
-    font_path = PROJECT_ROOT / 'webserver' / 'PoppinsLatin-Regular.ttf'
+    font_path = PROJECT_ROOT / 'webserver' / 'static' / 'PoppinsLatin-Regular.ttf'
     font = 'Helvetica'
     if font_path.exists():
         try:
