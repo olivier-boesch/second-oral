@@ -159,20 +159,21 @@ sudo python setup_new_site.py \
 > 📖 **Documentation complète** : [docs/workflow_admin.md](docs/workflow_admin.md)
 > — format détaillé des CSV, contraintes de l'algorithme, résolution des problèmes.
 
-### Préparer les fichiers CSV
+### Préparer les fichiers
 
-Trois fichiers sont nécessaires dans `data/` :
+Trois fichiers CSV sont nécessaires dans `data/` :
 
 | Fichier | Colonnes |
 |---|---|
 | `candidats.csv` | `CANDIDAT` (Nom Prénom (INE)) ; `CHOIX DISCIPLINE 1` ; `CHOIX DISCIPLINE 2` ; `TT` (0/1) ; `Etab` ; `Profs` |
-| `profs_total.csv` | `Nom` ; `Disc.poste` ; `Salle` ; `Heure mini` ; `Etab` ; `Loge` |
+| `examinateurs.csv` | `Nom` ; `Disc.poste` ; `Salle` ; `Heure mini` ; `Etab` ; `Loge` |
 | `preps.csv` | `Matiere` ; `Matière court` ; `Temps preparation (min)` ; `Duree (min)` |
 
-**Modèles téléchargeables** depuis l'interface admin → `/gestion/algo`,
-ou directement dans `webserver/static/templates_csv/`.
+**Méthode recommandée — fichier ODS unique :**
+depuis `/gestion/algo`, téléchargez le modèle ODS (feuille `preps` pré-remplie avec les 16 disciplines, listes déroulantes de validation sur `examinateurs` et `candidats`), remplissez-le sous LibreOffice Calc ou Excel, puis uploadez-le — le serveur le découpe automatiquement en 3 CSV.
 
-Les fichiers peuvent être uploadés directement depuis la page `/gestion/algo`.
+**Méthode alternative — CSV individuels :**
+modèles téléchargeables dans `webserver/static/templates_csv/` ou depuis `/gestion/algo`.
 
 ### Lancer l'algorithme
 
@@ -236,7 +237,7 @@ de minimisation RGPD :
 | `LISEZMOI.txt` | Manifeste : contenu de l'archive, date et auteur de la génération |
 
 **Volontairement exclus** de l'archive : mots de passe, clés de connexion,
-fichiers CSV bruts d'inscription (`data/candidats.csv`, `profs_total.csv`, `preps.csv`),
+fichiers CSV bruts d'inscription (`data/candidats.csv`, `examinateurs.csv`, `preps.csv`),
 et les autres PDF générables à la demande (papillons, fiches candidats/loges, liste générale des oraux).
 
 ---
@@ -308,7 +309,7 @@ python -m pytest tests/integration/
 
 Le pipeline GitHub Actions (`.github/workflows/ci.yml`) exécute à chaque push sur `main` :
 1. **`pip-audit`** — détection des CVE connues dans les dépendances
-2. **Tests** — 194 tests unitaires + intégration avec couverture (dont vérification
+2. **Tests** — 211 tests unitaires + intégration avec couverture (dont vérification
    automatisée des annotations de type, du PEP8 et de mypy sur `app.py`, et
    non-régression des constats de l'audit de sécurité)
 
@@ -335,7 +336,7 @@ second_oral/
 │
 ├── data/
 │   ├── candidats.csv            Données candidats (séparateur ;)
-│   ├── profs_total.csv          Données examinateurs
+│   ├── examinateurs.csv         Données examinateurs
 │   ├── preps.csv                Matières et durées
 │   └── algo_params.json         Paramètres algo (généré par l'interface web)
 │
@@ -346,6 +347,7 @@ second_oral/
 │   ├── unit/
 │   │   ├── test_code_quality.py    Annotations, PEP8 et mypy sur app.py
 │   │   ├── test_csv_validator.py   Tests unitaires du validateur CSV
+│   │   ├── test_ods_handler.py     Tests unitaires du lecteur/générateur ODS
 │   │   └── test_setup_utils.py     Tests unitaires des utilitaires de setup
 │   └── integration/
 │       ├── test_flask_routes.py    Tests d'intégration Flask (DB mockée)
@@ -364,6 +366,7 @@ second_oral/
     ├── app_secrets.py           Secrets (root:root 640, non versionné)
     ├── algo_bg.py               Exécution de algo.py en tâche de fond (SSE)
     ├── csv_validator.py         Validation et normalisation des fichiers CSV
+    ├── ods_handler.py           Lecture et génération de fichiers ODS (odfpy)
     ├── db_facility_web.py       Requêtes SQL paramétrées
     ├── reports.py               Génération PDF (ReportLab + pypdftk)
     ├── flask_sse.py             Blueprint SSE avec cache Redis
@@ -372,7 +375,7 @@ second_oral/
     ├── static/
     │   ├── .well-known/
     │   │   └── security.txt     Contact de divulgation responsable (RFC 9116)
-    │   ├── templates_csv/       Modèles CSV téléchargeables depuis /gestion/algo
+    │   ├── templates_csv/       Modèles CSV individuels (examinateurs, candidats, preps)
     │   ├── docs/                PDFs générés (volume Docker nommé)
     │   └── ...                  CSS, images, JS
     │
@@ -387,7 +390,7 @@ second_oral/
         ├── liste.html           Liste générale (affichage grand écran)
         ├── sign.html            Signature dématérialisée
         ├── mentions_legales.html Mentions légales + politique de confidentialité
-        ├── gestion_algo.html    Upload CSV + paramètres algo + lancement + log
+        ├── gestion_algo.html    Upload ODS/CSV + paramètres algo + lancement + log
         └── ...
 ```
 
@@ -411,6 +414,7 @@ mysql-connector-python==9.7.0
 redis==8.0.0
 pyotp==2.9.0, segno==1.6.6
 reportlab==4.5.1, pypdftk==0.5, pillow==12.2.0
+odfpy>=1.4.0
 pytz==2026.2, colorama==0.4.6, setuptools==80.9.0
 ```
 

@@ -311,9 +311,9 @@ class TestAdminRoutes:
     def test_validate_csv_stats_structure(self, admin_client):
         r = admin_client.get("/gestion/algo/validate")
         stats = json.loads(r.data)["stats"]
-        assert "candidats" in stats
-        assert "profs"     in stats
-        assert "matieres"  in stats
+        assert "candidats"    in stats
+        assert "examinateurs" in stats
+        assert "matieres"     in stats
 
     def test_save_params_valid(self, admin_client, tmp_path, flask_app, monkeypatch):
         # Redirige _ALGO_PARAMS_FILE vers tmp_path pour ne pas polluer data/
@@ -349,6 +349,62 @@ class TestAdminRoutes:
     def test_download_csv_invalid_key_returns_404(self, admin_client):
         r = admin_client.get("/gestion/algo/download-csv/unknown_key")
         assert r.status_code == 404
+
+    def test_download_modele_ods_returns_ods(self, admin_client):
+        r = admin_client.get("/gestion/algo/download-modele-ods")
+        assert r.status_code == 200
+        assert r.content_type == "application/vnd.oasis.opendocument.spreadsheet"
+        assert r.data[:2] == b"PK"  # ODS est un ZIP
+
+    def test_ods_upload_splits_into_three_csvs(self, admin_client, tmp_path,
+                                               flask_app, monkeypatch):
+        import sys, io as _io
+        from pathlib import Path as _Path
+        sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "webserver"))
+        from ods_handler import generate_ods_modele, parse_ods
+        import app as app_module
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        # Génère un ODS valide et l'uploade
+        ods_bytes = generate_ods_modele()
+        r = admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(ods_bytes), "modele_oral.ods")},
+            content_type="multipart/form-data",
+        )
+        assert r.status_code == 200
+        body = json.loads(r.data)
+        assert "preps.csv" in body["uploaded"]
+        assert (tmp_path / "preps.csv").exists()
+
+    def test_ods_upload_invalid_extension_returns_error(self, admin_client):
+        r = admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(b"not ods"), "file.xlsx")},
+            content_type="multipart/form-data",
+        )
+        assert r.status_code == 200
+        body = json.loads(r.data)
+        assert body["ok"] is False
+        assert any("extension .ods" in e for e in body["errors"])
+
+    def test_ods_upload_invalid_content_returns_error(self, admin_client):
+        r = admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(b"garbage"), "modele.ods")},
+            content_type="multipart/form-data",
+        )
+        assert r.status_code == 200
+        body = json.loads(r.data)
+        assert body["ok"] is False
+
+    def test_ods_upload_requires_admin(self, client):
+        r = client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(b"x"), "x.ods")},
+            content_type="multipart/form-data",
+        )
+        assert r.status_code in (302, 403)
 
 
 # ── Candidat (route protégée) ─────────────────────────────────────────────────
@@ -457,7 +513,7 @@ class TestArchiveRoutes:
         r = admin_client.get("/gestion/archive/download")
         with zipfile.ZipFile(BytesIO(r.data)) as zf:
             names = zf.namelist()
-            for forbidden in ("candidats.csv", "profs_total.csv", "preps.csv",
+            for forbidden in ("candidats.csv", "examinateurs.csv", "preps.csv",
                               "password", "login_key"):
                 assert all(forbidden not in n for n in names)
 

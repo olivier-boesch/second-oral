@@ -4,11 +4,11 @@ Validation et normalisation des fichiers CSV pour algo.py.
 Usage :
     from csv_validator import normalize_csv, validate_all
 
-    report = validate_all(candidats_path, profs_path, preps_path)
+    report = validate_all(candidats_path, examinateurs_path, preps_path)
     # report["ok"]       -> bool
     # report["errors"]   -> [{"file": ..., "row": ..., "message": ...}]
     # report["warnings"] -> [{"file": ..., "row": ..., "message": ...}]
-    # report["stats"]    -> {"candidats": int, "profs": int, "matieres": int}
+    # report["stats"]    -> {"candidats": int, "examinateurs": int, "matieres": int}
 """
 
 from __future__ import annotations
@@ -123,7 +123,7 @@ def validate_preps(rows: list[dict]) -> list[dict]:
     return issues
 
 
-# ── Validation profs_total.csv ────────────────────────────────────────────────
+# ── Validation examinateurs.csv ──────────────────────────────────────────────
 
 PROFS_COLS = {"Nom", "Disc.poste", "Salle", "Heure mini", "Etab", "Loge"}
 
@@ -136,11 +136,11 @@ def _mat_match(disc: str, matieres: set[str], noms_courts: set[str]) -> bool:
 def validate_profs(rows: list[dict], matieres: set[str], noms_courts: set[str]) -> list[dict]:
     issues = []
     if not rows:
-        return [_err("profs", None, "Fichier vide.")]
+        return [_err("examinateurs", None, "Fichier vide.")]
 
     missing = PROFS_COLS - set(rows[0].keys())
     if missing:
-        issues.append(_err("profs", None,
+        issues.append(_err("examinateurs", None,
             f"Colonnes manquantes : {', '.join(sorted(missing))}"))
         return issues
 
@@ -148,31 +148,31 @@ def validate_profs(rows: list[dict], matieres: set[str], noms_courts: set[str]) 
     for i, r in enumerate(rows, 1):
         nom = r.get("Nom", "").strip()
         if not nom:
-            issues.append(_err("profs", i, "Colonne 'Nom' vide."))
+            issues.append(_err("examinateurs", i, "Colonne 'Nom' vide."))
 
         disc = r.get("Disc.poste", "").strip()
         if not disc:
-            issues.append(_err("profs", i, f"Colonne 'Disc.poste' vide (prof '{nom}')."))
+            issues.append(_err("examinateurs", i, f"Colonne 'Disc.poste' vide (prof '{nom}')."))
         elif not _mat_match(disc, matieres, noms_courts):
-            issues.append(_err("profs", i,
+            issues.append(_err("examinateurs", i,
                 f"Discipline '{disc}' (prof '{nom}') introuvable dans preps.csv. "
                 f"Valeurs attendues : {', '.join(sorted(matieres | noms_courts))}."))
 
         salle = r.get("Salle", "").strip()
         if not salle:
-            issues.append(_err("profs", i, f"Colonne 'Salle' vide (prof '{nom}')."))
+            issues.append(_err("examinateurs", i, f"Colonne 'Salle' vide (prof '{nom}')."))
         elif salle in salles:
-            issues.append(_warn("profs", i, f"Salle '{salle}' présente plusieurs fois."))
+            issues.append(_warn("examinateurs", i, f"Salle '{salle}' présente plusieurs fois."))
         else:
             salles.add(salle)
 
         heure = r.get("Heure mini", "").strip()
         if not _HOUR_RE.match(heure) or not (0 <= int(heure) <= 23):
-            issues.append(_err("profs", i,
+            issues.append(_err("examinateurs", i,
                 f"'Heure mini' doit être un entier entre 0 et 23 (valeur : '{heure}')."))
 
         if not r.get("Loge", "").strip():
-            issues.append(_warn("profs", i, f"Colonne 'Loge' vide (prof '{nom}')."))
+            issues.append(_warn("examinateurs", i, f"Colonne 'Loge' vide (prof '{nom}')."))
 
     return issues
 
@@ -230,14 +230,14 @@ def validate_candidats(rows: list[dict], matieres: set[str], noms_courts: set[st
 # ── Rapport complet ───────────────────────────────────────────────────────────
 
 def validate_all(candidats_path: Path | None,
-                 profs_path: Path | None,
+                 examinateurs_path: Path | None,
                  preps_path: Path | None) -> dict:
     """
     Valide les trois fichiers CSV et renvoie un rapport consolidé.
     Les fichiers absents génèrent une erreur dédiée.
     """
     issues: list[dict] = []
-    stats = {"candidats": 0, "profs": 0, "matieres": 0}
+    stats = {"candidats": 0, "examinateurs": 0, "matieres": 0}
     matieres: set[str] = set()
     noms_courts: set[str] = set()
 
@@ -252,13 +252,13 @@ def validate_all(candidats_path: Path | None,
         noms_courts = {r.get("Matière court", "").strip() for r in preps_rows if r.get("Matière court")}
         stats["matieres"] = len(matieres)
 
-    # ── profs ─────────────────────────────────────────────────────────────────
-    if not profs_path or not Path(profs_path).exists():
-        issues.append(_err("profs", None, "Fichier profs_total.csv absent."))
+    # ── examinateurs ──────────────────────────────────────────────────────────
+    if not examinateurs_path or not Path(examinateurs_path).exists():
+        issues.append(_err("examinateurs", None, "Fichier examinateurs.csv absent."))
     else:
-        profs_rows, _ = normalize_csv_file(profs_path)
+        profs_rows, _ = normalize_csv_file(examinateurs_path)
         issues.extend(validate_profs(profs_rows, matieres, noms_courts))
-        stats["profs"] = len(profs_rows)
+        stats["examinateurs"] = len(profs_rows)
 
     # ── candidats ─────────────────────────────────────────────────────────────
     if not candidats_path or not Path(candidats_path).exists():

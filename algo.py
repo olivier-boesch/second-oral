@@ -51,7 +51,7 @@ CRENEAUX            = _env_int("ALGO_CRENEAUX", 13)
 # données
 DATA_DIR = 'data'
 ELVS_FILE = join(DATA_DIR, "candidats.csv")
-PROFS_FILE = join(DATA_DIR, "profs_total.csv")
+PROFS_FILE = join(DATA_DIR, "examinateurs.csv")
 PREPS_FILE = join(DATA_DIR, 'preps.csv')
 OK_CHAR = "\U00002714"  # ✔
 NOK_CHAR = "\U00002718"  # ✘

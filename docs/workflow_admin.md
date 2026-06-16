@@ -7,9 +7,9 @@ Ce document décrit le processus complet de préparation et de lancement des ora
 ## Vue d'ensemble du workflow
 
 ```
-1. Préparer les trois fichiers CSV
+1. Préparer les données (via ODS modèle ou CSV individuels)
         ↓
-2. Uploader les fichiers via /gestion/algo
+2. Uploader le fichier ODS (ou les CSV) via /gestion/algo
         ↓
 3. Lancer algo.py (placement automatique)
         ↓
@@ -22,7 +22,14 @@ Ce document décrit le processus complet de préparation et de lancement des ora
 
 ---
 
-## 1. Les trois fichiers CSV
+## 1. Les trois fichiers de données
+
+Les données sont fournies soit via un **fichier ODS unique** (méthode recommandée), soit via **trois fichiers CSV séparés** (méthode avancée). Dans les deux cas, le serveur produit trois CSV dans `data/` avec les colonnes décrites ci-dessous.
+
+> **Méthode recommandée — fichier ODS :**
+> depuis `/gestion/algo`, cliquez **Télécharger le modèle ODS**. La feuille `preps` est pré-remplie avec les 16 disciplines habituelles. Les feuilles `examinateurs` et `candidats` proposent des listes déroulantes de validation pour les disciplines (colonne `Disc.poste` / `CHOIX DISCIPLINE`) et des validations de type (heure entière 0-23, TT 0/1). Remplissez les feuilles sous LibreOffice Calc ou Excel, puis uploadez le fichier — le serveur le découpe automatiquement.
+
+### Format des CSV (généré depuis l'ODS ou fourni directement)
 
 Tous les fichiers utilisent le **point-virgule `;` comme séparateur** et l'encodage **UTF-8**.
 
@@ -88,7 +95,7 @@ CANDIDAT;CHOIX DISCIPLINE 1;CHOIX DISCIPLINE 2;TT;Etab;Profs
 | `CHOIX DISCIPLINE 2` | Deuxième discipline choisie | Idem | `PC` |
 | `TT` | Tiers-temps | `0` = non, `1` = oui | `0` |
 | `Etab` | Établissement d'origine (abréviation libre) | Texte libre | `St Ex` |
-| `Profs` | Examinateurs à éviter (séparés par virgule) | Noms tels que dans `profs_total.csv` | `Dupont,Martin` |
+| `Profs` | Examinateurs à éviter (séparés par virgule) | Noms tels que dans `examinateurs.csv` | `Dupont,Martin` |
 
 **Exemple :**
 
@@ -108,7 +115,7 @@ Leroy Sophie (1122334455C);Mana;Droit Eco;0;Cézanne;Dupont,Bernard
 
 ---
 
-### 1.3 `profs_total.csv` — Liste des examinateurs
+### 1.3 `examinateurs.csv` — Liste des examinateurs
 
 Ce fichier liste tous les examinateurs disponibles, leur salle et leurs contraintes.
 
@@ -176,9 +183,9 @@ L'algorithme (`algo.py`) tente de trouver le meilleur placement en respectant :
 Avant de lancer l'algorithme, s'assurer que :
 
 - [ ] Chaque discipline dans `candidats.csv` (`CHOIX DISCIPLINE 1`, `CHOIX DISCIPLINE 2`) existe dans `preps.csv` (nom complet ou abréviation)
-- [ ] Chaque discipline dans `profs_total.csv` (`Disc.poste`) existe dans `preps.csv`
+- [ ] Chaque discipline dans `examinateurs.csv` (`Disc.poste`) existe dans `preps.csv`
 - [ ] Chaque candidat a exactement deux disciplines différentes
-- [ ] Les abréviations d'établissements sont cohérentes entre `candidats.csv` et `profs_total.csv`
+- [ ] Les abréviations d'établissements sont cohérentes entre `candidats.csv` et `examinateurs.csv`
 - [ ] Chaque examinateur a une salle et une loge renseignées
 - [ ] Il y a suffisamment d'examinateurs pour couvrir le nombre de candidats par discipline
 
@@ -186,11 +193,20 @@ Avant de lancer l'algorithme, s'assurer que :
 
 ### Étape 3 — Uploader via l'interface web
 
+**Méthode ODS (recommandée) :**
+
 1. Se connecter en admin : `/login`
 2. Aller sur `/gestion/algo`
-3. Dans la section **Fichiers CSV**, sélectionner les fichiers mis à jour
-4. Cliquer **Envoyer les fichiers sélectionnés**
-5. Vérifier les badges de présence (vert = présent)
+3. Cliquer **Télécharger le modèle ODS** pour obtenir le fichier pré-rempli
+4. Remplir les feuilles `examinateurs` et `candidats` (les listes déroulantes guident la saisie des disciplines)
+5. Dans la section **Import via fichier ODS**, sélectionner le fichier et cliquer **Envoyer**
+6. Le rapport de validation s'affiche immédiatement
+
+**Méthode CSV individuelle (alternative) :**
+
+1. Dans la section **Import CSV individuel**, sélectionner un ou plusieurs fichiers `.csv`
+2. Cliquer **Envoyer les fichiers sélectionnés**
+3. Vérifier les badges de présence (vert = présent)
 
 ### Étape 4 — Lancer l'algorithme
 
@@ -275,9 +291,9 @@ Sur `/gestion`, cliquer **Recharger toutes les pages** : tous les navigateurs co
 
 | Symptôme | Cause probable | Solution |
 |---|---|---|
-| `Discipline '...' introuvable` | Orthographe différente entre CSV | Corriger le nom dans `candidats.csv` ou `profs_total.csv` pour qu'il corresponde au nom complet ou à l'abréviation de `preps.csv` |
-| `Pas de créneau trouvé. Abandon` | Trop peu d'examinateurs pour une discipline | Ajouter des examinateurs dans `profs_total.csv` |
+| `Discipline '...' introuvable` | Orthographe différente entre CSV | Corriger le nom dans `candidats.csv` ou `examinateurs.csv` pour qu'il corresponde au nom complet ou à l'abréviation de `preps.csv` |
+| `Pas de créneau trouvé. Abandon` | Trop peu d'examinateurs pour une discipline | Ajouter des examinateurs dans `examinateurs.csv` |
 | `Aucun placement valide trouvé` | Contraintes incompatibles (anti-conflit établissement trop restrictif, horaires trop contraints) | Réduire les contraintes `Etab` ou élargir les `Heure mini` |
 | Algo très long (> 15 min) | Données volumineuses ou beaucoup de contraintes | Normal ; attendre. Réduire `N_run` dans `algo.py` si nécessaire (défaut : 1000) |
-| Candidat sans oral | Discipline non couverte par un examinateur | Vérifier que la discipline du candidat a au moins un examinateur dans `profs_total.csv` |
+| Candidat sans oral | Discipline non couverte par un examinateur | Vérifier que la discipline du candidat a au moins un examinateur dans `examinateurs.csv` |
 | Mot de passe de papillon invalide | Algo relancé (nouveaux mots de passe générés) | Redistribuer les nouveaux papillons |

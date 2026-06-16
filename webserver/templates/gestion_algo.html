@@ -109,10 +109,38 @@
 
 <h1>Lancement de algo.py</h1>
 
-{# ── 1. Fichiers CSV ──────────────────────────────────────────────────────── #}
+{# ── 1. Fichier ODS (méthode recommandée) ─────────────────────────────────── #}
 <div class="algo-section">
-    <h2>📂 Fichiers CSV</h2>
-    <p>Déposez les fichiers mis à jour puis cliquez sur <em>Envoyer</em>.</p>
+    <h2>📊 Import via fichier ODS <span style="font-size:.75em;font-weight:normal;color:#3d2fa0;">(recommandé)</span></h2>
+    <p style="font-size:.9em;">
+        Téléchargez le modèle, remplissez les feuilles <strong>examinateurs</strong> et <strong>candidats</strong>
+        (listes déroulantes pour les disciplines), puis uploadez-le ici.<br>
+        Le fichier sera automatiquement découpé en 3 CSV.
+    </p>
+    <p>
+        <a href="{{ url_for('algo_download_modele_ods') }}"
+           class="btn-dl" style="text-decoration:none; display:inline-flex; align-items:center; gap:.4em; padding:.4em 1em;">
+            ⬇ Télécharger le modèle ODS
+        </a>
+        {% if csv_status.candidats and csv_status.examinateurs and csv_status.preps %}
+        <span style="font-size:.8em; color:#155724; margin-left:.8em;">✔ Les 3 fichiers CSV sont déjà présents</span>
+        {% endif %}
+    </p>
+    <form id="ods-upload-form">
+        <div class="file-row">
+            <label>Fichier ODS</label>
+            <input type="file" name="ods_file" accept=".ods" style="flex:1">
+            <button type="submit">⬆ Envoyer</button>
+        </div>
+        <p id="ods-upload-feedback" class="upload-feedback"></p>
+    </form>
+    <div id="ods-validation-report" class="validation-report" style="display:none"></div>
+</div>
+
+{# ── 1b. Fichiers CSV individuels (méthode avancée) ───────────────────────── #}
+<div class="algo-section">
+    <h2>📂 Import CSV individuel <span style="font-size:.75em;font-weight:normal;color:#666;">(avancé)</span></h2>
+    <p style="font-size:.9em;">Déposez un ou plusieurs fichiers CSV directement, puis cliquez sur <em>Envoyer</em>.</p>
 
     <form id="upload-form">
         <div class="file-row">
@@ -123,11 +151,11 @@
             <input type="file" name="candidats" accept=".csv">
         </div>
         <div class="file-row">
-            <label>profs_total.csv</label>
-            <span class="badge {% if csv_status.profs %}badge-ok{% else %}badge-missing{% endif %}">
-                {% if csv_status.profs %}présent{% else %}absent{% endif %}
+            <label>examinateurs.csv</label>
+            <span class="badge {% if csv_status.examinateurs %}badge-ok{% else %}badge-missing{% endif %}">
+                {% if csv_status.examinateurs %}présent{% else %}absent{% endif %}
             </span>
-            <input type="file" name="profs" accept=".csv">
+            <input type="file" name="examinateurs" accept=".csv">
         </div>
         <div class="file-row">
             <label>preps.csv</label>
@@ -145,7 +173,7 @@
 </div>
 
 {# ── 1b. Téléchargement des CSV existants ─────────────────────────────────── #}
-{% if csv_status.candidats or csv_status.profs or csv_status.preps %}
+{% if csv_status.candidats or csv_status.examinateurs or csv_status.preps %}
 <div class="algo-section">
     <h2>⬇ Télécharger les fichiers CSV actuels</h2>
     <ul class="templates-list">
@@ -155,9 +183,9 @@
             <small>— fichier actuellement utilisé</small>
         </li>
         {% endif %}
-        {% if csv_status.profs %}
+        {% if csv_status.examinateurs %}
         <li>
-            <a href="{{ url_for('algo_download_csv', key='profs') }}">profs_total.csv</a>
+            <a href="{{ url_for('algo_download_csv', key='examinateurs') }}">examinateurs.csv</a>
             <small>— fichier actuellement utilisé</small>
         </li>
         {% endif %}
@@ -171,9 +199,10 @@
 </div>
 {% endif %}
 
-{# ── 2. Modèles CSV ───────────────────────────────────────────────────────── #}
+{# ── 2. Modèles CSV (fallback) ────────────────────────────────────────────── #}
 <div class="algo-section">
-    <h2>📄 Modèles de fichiers CSV</h2>
+    <h2>📄 Modèles CSV individuels</h2>
+    <p style="font-size:.85em; color:#666;">Utilisés en import CSV individuel (méthode avancée).</p>
     <ul class="templates-list">
         <li>
             <a href="{{ url_for('static', filename='templates_csv/candidats_modele.csv') }}" download>
@@ -182,8 +211,8 @@
             <small>— CANDIDAT ; CHOIX DISCIPLINE 1 ; CHOIX DISCIPLINE 2 ; TT ; Etab ; Profs</small>
         </li>
         <li>
-            <a href="{{ url_for('static', filename='templates_csv/profs_modele.csv') }}" download>
-                ⬇ profs_modele.csv
+            <a href="{{ url_for('static', filename='templates_csv/examinateurs_modele.csv') }}" download>
+                ⬇ examinateurs_modele.csv
             </a>
             <small>— Nom ; Disc.poste ; Salle ; Heure mini ; Etab ; Loge</small>
         </li>
@@ -384,6 +413,7 @@ const RUN_URL       = "{{ url_for('algo_run') }}";
 const UPLOAD_URL    = "{{ url_for('algo_upload_csv') }}";
 const PARAMS_URL    = "{{ url_for('algo_save_params') }}";
 const VALIDATE_URL  = "{{ url_for('algo_validate_csv') }}";
+const ODS_UPLOAD_URL = UPLOAD_URL;
 const BATCH_BASE = "/generate-doc-batch/";
 const EXISTS_BASE = "{{ url_for('algo_doc_exists', filename='__fn__') }}".replace('__fn__', '');
 const CSRF = "{{ csrf_token }}";
@@ -485,6 +515,31 @@ function lancerAlgo() {
     });
 }
 
+// ── Upload ODS ───────────────────────────────────────────────────────────────
+document.getElementById('ods-upload-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fb = document.getElementById('ods-upload-feedback');
+    const reportEl = document.getElementById('ods-validation-report');
+    fb.textContent = 'Envoi en cours…';
+    const formData = new FormData(e.target);
+    fetch(ODS_UPLOAD_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: formData })
+        .then(r => r.json())
+        .then(d => {
+            if (d.uploaded && d.uploaded.length) {
+                fb.style.color = '#155724';
+                fb.textContent = `✔ Fichiers créés : ${d.uploaded.join(', ')}`;
+            } else if (d.errors && d.errors.length) {
+                fb.style.color = '#721c24';
+                fb.textContent = `✘ ${d.errors.join(' | ')}`;
+            } else {
+                fb.style.color = '#383d41';
+                fb.textContent = 'Aucun fichier sélectionné.';
+            }
+            if (d.validation) renderReport(d.validation, reportEl);
+        })
+        .catch(() => { fb.style.color = 'red'; fb.textContent = 'Erreur réseau.'; });
+});
+
 // ── Upload CSV ───────────────────────────────────────────────────────────────
 document.getElementById('upload-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -579,13 +634,13 @@ function renderReport(report, container) {
     container.innerHTML = '';
 
     // Statistiques
-    if (report.stats && (report.stats.candidats || report.stats.profs || report.stats.matieres)) {
+    if (report.stats && (report.stats.candidats || report.stats.examinateurs || report.stats.matieres)) {
         const stats = document.createElement('div');
         stats.className = 'val-stats';
         const s = report.stats;
-        if (s.matieres)  stats.innerHTML += `<span class="val-stat">📚 ${s.matieres} matière(s)</span>`;
-        if (s.profs)     stats.innerHTML += `<span class="val-stat">👩‍🏫 ${s.profs} examinateur(s)</span>`;
-        if (s.candidats) stats.innerHTML += `<span class="val-stat">🎓 ${s.candidats} candidat(s)</span>`;
+        if (s.matieres)       stats.innerHTML += `<span class="val-stat">📚 ${s.matieres} matière(s)</span>`;
+        if (s.examinateurs)   stats.innerHTML += `<span class="val-stat">👩‍🏫 ${s.examinateurs} examinateur(s)</span>`;
+        if (s.candidats)      stats.innerHTML += `<span class="val-stat">🎓 ${s.candidats} candidat(s)</span>`;
         container.appendChild(stats);
     }
 
@@ -597,7 +652,7 @@ function renderReport(report, container) {
         return;
     }
 
-    const FILE_LABELS = { candidats: 'candidats.csv', profs: 'profs_total.csv', preps: 'preps.csv' };
+    const FILE_LABELS = { candidats: 'candidats.csv', examinateurs: 'examinateurs.csv', preps: 'preps.csv' };
 
     function renderGroup(issues, cssClass) {
         // Regrouper par fichier

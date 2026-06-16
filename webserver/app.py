@@ -1580,7 +1580,7 @@ def archive_download() -> ResponseReturnValue:
             "Volontairement absents de cette archive (minimisation RGPD) :\n"
             "  - mots de passe et clés de connexion (candidats, examinateurs, loges)\n"
             "  - fichiers CSV bruts d'inscription "
-            "(data/candidats.csv, profs_total.csv, preps.csv)\n"
+            "(data/candidats.csv, examinateurs.csv, preps.csv)\n"
             "  - autres PDF générables à la demande depuis la page algo "
             "(papillons, fiches candidats/loges, liste générale des oraux)\n"
         )
@@ -1737,9 +1737,9 @@ def mentions_legales() -> ResponseReturnValue:
 
 _DATA_DIR = Path(app.root_path).parent / "data"
 _ALLOWED_CSV = {
-    "candidats": "candidats.csv",
-    "profs":     "profs_total.csv",
-    "preps":     "preps.csv",
+    "candidats":    "candidats.csv",
+    "examinateurs": "examinateurs.csv",
+    "preps":        "preps.csv",
 }
 _ALGO_PARAMS_FILE = _DATA_DIR / "algo_params.json"
 _ALGO_PARAMS_DEFAULTS = {
@@ -1781,39 +1781,83 @@ def gestion_algo() -> ResponseReturnValue:
 @app.route("/gestion/algo/upload", methods=["POST"])
 @admin_required
 def algo_upload_csv() -> ResponseReturnValue:
-    """Upload des fichiers CSV vers data/ avec validation immédiate."""
+    """Upload des fichiers CSV (individuels) ou d'un fichier ODS unique vers data/."""
     from csv_validator import normalize_csv, validate_all
+    import io as _io
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
     uploaded, upload_errors = [], []
 
-    for field, target_name in _ALLOWED_CSV.items():
-        f = request.files.get(field)
-        if not f or not f.filename:
-            continue
-        if not f.filename.lower().endswith(".csv"):
-            upload_errors.append(f"{target_name} : extension .csv requise")
-            continue
-        raw = f.read()
+    # ── Cas ODS : un fichier unique → 3 CSV ───────────────────────────────────
+    ods_file = request.files.get("ods_file")
+    if ods_file and ods_file.filename:
+        if not ods_file.filename.lower().endswith(".ods"):
+            return jsonify({"ok": False, "uploaded": [],
+                            "errors": ["ods_file : extension .ods requise"],
+                            "validation": {}})
+        from ods_handler import parse_ods
         try:
-            rows, delim = normalize_csv(raw)
-        except Exception as e:
-            upload_errors.append(f"{target_name} : impossible de lire le fichier ({e})")
-            continue
-        if not rows:
-            upload_errors.append(f"{target_name} : fichier vide")
-            continue
-        dest = _DATA_DIR / target_name
-        if dest.exists():
-            dest.rename(dest.with_suffix(".csv.bak"))
-        dest.write_bytes(raw)
-        uploaded.append(target_name)
-        app.logger.info(f"CSV upload: {target_name} ({len(rows)} lignes, sep='{delim}')")
+            sheets = parse_ods(ods_file.read())
+        except ValueError as e:
+            return jsonify({"ok": False, "uploaded": [], "errors": [str(e)], "validation": {}})
+
+        sheet_map = {
+            "candidats":    ("candidats.csv",    normalize_csv),
+            "examinateurs": ("examinateurs.csv",  normalize_csv),
+            "preps":        ("preps.csv",         normalize_csv),
+        }
+        for sheet_key, (target_name, _) in sheet_map.items():
+            rows = sheets.get(sheet_key)
+            if rows is None:
+                upload_errors.append(f"Feuille '{sheet_key}' absente du fichier ODS.")
+                continue
+            # Reconstruire des bytes CSV depuis les rows
+            import csv as _csv
+            if not rows:
+                upload_errors.append(f"Feuille '{sheet_key}' vide dans le fichier ODS.")
+                continue
+            buf = _io.StringIO()
+            writer = _csv.DictWriter(buf, fieldnames=list(rows[0].keys()), delimiter=";",
+                                     lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(rows)
+            raw = ("﻿" + buf.getvalue()).encode("utf-8")  # BOM UTF-8
+            dest = _DATA_DIR / target_name
+            if dest.exists():
+                dest.rename(dest.with_suffix(".csv.bak"))
+            dest.write_bytes(raw)
+            uploaded.append(target_name)
+            app.logger.info(f"ODS→CSV: {target_name} ({len(rows)} lignes)")
+
+    else:
+        # ── Cas CSV individuels ────────────────────────────────────────────────
+        for field, target_name in _ALLOWED_CSV.items():
+            f = request.files.get(field)
+            if not f or not f.filename:
+                continue
+            if not f.filename.lower().endswith(".csv"):
+                upload_errors.append(f"{target_name} : extension .csv requise")
+                continue
+            raw = f.read()
+            try:
+                rows, delim = normalize_csv(raw)
+            except Exception as e:
+                upload_errors.append(f"{target_name} : impossible de lire le fichier ({e})")
+                continue
+            if not rows:
+                upload_errors.append(f"{target_name} : fichier vide")
+                continue
+            dest = _DATA_DIR / target_name
+            if dest.exists():
+                dest.rename(dest.with_suffix(".csv.bak"))
+            dest.write_bytes(raw)
+            uploaded.append(target_name)
+            app.logger.info(f"CSV upload: {target_name} ({len(rows)} lignes, sep='{delim}')")
 
     # Validation croisée sur les fichiers présents après upload
     report = validate_all(
-        _DATA_DIR / "candidats.csv"   if (_DATA_DIR / "candidats.csv").exists()   else None,
-        _DATA_DIR / "profs_total.csv" if (_DATA_DIR / "profs_total.csv").exists() else None,
-        _DATA_DIR / "preps.csv"       if (_DATA_DIR / "preps.csv").exists()       else None,
+        _DATA_DIR / "candidats.csv"    if (_DATA_DIR / "candidats.csv").exists()    else None,
+        _DATA_DIR / "examinateurs.csv" if (_DATA_DIR / "examinateurs.csv").exists() else None,
+        _DATA_DIR / "preps.csv"        if (_DATA_DIR / "preps.csv").exists()        else None,
     )
     return jsonify({
         "ok":       not upload_errors,
@@ -1829,9 +1873,9 @@ def algo_validate_csv() -> ResponseReturnValue:
     """Rapport de validation complet des CSV existants (pré-lancement)."""
     from csv_validator import validate_all
     report = validate_all(
-        _DATA_DIR / "candidats.csv"   if (_DATA_DIR / "candidats.csv").exists()   else None,
-        _DATA_DIR / "profs_total.csv" if (_DATA_DIR / "profs_total.csv").exists() else None,
-        _DATA_DIR / "preps.csv"       if (_DATA_DIR / "preps.csv").exists()       else None,
+        _DATA_DIR / "candidats.csv"    if (_DATA_DIR / "candidats.csv").exists()    else None,
+        _DATA_DIR / "examinateurs.csv" if (_DATA_DIR / "examinateurs.csv").exists() else None,
+        _DATA_DIR / "preps.csv"        if (_DATA_DIR / "preps.csv").exists()        else None,
     )
     return jsonify(report)
 
@@ -1867,6 +1911,29 @@ def algo_download_csv(key: str) -> ResponseReturnValue:
     if not path.exists():
         abort(404)
     return send_from_directory(str(_DATA_DIR), _ALLOWED_CSV[key], as_attachment=True)
+
+
+@app.route("/gestion/algo/download-modele-ods")
+@admin_required
+def algo_download_modele_ods() -> ResponseReturnValue:
+    """Génère et télécharge le fichier ODS modèle (disciplines depuis preps.csv si présent)."""
+    from ods_handler import generate_ods_modele
+    from csv_validator import normalize_csv
+    import io as _io
+    preps_path = _DATA_DIR / "preps.csv"
+    preps_rows: list[dict] | None = None
+    if preps_path.exists():
+        try:
+            preps_rows, _ = normalize_csv(preps_path.read_bytes())
+        except Exception:
+            pass
+    buf = generate_ods_modele(preps_rows)
+    return send_file(
+        _io.BytesIO(buf),
+        mimetype="application/vnd.oasis.opendocument.spreadsheet",
+        as_attachment=True,
+        download_name="modele_oral.ods",
+    )
 
 
 @app.route("/gestion/algo/run", methods=["POST"])

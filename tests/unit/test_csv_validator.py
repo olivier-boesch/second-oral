@@ -300,9 +300,9 @@ class TestValidateAll:
 
         report = validate_all(cands, profs, preps)
         assert report["ok"]
-        assert report["stats"]["matieres"] == 2
-        assert report["stats"]["profs"]     == 1
-        assert report["stats"]["candidats"] == 1
+        assert report["stats"]["matieres"]     == 2
+        assert report["stats"]["examinateurs"] == 1
+        assert report["stats"]["candidats"]    == 1
 
     def test_cross_file_discipline_error(self, tmp_path):
         preps = tmp_path / "preps.csv"
