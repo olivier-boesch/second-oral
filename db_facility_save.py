@@ -18,6 +18,7 @@ SQL_BASE = [
     {"sql": "DROP TABLE IF EXISTS Examinateur"},
     {"sql": "DROP TABLE IF EXISTS Candidat"},
     {"sql": "DROP TABLE IF EXISTS Matiere"},
+    {"sql": "DROP TABLE IF EXISTS Loge"},
     {"sql": "DROP TABLE IF EXISTS TokenSignature"},
     {"sql": "DROP TABLE IF EXISTS Logs"},
     {"sql": "DROP PROCEDURE IF EXISTS log_action"},
