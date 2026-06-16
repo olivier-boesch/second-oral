@@ -13,7 +13,10 @@ from ods_handler import (
     PREPS_HEADERS,
     EXAM_HEADERS,
     CANDIDATS_HEADERS,
+    LYCEES_HEADERS,
+    LYCEES_SHEET_NAME,
     _DEFAULT_PREPS,
+    _LYCEES_AIM,
 )
 
 
@@ -25,9 +28,18 @@ class TestGenerateOdsModele:
         assert isinstance(data, bytes)
         assert len(data) > 1000
 
-    def test_three_sheets(self):
+    def test_four_sheets(self):
         sheets = parse_ods(generate_ods_modele())
-        assert set(sheets.keys()) == {"preps", "examinateurs", "candidats"}
+        assert set(sheets.keys()) == {"preps", "examinateurs", "candidats", LYCEES_SHEET_NAME}
+
+    def test_sheet_order(self):
+        """L'ordre des feuilles doit être : candidats, examinateurs, preps, lycees."""
+        from odf.opendocument import load as odf_load
+        import io
+        doc = odf_load(io.BytesIO(generate_ods_modele()))
+        from odf.table import Table
+        names = [t.getAttribute("name") for t in doc.spreadsheet.getElementsByType(Table)]
+        assert names == ["candidats", "examinateurs", "preps", LYCEES_SHEET_NAME]
 
     def test_preps_prefilled_default(self):
         sheets = parse_ods(generate_ods_modele())
@@ -49,8 +61,10 @@ class TestGenerateOdsModele:
 
     def test_preps_custom_rows(self):
         custom = [
-            {"Matiere": "TestA", "Matière court": "TA", "Temps preparation (min)": "15", "Duree (min)": "10"},
-            {"Matiere": "TestB", "Matière court": "TB", "Temps preparation (min)": "20", "Duree (min)": "15"},
+            {"Matiere": "TestA", "Matière court": "TA",
+             "Temps preparation (min)": "15", "Duree (min)": "10"},
+            {"Matiere": "TestB", "Matière court": "TB",
+             "Temps preparation (min)": "20", "Duree (min)": "15"},
         ]
         sheets = parse_ods(generate_ods_modele(custom))
         assert len(sheets["preps"]) == 2
@@ -62,6 +76,34 @@ class TestGenerateOdsModele:
         # Les lignes vides sont filtrées par parse_ods
         assert sheets["examinateurs"] == []
         assert sheets["candidats"] == []
+
+    def test_lycees_sheet_has_correct_row_count(self):
+        sheets = parse_ods(generate_ods_modele())
+        assert len(sheets[LYCEES_SHEET_NAME]) == len(_LYCEES_AIM)
+
+    def test_lycees_headers_present(self):
+        sheets = parse_ods(generate_ods_modele())
+        for row in sheets[LYCEES_SHEET_NAME]:
+            for h in LYCEES_HEADERS:
+                assert h in row
+
+    def test_lycees_first_row_has_uai_nom_ville_tel(self):
+        sheets = parse_ods(generate_ods_modele())
+        first = sheets[LYCEES_SHEET_NAME][0]
+        uai, nom, ville, tel = _LYCEES_AIM[0]
+        assert first["UAI"] == uai
+        assert first["Nom"] == nom
+        assert first["Ville"] == ville
+        assert first["Téléphone"] == tel
+
+    def test_lycees_etab_column_contains_ville_nom_uai(self):
+        """La colonne Etab (formule) doit contenir la concaténation ville — nom (UAI)."""
+        sheets = parse_ods(generate_ods_modele())
+        row = sheets[LYCEES_SHEET_NAME][0]
+        uai, nom, ville, _ = _LYCEES_AIM[0]
+        expected = f"{ville} — {nom} ({uai})"
+        # La cellule formule stocke la valeur cachée pré-calculée
+        assert row["Etab"] == expected
 
 
 # ── parse_ods ─────────────────────────────────────────────────────────────────
@@ -96,3 +138,7 @@ class TestParseOds:
         short_names = {r["Matière court"] for r in sheets["preps"]}
         expected = {c for _, c, _, _ in _DEFAULT_PREPS}
         assert short_names == expected
+
+    def test_lycees_249_rows(self):
+        sheets = parse_ods(generate_ods_modele())
+        assert len(sheets[LYCEES_SHEET_NAME]) == 249

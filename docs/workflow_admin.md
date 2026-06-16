@@ -27,7 +27,13 @@ Ce document décrit le processus complet de préparation et de lancement des ora
 Les données sont fournies soit via un **fichier ODS unique** (méthode recommandée), soit via **trois fichiers CSV séparés** (méthode avancée). Dans les deux cas, le serveur produit trois CSV dans `data/` avec les colonnes décrites ci-dessous.
 
 > **Méthode recommandée — fichier ODS :**
-> depuis `/gestion/algo`, cliquez **Télécharger le modèle ODS**. La feuille `preps` est pré-remplie avec les 16 disciplines habituelles. Les feuilles `examinateurs` et `candidats` proposent des listes déroulantes de validation pour les disciplines (colonne `Disc.poste` / `CHOIX DISCIPLINE`) et des validations de type (heure entière 0-23, TT 0/1). Remplissez les feuilles sous LibreOffice Calc ou Excel, puis uploadez le fichier — le serveur le découpe automatiquement.
+> depuis `/gestion/algo`, cliquez **Télécharger le modèle ODS**. Le fichier contient 4 feuilles :
+> - `candidats` : à remplir — listes déroulantes pour les disciplines, TT et établissement
+> - `examinateurs` : à remplir — listes déroulantes pour la discipline, l'heure de début et l'établissement
+> - `preps` : pré-remplie avec les 16 disciplines habituelles (à modifier si besoin)
+> - `lycees` : référentiel des 249 lycées académie Aix-Marseille (lecture seule — la colonne `Etab` est une formule dynamique `Ville — Nom (UAI)`)
+>
+> Les colonnes `Etab` de `candidats` et `examinateurs` proposent une liste déroulante issue de la feuille `lycees`. Remplissez les feuilles sous LibreOffice Calc ou Excel, puis uploadez le fichier — le serveur le découpe automatiquement en 3 CSV.
 
 ### Format des CSV (généré depuis l'ODS ou fourni directement)
 
@@ -198,7 +204,7 @@ Avant de lancer l'algorithme, s'assurer que :
 1. Se connecter en admin : `/login`
 2. Aller sur `/gestion/algo`
 3. Cliquer **Télécharger le modèle ODS** pour obtenir le fichier pré-rempli
-4. Remplir les feuilles `examinateurs` et `candidats` (les listes déroulantes guident la saisie des disciplines)
+4. Remplir les feuilles `candidats` et `examinateurs` (les listes déroulantes guident la saisie des disciplines et des établissements)
 5. Dans la section **Import via fichier ODS**, sélectionner le fichier et cliquer **Envoyer**
 6. Le rapport de validation s'affiche immédiatement
 

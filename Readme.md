@@ -309,7 +309,7 @@ python -m pytest tests/integration/
 
 Le pipeline GitHub Actions (`.github/workflows/ci.yml`) exécute à chaque push sur `main` :
 1. **`pip-audit`** — détection des CVE connues dans les dépendances
-2. **Tests** — 211 tests unitaires + intégration avec couverture (dont vérification
+2. **Tests** — 217 tests unitaires + intégration avec couverture (dont vérification
    automatisée des annotations de type, du PEP8 et de mypy sur `app.py`, et
    non-régression des constats de l'audit de sécurité)
 
@@ -366,7 +366,7 @@ second_oral/
     ├── app_secrets.py           Secrets (root:root 640, non versionné)
     ├── algo_bg.py               Exécution de algo.py en tâche de fond (SSE)
     ├── csv_validator.py         Validation et normalisation des fichiers CSV
-    ├── ods_handler.py           Lecture et génération de fichiers ODS (odfpy)
+    ├── ods_handler.py           Lecture et génération ODS 4 feuilles (odfpy) + 249 lycées Aix-Marseille
     ├── db_facility_web.py       Requêtes SQL paramétrées
     ├── reports.py               Génération PDF (ReportLab + pypdftk)
     ├── flask_sse.py             Blueprint SSE avec cache Redis
