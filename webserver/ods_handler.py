@@ -135,7 +135,7 @@ def _add_header_style(doc: OpenDocumentSpreadsheet) -> str:
 def _build_validation_list(names: list[str]) -> str:
     """Formate une liste de valeurs pour ODS content-validation."""
     quoted = [f'"{v}"' for v in names]
-    return ";" + ";".join(quoted)
+    return ";".join(quoted)
 
 
 def generate_ods_modele(preps_rows: list[dict] | None = None) -> bytes:
@@ -218,7 +218,7 @@ def generate_ods_modele(preps_rows: list[dict] | None = None) -> bytes:
     # Validation heure (entier 0-23)
     val_heure = ContentValidation(
         name="vHeure",
-        condition="of:cell-content-is-whole-number() and of:cell-content()>=0 and of:cell-content()<=23",
+        condition="of:cell-content-is-between(0;23)",
         allowemptycell="true",
     )
     validations.addElement(val_heure)
