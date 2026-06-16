@@ -116,6 +116,121 @@ class TestLogin:
         with client.session_transaction() as sess:
             assert "loge" not in sess
 
+    def test_correct_loge_password_sets_session(self, client, db_mock):
+        import sys
+        app_secrets = sys.modules["app_secrets"]
+        good_hash = app_secrets.hash_password("secretloge", "Loge A")
+        db_mock.make_sql_select.side_effect = [
+            [{"salle": "Loge A"}],
+            [{"nom": "Loge A", "password_hash": good_hash}],
+        ]
+        r = client.post("/login-loge", data={"loge": "Loge A", "password": "secretloge"},
+                        follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-loge" not in r.headers["Location"]
+        with client.session_transaction() as sess:
+            assert sess.get("loge") == "Loge A"
+
+    def test_logout_loge_clears_session(self, client):
+        with client.session_transaction() as sess:
+            sess["loge"] = "Loge A"
+        r = client.get("/logout-loge", follow_redirects=False)
+        assert r.status_code == 302
+        with client.session_transaction() as sess:
+            assert "loge" not in sess
+
+
+# ── Authentification examinateur ──────────────────────────────────────────────
+
+class TestLoginExaminateur:
+    def test_wrong_password_redirects_to_login_examinateur(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [{"password_hash": "not-the-right-hash"}]
+        r = client.post("/login-examinateur",
+                        data={"salle": "101", "password": "mauvais"},
+                        follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-examinateur" in r.headers["Location"]
+        with client.session_transaction() as sess:
+            assert "user" not in sess
+
+    def test_no_match_in_db_redirects_to_login_examinateur(self, client, db_mock):
+        db_mock.make_sql_select.return_value = []
+        r = client.post("/login-examinateur",
+                        data={"salle": "101", "password": "anything"},
+                        follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-examinateur" in r.headers["Location"]
+
+    def test_correct_password_sets_session(self, client, db_mock):
+        import sys
+        app_secrets = sys.modules["app_secrets"]
+        good_hash = app_secrets.hash_password("monpass", "101")
+        db_mock.make_sql_select.return_value = [{"password_hash": good_hash}]
+        r = client.post("/login-examinateur",
+                        data={"salle": "101", "password": "monpass"},
+                        follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-examinateur" not in r.headers["Location"]
+        with client.session_transaction() as sess:
+            assert sess.get("user") == "101"
+
+    def test_logout_examinateur_clears_session(self, client):
+        with client.session_transaction() as sess:
+            sess["user"] = "101"
+        r = client.get("/logout", follow_redirects=False)
+        assert r.status_code == 302
+        with client.session_transaction() as sess:
+            assert "user" not in sess
+
+    def test_salle_route_redirects_without_session(self, client):
+        r = client.get("/salle/101", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-examinateur" in r.headers["Location"]
+
+
+# ── Authentification candidat ─────────────────────────────────────────────────
+
+class TestLoginCandidat:
+    def test_wrong_password_redirects_to_login_candidat(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [{"password_hash": "bad-hash"}]
+        r = client.post("/login-candidat",
+                        data={"ine": "111111111AA", "password": "wrong"},
+                        follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-candidat" in r.headers["Location"]
+        with client.session_transaction() as sess:
+            assert "candidat" not in sess
+
+    def test_unknown_ine_redirects_to_login_candidat(self, client, db_mock):
+        db_mock.make_sql_select.return_value = []
+        r = client.post("/login-candidat",
+                        data={"ine": "000000000ZZ", "password": "anything"},
+                        follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-candidat" in r.headers["Location"]
+
+    def test_correct_password_sets_session(self, client, db_mock):
+        import sys
+        app_secrets = sys.modules["app_secrets"]
+        ine = "111111111AA"
+        good_hash = app_secrets.hash_password("motdepasse", ine)
+        db_mock.make_sql_select.return_value = [{"password_hash": good_hash}]
+        r = client.post("/login-candidat",
+                        data={"ine": ine, "password": "motdepasse"},
+                        follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-candidat" not in r.headers["Location"]
+        with client.session_transaction() as sess:
+            assert sess.get("candidat") == ine
+
+    def test_logout_candidat_clears_session(self, client):
+        with client.session_transaction() as sess:
+            sess["candidat"] = "111111111AA"
+        r = client.get("/logout-candidat", follow_redirects=False)
+        assert r.status_code == 302
+        with client.session_transaction() as sess:
+            assert "candidat" not in sess
+
 
 # ── Routes admin avec session ─────────────────────────────────────────────────
 
