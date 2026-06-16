@@ -30,9 +30,10 @@ from reportlab.platypus.doctemplate import SimpleDocTemplate
 _FONT_DIR = Path(__file__).resolve().parent / 'static'
 
 pdfmetrics.registerFont(TTFont('BodyFont', str(_FONT_DIR / 'PoppinsLatin-Regular.ttf')))
-# Police à empattements pour les papillons : les empattements distinguent
-# mieux les caractères ambigus des mots de passe générés (1/l/I, 0/O...).
 pdfmetrics.registerFont(TTFont('PapillonFont', str(_FONT_DIR / 'DejaVuSerif.ttf')))
+# Monospace pour les mots de passe et identifiants : chaque caractère a la même
+# largeur et les glyphes ambigus (0/O, 1/l/I) sont nettement distincts.
+pdfmetrics.registerFont(TTFont('MonoFont', str(_FONT_DIR / 'DejaVuSansMono.ttf')))
 
 WARNING_CHAR = "(!)"
 
@@ -411,8 +412,8 @@ def fiche_candidat(infos_candidat, tempdirname, file_dir='.', filename_root='',
         story.append(Spacer(1, 20))
         story.append(Paragraph("Identifiants de connexion :", style=normal_style))
         story.append(Paragraph(
-            f"INE : <b>{infos_candidat['ine']}</b> — "
-            f"Mot de passe : <b>{login_key}</b>",
+            f'INE : <font name="MonoFont"><b>{infos_candidat["ine"]}</b></font> — '
+            f'Mot de passe : <font name="MonoFont"><b>{login_key}</b></font>',
             style=normal_style,
         ))
 
@@ -481,14 +482,19 @@ def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
     c_canvas.setFont("PapillonFont", 12)
     c_canvas.drawString(x + pad, y + slip_h - 16 * mm, name[:35])
 
-    # Identifiant
+    # Identifiant — monospace pour distinguer les caractères ambigus
     c_canvas.setFont("PapillonFont", 10)
-    c_canvas.drawString(x + pad, y + slip_h - 22 * mm, f"{id_label} : {id_value}")
+    c_canvas.drawString(x + pad, y + slip_h - 22 * mm, f"{id_label} : ")
+    c_canvas.setFont("MonoFont", 10)
+    label_w = c_canvas.stringWidth(f"{id_label} : ", "PapillonFont", 10)
+    c_canvas.drawString(x + pad + label_w, y + slip_h - 22 * mm, id_value)
 
-    # Mot de passe
+    # Mot de passe — monospace pour distinguer les caractères ambigus
     c_canvas.setFont("PapillonFont", 11)
-    c_canvas.drawString(x + pad, y + slip_h - 27 * mm,
-                        f"Mot de passe : {pwd_value}")
+    c_canvas.drawString(x + pad, y + slip_h - 27 * mm, "Mot de passe : ")
+    c_canvas.setFont("MonoFont", 11)
+    pwd_label_w = c_canvas.stringWidth("Mot de passe : ", "PapillonFont", 11)
+    c_canvas.drawString(x + pad + pwd_label_w, y + slip_h - 27 * mm, pwd_value)
 
     # QR code + URL texte (coin inférieur droit)
     if url:
@@ -506,7 +512,7 @@ def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
             )
         except Exception:
             pass
-        c_canvas.setFont("PapillonFont", 6)
+        c_canvas.setFont("MonoFont", 6)
         c_canvas.drawString(x + pad, y + 3 * mm, url[:45])
 
 

@@ -188,6 +188,62 @@ class TestLoginExaminateur:
         assert "/login-examinateur" in r.headers["Location"]
 
 
+# ── Routes loge (accès protégé) ───────────────────────────────────────────────
+
+class TestLogeRoutes:
+    def test_loge_form_redirects_without_session(self, client):
+        r = client.get("/loge", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-loge" in r.headers["Location"]
+
+    def test_loge_page_redirects_without_session(self, client):
+        r = client.get("/loge/Loge%20A", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-loge" in r.headers["Location"]
+
+    def test_loge_page_accessible_with_loge_session(self, client, db_mock):
+        """Un surveillant connecté peut consulter la fiche de sa loge."""
+        db_mock.make_sql_select.side_effect = [
+            [{"salle": "Loge A", "id": 1}],  # SELECT_INFOS_LOGE
+            [],                               # SELECT_ORAUX_LOGE (aucun oral)
+        ]
+        with client.session_transaction() as sess:
+            sess["loge"] = "Loge A"
+        r = client.get("/loge/Loge%20A", follow_redirects=False)
+        assert r.status_code == 200
+
+    def test_loge_page_accessible_from_other_loge(self, client, db_mock):
+        """Un surveillant peut voir une autre loge (vue croisée autorisée)."""
+        db_mock.make_sql_select.side_effect = [
+            [{"salle": "Loge A", "id": 1}],
+            [],
+        ]
+        with client.session_transaction() as sess:
+            sess["loge"] = "Loge B"
+        r = client.get("/loge/Loge%20A", follow_redirects=False)
+        assert r.status_code == 200
+
+    def test_examinateur_peut_voir_sa_loge(self, client, db_mock):
+        """Un examinateur authentifié peut consulter la fiche de sa loge."""
+        import db_facility_web as dbw
+        salle_row = [{"salle": "101", "password_hash": "x", "nom": "Martin"}]
+
+        def fake_select(query, *args, **kwargs):
+            if query is dbw.SELECT_PASSWORD_CHECK_SALLE:
+                return salle_row
+            if query is dbw.SELECT_INFOS_LOGE:
+                return [{"salle": "Loge A", "id": 1}]
+            if query is dbw.SELECT_ORAUX_LOGE:
+                return []
+            return []
+
+        db_mock.make_sql_select.side_effect = fake_select
+        with client.session_transaction() as sess:
+            sess["user"] = "101"
+        r = client.get("/loge/Loge%20A", follow_redirects=False)
+        assert r.status_code == 200
+
+
 # ── Authentification candidat ─────────────────────────────────────────────────
 
 class TestLoginCandidat:

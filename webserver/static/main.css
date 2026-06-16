@@ -15,6 +15,11 @@
     src: url("raleway.regular.ttf");
     font-display: swap;
 }
+@font-face {
+    font-family: "DejaVuMono";
+    src: url("DejaVuSansMono.ttf");
+    font-display: swap;
+}
 
 /* ── Variables ───────────────────────────────────────────── */
 :root {
@@ -294,6 +299,13 @@ button.outline:hover {
 .sign-button-only:hover {
     background: var(--primary);
     color: white;
+}
+
+/* ── Identifiants et mots de passe ──────────────────────── */
+code {
+    font-family: "DejaVuMono", "DejaVu Sans Mono", monospace;
+    font-size: 1em;
+    letter-spacing: 0.03em;
 }
 
 /* ── Champs de saisie ────────────────────────────────────── */
