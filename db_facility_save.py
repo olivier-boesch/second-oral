@@ -157,7 +157,7 @@ SQL_BASE = [
             JSON_OBJECT('id', NEW.id, 'nom', NEW.nom,
                         'etablissements', NEW.etablissements,
                         'matiere', NEW.matiere, 'salle', NEW.salle,
-                        'loge', NEW.loge, 'password_hash', NEW.password_hash)
+                        'loge', NEW.loge)
         ), 'Examinateur');
     END
     """},
@@ -214,11 +214,11 @@ SQL_BASE = [
             'data_new', JSON_OBJECT('id', NEW.id, 'nom', NEW.nom,
                         'etablissements', NEW.etablissements,
                         'matiere', NEW.matiere, 'salle', NEW.salle,
-                        'loge', NEW.loge, 'password_hash', NEW.password_hash),
+                        'loge', NEW.loge),
             'data_old', JSON_OBJECT('id', OLD.id, 'nom', OLD.nom,
                         'etablissements', OLD.etablissements,
                         'matiere', OLD.matiere, 'salle', OLD.salle,
-                        'loge', OLD.loge, 'password_hash', OLD.password_hash)
+                        'loge', OLD.loge)
         ), 'Examinateur');
     END
     """},
@@ -276,7 +276,7 @@ SQL_BASE = [
             JSON_OBJECT('id', OLD.id, 'nom', OLD.nom,
                         'etablissements', OLD.etablissements,
                         'matiere', OLD.matiere, 'salle', OLD.salle,
-                        'loge', OLD.loge, 'password_hash', OLD.password_hash)
+                        'loge', OLD.loge)
         ), 'Examinateur');
     END
     """},

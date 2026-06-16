@@ -273,9 +273,10 @@ et les autres PDF générables à la demande (papillons, fiches candidats/loges,
 | **TLS** | TLS 1.2+ uniquement ; suites ECDHE/DHE-GCM/CHACHA20 ; `ssl_session_tickets off` ; redirection HTTP→HTTPS |
 | **Headers** | `Referrer-Policy: strict-origin-when-cross-origin`, `Cross-Origin-Opener-Policy: same-origin`, `X-Content-Type-Options: nosniff` |
 | **Permissions-Policy** | `camera`, `microphone`, `geolocation`, `payment`, `usb` désactivés |
-| **Open redirect** | Toutes les URLs `link_back` validées (même domaine) — encodage simple via `url_for` |
-| **IDOR** | `/generate-doc-one` protégé — auth obligatoire (fiche candidat, salle, loge) ; canaux SSE soumis à autorisation par session (cf. ligne SSE) |
+| **Open redirect** | Toutes les URLs `link_back` validées : schéma limité à `http`/`https`/vide (les URI `javascript:`, `data:`, `vbscript:` sont rejetées) + même domaine obligatoire |
+| **IDOR** | `/generate-doc-one` protégé — auth obligatoire (fiche candidat, salle, loge) ; `/download?filename=candidat_*` requiert une session active (personnel ou candidat) ; canaux SSE soumis à autorisation par session (cf. ligne SSE) |
 | **Path traversal** | `/download` : regex `^[\w\-. ]+\.pdf$` + `send_from_directory` |
+| **Logs d'audit** | Les triggers DB n'enregistrent pas `password_hash` dans `journal_audit.json` — les hashs scrypt des examinateurs/loges ne transitent pas dans l'archive RGPD |
 | **SSE** | Auth requise (`before_request`) **et** autorisation par canal (`_sse_channel_allowed` — un candidat/loge/examinateur ne peut s'abonner qu'à ses propres canaux ; `general` ne diffuse aucune donnée personnelle) + connexion Redis sans socket timeout (gevent) |
 | **Actions mutantes** | `delete-examinateur` / `reload-pages` exposées uniquement en POST (+ CSRF) — jamais déclenchables par un simple lien GET |
 | **Tokens en logs** | Tokens de signature tronqués (`_redact_token`) avant journalisation — jamais en clair (fenêtre de validité de 5 min) |
@@ -307,7 +308,7 @@ python -m pytest tests/integration/
 
 Le pipeline GitHub Actions (`.github/workflows/ci.yml`) exécute à chaque push sur `main` :
 1. **`pip-audit`** — détection des CVE connues dans les dépendances
-2. **Tests** — 162 tests unitaires + intégration avec couverture (dont vérification
+2. **Tests** — 194 tests unitaires + intégration avec couverture (dont vérification
    automatisée des annotations de type, du PEP8 et de mypy sur `app.py`, et
    non-régression des constats de l'audit de sécurité)
 

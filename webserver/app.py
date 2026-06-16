@@ -358,12 +358,15 @@ def nocache(f):
 def _safe_redirect_url(url):
     """
     Valide qu'une URL de redirection reste sur le même domaine.
-    Renvoie None si l'URL est externe ou malformée.
+    Renvoie None si l'URL est externe, malformée, ou utilise un schéma dangereux
+    (javascript:, data:, etc.).
     """
     if not url or url in ('None', ''):
         return None
     parsed = urlparse(url)
-    # Accepte les chemins relatifs et les URLs du même hôte
+    # Rejeter tout schéma autre que http/https/vide (chemins relatifs)
+    if parsed.scheme not in ('', 'http', 'https'):
+        return None
     if parsed.netloc and parsed.netloc != request.host:
         return None
     return url
@@ -1684,9 +1687,9 @@ def algo_doc_exists(filename: str) -> ResponseReturnValue:
 def download() -> ResponseReturnValue:
     """
     Sert les fichiers PDF générés.
-    - Les fiches candidats (candidat_*) sont publiques.
     - Les papillons (papillons_*) nécessitent d'être admin.
-    - Tous les autres documents nécessitent d'être authentifié.
+    - Les fiches candidats (candidat_*) nécessitent d'être authentifié (personnel ou candidat).
+    - Tous les autres documents nécessitent d'être authentifié (personnel).
     """
     filename = request.args.get('filename', '')
     # Anti path-traversal : nom de fichier simple uniquement
@@ -1696,7 +1699,10 @@ def download() -> ResponseReturnValue:
     if filename.startswith('papillons_'):
         if not is_admin_user():
             abort(403)
-    elif not filename.startswith('candidat_'):
+    elif filename.startswith('candidat_'):
+        if not is_any_authenticated():
+            abort(403)
+    else:
         if not is_authenticated():
             return redirect(url_for('login', link_back=request.url))
 
