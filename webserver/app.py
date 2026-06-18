@@ -1436,7 +1436,7 @@ def add_examinateur() -> ResponseReturnValue:
             'salle': salle,
             'matiere': request.form.get('matiere'),
             'loge': request.form.get('loge'),
-            'etablissements': request.form.get('etablissements'),
+            'etablissements': ','.join(request.form.getlist('etablissements')),
             'password_hash': hash_password(password, salle),
         }
         db_update(db_facility_web.INSERT_EXAMINATEUR, **d)

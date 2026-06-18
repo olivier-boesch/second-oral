@@ -18,13 +18,13 @@
             <input type="text" name="nom" placeholder="Nom complet">
         </p>
         <p>
-            <label for="etablissements">Établissement: </label>
-            <select name="etablissements">
-                <option value="">— choisir —</option>
+            <label for="etablissements">Établissements: </label><br>
+            <select name="etablissements" multiple size="8" style="width:100%;max-width:600px">
                 {% for lycee in liste_lycees %}
                 <option value="{{ lycee }}">{{ lycee }}</option>
                 {% endfor %}
-            </select>
+            </select><br>
+            <small>Ctrl+clic (ou Cmd+clic) pour sélectionner plusieurs établissements.</small>
         </p>
         <p>
             <label for="matiere">Matière: </label>
