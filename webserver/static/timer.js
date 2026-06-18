@@ -1,5 +1,7 @@
 (function () {
-    const LOGE_ID = window.LOGE_ID;
+    const LOGE_ID    = window.LOGE_ID;
+    const CSRF_TOKEN = window.CSRF_TOKEN;
+    const API_URL    = '/loge/timer-state';
 
     // ── AudioContext — créé au premier geste sur la page ─────────────────────
     let _ctx = null;
@@ -10,8 +12,9 @@
     ['click', 'keydown', 'touchstart'].forEach(function (evt) {
         document.addEventListener(evt, initAudio, { once: true, passive: true });
     });
+
     function beep(freq, dur, vol, delay) {
-        if (!_ctx) return; // pas encore de geste utilisateur
+        if (!_ctx) return;
         delay = delay || 0;
         const ctx = _ctx;
         const schedule = function () {
@@ -45,28 +48,19 @@
         return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
     }
 
-    // ── localStorage ─────────────────────────────────────────────────────────
-    function lsKey(numero, sujet) {
-        return 'timer_' + LOGE_ID + '_' + numero + '_' + sujet;
-    }
-    function loadState(numero, sujet) {
-        try {
-            const raw = localStorage.getItem(lsKey(numero, sujet));
-            if (!raw) return null;
-            const s = JSON.parse(raw);
-            if (s.running && s.startedAt) {
-                s.elapsed = (s.elapsed || 0) + Math.floor((Date.now() - s.startedAt) / 1000);
-                s.startedAt = Date.now();
-            }
-            return s;
-        } catch (e) { return null; }
-    }
+    // ── Redis via API ─────────────────────────────────────────────────────────
     function saveState(numero, sujet, state) {
-        try { localStorage.setItem(lsKey(numero, sujet), JSON.stringify(state)); } catch (e) {}
+        fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+            body: JSON.stringify({ loge: LOGE_ID, numero: numero, sujet: sujet,
+                                   elapsed: state.elapsed, running: state.running,
+                                   startedAt: state.startedAt }),
+        }).catch(function () {});
     }
 
-    // ── Initialisation de chaque timer ────────────────────────────────────────
-    document.querySelectorAll('[data-timer]').forEach(function (cell) {
+    // ── Initialisation de chaque timer à partir des états reçus ──────────────
+    function initTimer(cell, serverState) {
         const numero    = cell.dataset.numero;
         const sujet     = cell.dataset.sujet;
         const oral      = cell.dataset.oral;
@@ -78,7 +72,14 @@
         const btnPlay  = cell.querySelector('.timer-btn:nth-child(2)');
         const btnReset = cell.querySelector('.timer-btn:nth-child(3)');
 
-        let state    = loadState(numero, sujet) || { elapsed: 0, running: false, startedAt: null };
+        let state = serverState || { elapsed: 0, running: false, startedAt: null };
+
+        // Rattraper le temps écoulé si le timer tournait pendant le rechargement
+        if (state.running && state.startedAt) {
+            state.elapsed = (state.elapsed || 0) + Math.floor((Date.now() - state.startedAt) / 1000);
+            state.startedAt = Date.now();
+        }
+
         let interval = null;
         let warnDone = state.elapsed >= totalSecs - 60;
         let endDone  = state.elapsed >= totalSecs;
@@ -147,5 +148,16 @@
         }
 
         render();
-    });
+    }
+
+    // ── Chargement batch des états depuis Redis ───────────────────────────────
+    fetch(`${API_URL}?loge=${encodeURIComponent(LOGE_ID)}`)
+        .then(function (r) { return r.ok ? r.json() : {}; })
+        .catch(function () { return {}; })
+        .then(function (states) {
+            document.querySelectorAll('[data-timer]').forEach(function (cell) {
+                const slot = cell.dataset.numero + '_' + cell.dataset.sujet;
+                initTimer(cell, states[slot] || null);
+            });
+        });
 }());

@@ -296,7 +296,7 @@ def _get_redis_pub_for_ine():
     return _get_redis_pub(app.config.get('REDIS_URL', 'redis://localhost'))
 
 
-def _redis() :
+def _redis():
     """Client Redis partagé (stats + sessions online)."""
     from flask_sse import _get_redis_pub
     return _get_redis_pub(app.config.get('REDIS_URL', 'redis://localhost'))
@@ -317,8 +317,8 @@ def _stats_count_request(response):
         pipe.incr(hour_key)
         pipe.expire(hour_key, 49 * 3600)
         pipe.execute()
-    except Exception:
-        pass
+    except Exception as e:
+        app.logger.debug(f"stats Redis indisponible : {e}")
     return response
 
 
@@ -327,16 +327,16 @@ def _online_set(kind: str, ident: str) -> None:
     try:
         ip = request.remote_addr or 'inconnue'
         _redis().set(f'stats:online:{kind}:{ident}', ip, ex=8 * 3600)
-    except Exception:
-        pass
+    except Exception as e:
+        app.logger.debug(f"online_set Redis indisponible : {e}")
 
 
 def _online_clear(kind: str, ident: str) -> None:
     """Supprime le marqueur de session active."""
     try:
         _redis().delete(f'stats:online:{kind}:{ident}')
-    except Exception:
-        pass
+    except Exception as e:
+        app.logger.debug(f"online_clear Redis indisponible : {e}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -354,6 +354,36 @@ def db_get(sql, *args, no_list_auto=True):
 def db_update(sql, **kwargs):
     """Exécute un INSERT/UPDATE/DELETE."""
     app._db.make_sql_update(sql, **kwargs)
+
+
+def fetch_candidat(id_candidat) -> dict | None:
+    """Retourne les infos candidat + ses oraux, ou None si introuvable."""
+    rows = db_get(db_facility_web.SELECT_INFOS_CANDIDAT, id_candidat, no_list_auto=False)
+    if not rows:
+        return None
+    data = rows[0]
+    data['oraux'] = db_get(db_facility_web.SELECT_ORAUX_CANDIDAT, id_candidat, no_list_auto=False)
+    return data
+
+
+def fetch_salle(id_salle) -> dict | None:
+    """Retourne les infos salle + ses oraux, ou None si introuvable."""
+    rows = db_get(db_facility_web.SELECT_INFOS_SALLE, id_salle, no_list_auto=False)
+    if not rows:
+        return None
+    data = rows[0]
+    data['oraux'] = db_get(db_facility_web.SELECT_ORAUX_SALLE, data['id'], no_list_auto=False)
+    return data
+
+
+def fetch_loge(id_loge) -> dict | None:
+    """Retourne les infos loge + ses oraux, ou None si introuvable."""
+    rows = db_get(db_facility_web.SELECT_INFOS_LOGE, id_loge, no_list_auto=False)
+    if not rows:
+        return None
+    data = rows[0]
+    data['oraux'] = db_get(db_facility_web.SELECT_ORAUX_LOGE, id_loge, no_list_auto=False)
+    return data
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -718,14 +748,9 @@ def candidat(id_candidat: str | None = None) -> ResponseReturnValue:
         _r.setex(f"login_ine:{_ine_token}", 300, str(id_candidat))
         session['_login_tok'] = _ine_token
         return redirect(url_for('login_candidat'))
-    donnees_candidat = db_get(db_facility_web.SELECT_INFOS_CANDIDAT,
-                              id_candidat, no_list_auto=False)
+    donnees_candidat = fetch_candidat(id_candidat)
     if not donnees_candidat:
         abort(404, "Pas de candidat avec ce numéro")
-    donnees_candidat = donnees_candidat[0]
-    donnees_candidat['oraux'] = db_get(
-        db_facility_web.SELECT_ORAUX_CANDIDAT, id_candidat, no_list_auto=False
-    )
     show_credentials = is_admin_user() or is_student_user(id_candidat)
     if not show_credentials:
         donnees_candidat.pop('login_key', None)
@@ -778,14 +803,9 @@ def loge(id_loge: str) -> ResponseReturnValue:
         )
         if infos_salle:
             pass  # on laisse l'examinateur voir toutes les loges pour l'instant
-    donnees_loge = db_get(db_facility_web.SELECT_INFOS_LOGE,
-                          id_loge, no_list_auto=False)
+    donnees_loge = fetch_loge(id_loge)
     if not donnees_loge:
         abort(404, "Cette loge n'est pas dans la liste des loges utilisées")
-    donnees_loge = donnees_loge[0]
-    donnees_loge['oraux'] = db_get(
-        db_facility_web.SELECT_ORAUX_LOGE, id_loge, no_list_auto=False
-    )
     students_ine_list = [item['numero'] for item in donnees_loge['oraux']]
     return render_template(
         "loge.html",
@@ -862,14 +882,9 @@ def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturn
     if type_doc == 'fiche_salle':
         if not is_authenticated():
             abort(403)
-        info_salle = db_get(db_facility_web.SELECT_INFOS_SALLE,
-                            id_doc, no_list_auto=False)
+        info_salle = fetch_salle(id_doc)
         if not info_salle:
             abort(404)
-        info_salle = info_salle[0]
-        info_salle['oraux'] = db_get(
-            db_facility_web.SELECT_ORAUX_SALLE, info_salle['id'], no_list_auto=False
-        )
         app.logger.debug(f"Document: fiche salle {id_doc}")
         with tempfile.TemporaryDirectory() as tmpdir:
             filename = reports.salle_oraux(
@@ -881,14 +896,9 @@ def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturn
     if type_doc == 'fiche_loge':
         if not is_authenticated():
             abort(403)
-        donnees_loge = db_get(db_facility_web.SELECT_INFOS_LOGE,
-                              id_doc, no_list_auto=False)
+        donnees_loge = fetch_loge(id_doc)
         if not donnees_loge:
             abort(404)
-        donnees_loge = donnees_loge[0]
-        donnees_loge['oraux'] = db_get(
-            db_facility_web.SELECT_ORAUX_LOGE, id_doc, no_list_auto=False
-        )
         app.logger.debug(f"Document: fiche loge {id_doc}")
         with tempfile.TemporaryDirectory() as tmpdir:
             filename = reports.loge_oraux(
@@ -988,16 +998,9 @@ def salle(id_salle: str) -> ResponseReturnValue:
     if 'user' in session and session['user'] == id_salle:
         db_update(db_facility_web.DELETE_SALLE_TOKEN_SIGNATURE, id_salle=id_salle)
 
-    donnees_salle = db_get(db_facility_web.SELECT_INFOS_SALLE,
-                           id_salle, no_list_auto=False)
+    donnees_salle = fetch_salle(id_salle)
     if not donnees_salle:
         abort(404, "Cette salle n'est pas dans la liste des salles utilisées")
-    if len(donnees_salle) > 1:
-        abort(500, "Contactez le secrétariat, il y a un problème de configuration")
-    donnees_salle = donnees_salle[0]
-    donnees_salle['oraux'] = db_get(
-        db_facility_web.SELECT_ORAUX_SALLE, donnees_salle['id'], no_list_auto=False
-    )
     students_ine_list = [item['numero'] for item in donnees_salle['oraux']]
     # L'admin peut émarger sur n'importe quelle salle
     is_userpage = is_admin_user() or (session.get('user') == donnees_salle['salle'])
@@ -1548,29 +1551,63 @@ def verify_logs() -> ResponseReturnValue:
     )
 
 
-@app.route('/gestion/monitoring')
-@admin_required
+@app.route('/loge/timer-state', methods=['GET', 'POST'])
 @nocache
-def monitoring() -> ResponseReturnValue:
-    """Tableau de bord de monitoring — admin uniquement."""
-    import time as _time
-    redis_ok = False
-    total = by_status = hourly = online = online_detail = None
+def timer_state() -> ResponseReturnValue:
+    """API état des timers de loge — lecture/écriture dans Redis."""
+    if not (is_authenticated() or is_loge_user()):
+        abort(403)
+    loge = request.args.get('loge') if request.method == 'GET' else (request.json or {}).get('loge')
+    if not loge:
+        abort(400)
+    # Vérifier que l'utilisateur a accès à cette loge
+    if not is_admin_user() and not is_loge_user(loge):
+        abort(403)
+    try:
+        r = _redis()
+        if request.method == 'GET':
+            # Renvoyer tous les états pour cette loge en un seul appel
+            states: dict = {}
+            for raw_key in r.scan_iter(f'timer:{loge}:*'):
+                key = raw_key.decode()
+                parts = key.split(':', 3)          # timer:<loge>:<numero>:<sujet>
+                if len(parts) == 4:
+                    slot = f"{parts[2]}_{parts[3]}"
+                    raw = r.get(raw_key)
+                    if raw:
+                        import json as _json
+                        states[slot] = _json.loads(raw)
+            return jsonify(states)
+        # POST — sauvegarder un état
+        import json as _json
+        data = request.json or {}
+        numero = data.get('numero', '')
+        sujet  = data.get('sujet', '')
+        state  = {k: data[k] for k in ('elapsed', 'running', 'startedAt') if k in data}
+        if not numero or not sujet:
+            abort(400)
+        r.set(f'timer:{loge}:{numero}:{sujet}', _json.dumps(state), ex=24 * 3600)
+        return jsonify({'ok': True})
+    except (OSError, ValueError, KeyError) as e:
+        app.logger.warning(f"timer_state erreur : {e}")
+        abort(500)
+
+
+def _monitoring_redis_stats() -> tuple[bool, dict]:
+    """Lit les stats Redis pour le monitoring. Retourne (redis_ok, data)."""
     try:
         r = _redis()
         total = int(r.get('stats:req:total') or 0)
-        by_status = {
-            b: int(r.get(f'stats:req:status:{b}') or 0)
-            for b in ('2xx', '3xx', '4xx', '5xx')
-        }
+        by_status = {b: int(r.get(f'stats:req:status:{b}') or 0)
+                     for b in ('2xx', '3xx', '4xx', '5xx')}
         now = datetime.now(TIMEZONE)
         hourly = []
         for i in range(23, -1, -1):
             h = now - timedelta(hours=i)
-            count = int(r.get(f"stats:req:h:{h.strftime('%Y%m%d%H')}") or 0)
-            hourly.append({'label': h.strftime('%Hh'), 'count': count})
-        online = {'admin': 0, 'exam': 0, 'cand': 0, 'loge': 0}
-        online_detail = {'admin': [], 'exam': [], 'cand': [], 'loge': []}
+            hourly.append({'label': h.strftime('%Hh'),
+                           'count': int(r.get(f"stats:req:h:{h.strftime('%Y%m%d%H')}") or 0)})
+        online: dict = {'admin': 0, 'exam': 0, 'cand': 0, 'loge': 0}
+        online_detail: dict = {'admin': [], 'exam': [], 'cand': [], 'loge': []}
         for raw_key in r.scan_iter('stats:online:*'):
             parts = raw_key.decode().split(':')
             if len(parts) >= 4:
@@ -1580,27 +1617,43 @@ def monitoring() -> ResponseReturnValue:
                     online[kind] += 1
                 if kind in online_detail:
                     online_detail[kind].append({'id': ident, 'ip': ip})
-        redis_ok = True
-    except Exception:
-        pass
+        return True, {'total': total, 'by_status': by_status,
+                      'hourly': hourly, 'online': online, 'online_detail': online_detail}
+    except Exception as e:
+        app.logger.debug(f"monitoring Redis indisponible : {e}")
+        return False, {}
+
+
+def _monitoring_recent_failures() -> list[dict]:
+    """Retourne les IPs avec échecs d'auth dans les 5 dernières minutes."""
+    import time as _time
     now_ts = _time.time()
-    recent_failures = sorted(
+    return sorted(
         [{'ip': ip, 'count': len([t for t in ts if now_ts - t < 300])}
          for ip, ts in _auth_failures.items()
          if any(now_ts - t < 300 for t in ts)],
         key=lambda x: -x['count'],
     )
+
+
+@app.route('/gestion/monitoring')
+@admin_required
+@nocache
+def monitoring() -> ResponseReturnValue:
+    """Tableau de bord de monitoring — admin uniquement."""
+    redis_ok, stats = _monitoring_redis_stats()
+    recent_failures = _monitoring_recent_failures()
     return render_template(
         'monitoring.html',
         centre=CENTRE_EXAMEN,
         username=get_username(),
         url_of_page=request.url,
         redis_ok=redis_ok,
-        total=total,
-        by_status=by_status,
-        hourly=hourly,
-        online=online,
-        online_detail=online_detail,
+        total=stats.get('total'),
+        by_status=stats.get('by_status'),
+        hourly=stats.get('hourly'),
+        online=stats.get('online'),
+        online_detail=stats.get('online_detail'),
         recent_failures=recent_failures,
     )
 
@@ -1642,89 +1695,65 @@ def archive_page() -> ResponseReturnValue:
     )
 
 
-@app.route('/gestion/archive/download')
-@admin_required
-@nocache
-def archive_download() -> ResponseReturnValue:
-    """
-    Génère et sert l'archive zip de fin de session.
-    - planning_oraux.csv / emargements.csv : exports CSV (sans les images de signature)
-    - journal_audit.json : logs chaînés par hash (intégrité vérifiable)
-    - documents/ : fiches d'émargement de toutes les salles, régénérées à la
-      volée (signatures des candidats incluses) — seuls PDF retenus, pour
-      limiter l'archive aux preuves d'émargement réellement nécessaires
-    - Volontairement absents : mots de passe, clés de connexion, CSV bruts
-      d'inscription, et les autres PDF générables à la demande (papillons,
-      fiches candidats/loges, liste générale).
-    """
-    now = datetime.now()
-
-    # Régénère systématiquement toutes les fiches de salle (et la liste
-    # concaténée) avant export : on ne peut pas se fier à ce qui se trouve
-    # déjà dans static/docs (généré au fil de l'eau, salle par salle), au
-    # risque d'omettre des salles de l'archive — alors qu'elles portent les
-    # preuves d'émargement (images de signature) des candidats.
+def _archive_regenerate_fiches_salle() -> list[Path]:
+    """Régénère toutes les fiches de salle et retourne la liste des PDFs produits."""
     salles = db_get(db_facility_web.SELECT_DOC_LISTE_SALLES, no_list_auto=False)
     for s in salles:
         s['oraux'] = db_get(
             db_facility_web.SELECT_DOC_LISTE_SALLES_ORAUX, s['id'], no_list_auto=False
         )
     reports.liste_salle_oraux(salles, 'static/docs', 'salle', centre_examen=CENTRE_EXAMEN)
-
-    # static/docs/ accumule aussi des PDF générés à la demande (papillons,
-    # fiches candidats/loges, liste générale...) qui n'ont rien à faire dans
-    # cette archive — minimisation RGPD oblige, on ne retient que les fiches
-    # de salle (preuve d'émargement) que l'on vient de régénérer ci-dessus.
     docs_dir = Path(app.root_path) / 'static' / 'docs'
-    fiches_salles = sorted(
-        list(docs_dir.glob('salle-*.pdf')) + list(docs_dir.glob('liste_salles.pdf'))
-    ) if docs_dir.is_dir() else []
+    if not docs_dir.is_dir():
+        return []
+    return sorted(list(docs_dir.glob('salle-*.pdf')) + list(docs_dir.glob('liste_salles.pdf')))
 
+
+def _archive_build_zip(fiches_salles: list[Path], now: datetime) -> BytesIO:
+    """Construit le ZIP d'archive et retourne un BytesIO prêt à envoyer."""
     buf = BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         planning = db_get(db_facility_web.SELECT_DOC_ARCHIVE_PLANNING, no_list_auto=False)
         zf.writestr('planning_oraux.csv', _csv_bytes(
             ['candidat', 'numero', 'matiere', 'examinateur', 'salle',
-             'heure_sujet', 'heure_oral', 'heure_fin', 'modifie'],
-            planning,
+             'heure_sujet', 'heure_oral', 'heure_fin', 'modifie'], planning,
         ))
-
         emargements = db_get(db_facility_web.SELECT_DOC_ARCHIVE_EMARGEMENTS, no_list_auto=False)
         zf.writestr('emargements.csv', _csv_bytes(
             ['candidat', 'numero', 'examinateur', 'salle', 'heure_oral',
-             'signe', 'heure_emargement', 'hash_emargement'],
-            emargements,
+             'signe', 'heure_emargement', 'hash_emargement'], emargements,
         ))
-
         logs = db_get(db_facility_web.SELECT_ALL_LOGS, no_list_auto=False)
         zf.writestr('journal_audit.json',
                     json.dumps(logs, ensure_ascii=False, indent=2, default=str).encode('utf-8'))
-
         for pdf in fiches_salles:
             zf.write(pdf, arcname=f'documents/{pdf.name}')
-
         manifest = (
             f"Archive de fin de session — {CENTRE_EXAMEN}\n"
             f"Générée le {now:%d/%m/%Y à %H:%M} par {get_username() or 'admin'}\n\n"
             "Contenu :\n"
-            "  - planning_oraux.csv  : planning final des oraux "
-            "(candidat, matière, salle, examinateur, horaires)\n"
-            "  - emargements.csv     : preuves de signature des examinateurs "
-            "(sans les images — incluses dans documents/)\n"
-            "  - journal_audit.json  : journal d'audit chaîné par hash "
-            "(intégrité vérifiable, cf. /gestion/verify-logs)\n"
-            "  - documents/          : fiches d'émargement de toutes les salles "
-            "(régénérées à la volée, signatures des candidats incluses)\n\n"
-            "Volontairement absents de cette archive (minimisation RGPD) :\n"
-            "  - mots de passe et clés de connexion (candidats, examinateurs, loges)\n"
-            "  - fichiers CSV bruts d'inscription "
-            "(data/candidats.csv, examinateurs.csv, preps.csv)\n"
-            "  - autres PDF générables à la demande depuis la page algo "
-            "(papillons, fiches candidats/loges, liste générale des oraux)\n"
+            "  - planning_oraux.csv  : planning final des oraux\n"
+            "  - emargements.csv     : preuves de signature des examinateurs\n"
+            "  - journal_audit.json  : journal d'audit chaîné par hash\n"
+            "  - documents/          : fiches d'émargement de toutes les salles\n\n"
+            "Volontairement absents (minimisation RGPD) :\n"
+            "  - mots de passe et clés de connexion\n"
+            "  - fichiers CSV bruts d'inscription\n"
+            "  - autres PDF (papillons, fiches candidats/loges, liste générale)\n"
         )
         zf.writestr('LISEZMOI.txt', manifest.encode('utf-8'))
-
     buf.seek(0)
+    return buf
+
+
+@app.route('/gestion/archive/download')
+@admin_required
+@nocache
+def archive_download() -> ResponseReturnValue:
+    """Génère et sert l'archive zip de fin de session (RGPD — données minimisées)."""
+    now = datetime.now()
+    fiches_salles = _archive_regenerate_fiches_salle()
+    buf = _archive_build_zip(fiches_salles, now)
     filename = f"archive_{secure_filename(CENTRE_EXAMEN)}_{now:%Y%m%d}.zip"
     app.logger.info(f"Archive de fin de session générée par {get_username()}")
     return send_file(buf, mimetype='application/zip',
@@ -1891,7 +1920,7 @@ def _load_algo_params() -> dict:
     try:
         import json as _json
         return {**_ALGO_PARAMS_DEFAULTS, **_json.loads(_ALGO_PARAMS_FILE.read_text())}
-    except Exception:
+    except (OSError, ValueError):
         return dict(_ALGO_PARAMS_DEFAULTS)
 
 
@@ -2063,7 +2092,7 @@ def algo_download_modele_ods() -> ResponseReturnValue:
     if preps_path.exists():
         try:
             preps_rows, _ = normalize_csv(preps_path.read_bytes())
-        except Exception:
+        except (OSError, UnicodeDecodeError, ValueError):
             pass
     buf = generate_ods_modele(preps_rows)
     return send_file(

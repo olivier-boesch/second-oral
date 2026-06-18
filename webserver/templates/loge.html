@@ -84,7 +84,10 @@
     <p><a href="{{ url_for('salle_form') }}" target="_blank">liste des salles</a></p>
 {% include 'footer.html' %}
 
-<script nonce="{{ csp_nonce }}">window.LOGE_ID = {{ data['salle'] | tojson }};</script>
+<script nonce="{{ csp_nonce }}">
+    window.LOGE_ID    = {{ data['salle'] | tojson }};
+    window.CSRF_TOKEN = {{ csrf_token() | tojson }};
+</script>
 <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='timer.js') }}"></script>
 </body>
 </html>

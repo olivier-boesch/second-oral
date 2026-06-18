@@ -240,6 +240,32 @@ de minimisation RGPD :
 fichiers CSV bruts d'inscription (`data/candidats.csv`, `examinateurs.csv`, `preps.csv`),
 et les autres PDF générables à la demande (papillons, fiches candidats/loges, liste générale des oraux).
 
+> **RGPD — fin de session :** les PDF générés à la demande persistent dans `static/docs/` jusqu'à
+> redémarrage du conteneur. Après archivage, supprimer ce dossier ou relancer Docker pour le vider.
+
+### Monitoring (`/gestion/monitoring`)
+
+Tableau de bord admin-only (accès : accueil admin → « Monitoring »). Affiche en temps réel :
+
+- **Requêtes** : total, répartition succès / redirections / erreurs client / erreurs serveur, activité des 24 dernières heures (histogramme heure par heure)
+- **Sessions actives** : type (admin / examinateur / candidat / loge), identifiant, IP de connexion
+- **Échecs d'authentification** : IPs ayant échoué dans les 5 dernières minutes
+
+Toutes les données de monitoring sont stockées exclusivement en Redis (TTL 8 h pour les sessions, TTL 49 h pour les compteurs horaires) — aucune écriture en base ni sur disque. La page se rafraîchit automatiquement toutes les 10 secondes.
+
+> **RGPD :** les adresses IP des sessions actives sont des données personnelles (CNIL). Elles sont
+> traitées sur la base de l'intérêt légitime (art. 6.1.f RGPD) à des fins de diagnostic et de
+> détection d'anomalies, accessibles au seul admin (responsable du traitement), et supprimées
+> automatiquement après 8 h. Aucun croisement avec d'autres données n'est effectué.
+
+### Minuteurs de loge
+
+La page de loge affiche un minuteur par candidat, pré-réglé sur la durée de préparation de la matière (tiers-temps inclus dans le calcul des horaires). Chaque minuteur peut être démarré, mis en pause et réinitialisé individuellement. L'état est stocké en Redis (TTL 24 h) et survit aux rechargements de page.
+
+- **Bip d'avertissement** à 60 secondes restantes
+- **Signal sonore de fin** à 0 (3 bips)
+- Le son nécessite une première interaction utilisateur sur la page (restriction navigateur)
+
 ---
 
 ## Référence des scripts
@@ -284,6 +310,7 @@ et les autres PDF générables à la demande (papillons, fiches candidats/loges,
 | **Noms examinateurs** | Dropdown `/login-examinateur` : numéro de salle uniquement, pas de noms |
 | **Server header** | `server_tokens off` sur nginx hôte et Docker |
 | **IP client réelle** | nginx hôte remplace `X-Forwarded-For` par `$remote_addr` (anti-spoofing) ; nginx Docker le transmet intact ; `ProxyFix(x_for=1)` dans Flask |
+| **IPs de session (monitoring)** | Adresse IP stockée en Redis à chaque login (TTL 8 h, supprimée au logout) — visible uniquement par l'admin dans `/gestion/monitoring` à des fins de diagnostic (intérêt légitime art. 6.1.f RGPD) ; aucune écriture en base ni sur disque |
 | **Logs gunicorn** | Format `%({x-forwarded-for}i)s` — affiche l'IP réelle du client (pas l'IP Docker) |
 | **Logs d'audit** | Chaîne de hash SHA-256 + sel côté DB (falsification détectable) |
 | **Tokens signature** | Usage unique, expiration 5 min, canal `sign_<token>` dédié |

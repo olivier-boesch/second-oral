@@ -593,3 +593,98 @@ class TestArchiveRoutes:
         assert [s["id"] for s in regenerated] == [1, 2]
         assert regenerated[0]["oraux"] == [self.PLANNING_ROW]
         assert regenerated[1]["oraux"] == []
+
+
+# ── Nouvel examinateur avec mot de passe ─────────────────────────────────────
+
+class TestAddExaminateur:
+    def test_get_requires_admin(self, client):
+        r = client.get("/gestion/add-examinateur", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login" in r.headers["Location"]
+
+    def test_get_admin_renders_form(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [{"id": 1, "nom": "Maths"}]
+        r = admin_client.get("/gestion/add-examinateur")
+        assert r.status_code == 200
+        assert b"form" in r.data.lower()
+
+    def test_post_missing_nom_returns_400(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [{"id": 1, "nom": "Maths"}]
+        r = admin_client.post("/gestion/add-examinateur",
+                              data={"nom": "", "salle": "A01", "matiere": "1",
+                                    "loge": "L1", "etablissements": ""})
+        assert r.status_code == 400
+
+    def test_post_missing_salle_returns_400(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [{"id": 1, "nom": "Maths"}]
+        r = admin_client.post("/gestion/add-examinateur",
+                              data={"nom": "Dupont", "salle": "", "matiere": "1",
+                                    "loge": "L1", "etablissements": ""})
+        assert r.status_code == 400
+
+    def test_post_valid_inserts_with_password_hash(self, admin_client, db_mock,
+                                                    monkeypatch, tmp_path):
+        """Un POST valide doit insérer l'examinateur avec un password_hash non vide."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "root_path", str(tmp_path),
+                            raising=False)
+        (tmp_path / "static" / "docs").mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
+                            lambda *a, **kw: None)
+
+        db_mock.make_sql_update.reset_mock()
+        r = admin_client.post("/gestion/add-examinateur",
+                              data={"nom": "Martin Sophie", "salle": "B02",
+                                    "matiere": "1", "loge": "L1",
+                                    "etablissements": "Lycée Test"})
+        assert r.status_code == 302
+        calls = db_mock.make_sql_update.call_args_list
+        assert len(calls) >= 1
+        _, kwargs = calls[0]
+        assert kwargs.get("password_hash"), "password_hash doit être non vide"
+        assert kwargs.get("nom") == "Martin Sophie"
+        assert kwargs.get("salle") == "B02"
+
+    def test_post_valid_redirects_with_papillon_param(self, admin_client, db_mock,
+                                                       monkeypatch, tmp_path):
+        """Après création, la redirection doit inclure new_papillon."""
+        import app as app_module
+        (tmp_path / "static" / "docs").mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(app_module, "root_path", str(tmp_path),
+                            raising=False)
+        monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
+                            lambda *a, **kw: None)
+        r = admin_client.post("/gestion/add-examinateur",
+                              data={"nom": "Durand Paul", "salle": "C03",
+                                    "matiere": "1", "loge": "L1",
+                                    "etablissements": ""})
+        assert r.status_code == 302
+        assert "new_papillon" in r.headers["Location"]
+
+
+# ── Monitoring ────────────────────────────────────────────────────────────────
+
+class TestMonitoring:
+    def test_requires_admin(self, client):
+        r = client.get("/gestion/monitoring", follow_redirects=False)
+        assert r.status_code == 302
+
+    def test_renders_when_redis_unavailable(self, admin_client, monkeypatch):
+        """La page s'affiche même si Redis est indisponible."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_redis",
+                            lambda: (_ for _ in ()).throw(OSError("Redis KO")))
+        r = admin_client.get("/gestion/monitoring")
+        assert r.status_code == 200
+        assert "Redis indisponible" in r.data.decode()
+
+    def test_timer_state_get_requires_auth(self, client):
+        r = client.get("/loge/timer-state?loge=C107", follow_redirects=False)
+        assert r.status_code == 403
+
+    def test_timer_state_post_requires_auth(self, client):
+        r = client.post("/loge/timer-state",
+                        json={"loge": "C107", "numero": "123", "sujet": "08:00",
+                              "elapsed": 0, "running": False, "startedAt": None})
+        assert r.status_code == 403
