@@ -100,17 +100,6 @@
       </a>
       {% endif %}
 
-      {# Recherche par numéro de candidat #}
-      <a href="{{ url_for('candidat_form') }}">
-        <div class="grid-options-item">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-          Rechercher par numéro de candidat
-        </div>
-      </a>
-
       {# Connexion admin — toujours accessible #}
       {% if not admin %}
       <a href="{{ url_for('login', link_back=url_for('index')) }}">

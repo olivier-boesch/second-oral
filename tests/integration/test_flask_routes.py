@@ -410,10 +410,10 @@ class TestAdminRoutes:
 # ── Candidat (route protégée) ─────────────────────────────────────────────────
 
 class TestCandidatRoutes:
-    def test_candidat_form_accessible_without_session(self, client):
-        # /candidat est le formulaire de connexion candidat — public par définition
-        r = client.get("/candidat")
-        assert r.status_code == 200
+    def test_candidat_form_removed(self, client):
+        # /candidat (formulaire de recherche) a été supprimé
+        r = client.get("/candidat", follow_redirects=False)
+        assert r.status_code == 404
 
     def test_candidat_with_valid_session(self, client, flask_app, db_mock):
         """Un candidat authentifié peut accéder à sa fiche."""

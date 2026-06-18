@@ -706,24 +706,6 @@ def index() -> ResponseReturnValue:
     )
 
 
-@app.route('/c')
-@nocache
-def candidat_form_court() -> ResponseReturnValue:
-    """Raccourci `/c` → redirige vers le formulaire de recherche par numéro de candidat."""
-    return redirect(url_for('candidat_form'))
-
-
-@app.route("/candidat", methods=["GET"])
-@nocache
-def candidat_form() -> ResponseReturnValue:
-    """Formulaire de recherche d'un candidat par numéro de candidat."""
-    num = request.args.get("num", type=int, default=0)
-    if num != 0:
-        return redirect(url_for('candidat', id_candidat=num))
-    return render_template("candidat_form.html", url_of_page=request.url,
-                           centre=CENTRE_EXAMEN)
-
-
 @app.route('/c/<id_candidat>')
 @nocache
 def candidat_court(id_candidat: str) -> ResponseReturnValue:
