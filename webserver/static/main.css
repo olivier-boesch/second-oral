@@ -693,19 +693,25 @@ p.error {
     margin: 0 auto 1.5em;
 }
 .monitor-yaxis {
-    /* Couvre exactement la zone des barres (120px − 1.5rem labels) */
-    height: calc(120px - 1.5rem);
-    margin-bottom: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: flex-end;
-    padding-right: 6px;
+    position: relative;
+    width: 2.5rem;
+    height: 120px;
+    flex-shrink: 0;
+}
+.monitor-yaxis span {
+    position: absolute;
+    right: 6px;
     font-size: 0.65rem;
     color: var(--text-sm);
     white-space: nowrap;
-    flex-shrink: 0;
+    line-height: 1;
 }
+/* max  — texte aligné par le haut sur le sommet des barres */
+.monitor-yaxis span:nth-child(1) { top: 0; }
+/* mid  — texte centré sur la mi-hauteur des barres */
+.monitor-yaxis span:nth-child(2) { top: calc((120px - 1.5rem) / 2); transform: translateY(-50%); }
+/* 0    — texte aligné par le bas sur la ligne de base */
+.monitor-yaxis span:nth-child(3) { top: calc(120px - 1.5rem); transform: translateY(-100%); }
 .monitor-chart {
     display: flex;
     align-items: flex-end;
