@@ -1,11 +1,18 @@
 (function () {
     const LOGE_ID = window.LOGE_ID;
 
-    // ── AudioContext — créé au premier son joué ───────────────────────────────
+    // ── AudioContext — créé au premier geste sur la page ─────────────────────
     let _ctx = null;
+    function initAudio() {
+        if (_ctx) return;
+        _ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    ['click', 'keydown', 'touchstart'].forEach(function (evt) {
+        document.addEventListener(evt, initAudio, { once: true, passive: true });
+    });
     function beep(freq, dur, vol, delay) {
+        if (!_ctx) return; // pas encore de geste utilisateur
         delay = delay || 0;
-        if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
         const ctx = _ctx;
         const schedule = function () {
             const t = ctx.currentTime + delay;
@@ -129,7 +136,7 @@
             render();
         }
 
-        btnPlay.addEventListener('click',  function () { state.running ? pause() : start(); });
+        btnPlay.addEventListener('click',  function () { initAudio(); state.running ? pause() : start(); });
         btnReset.addEventListener('click', reset);
 
         if (state.running && remaining() > 0) {
