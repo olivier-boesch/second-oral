@@ -1618,6 +1618,24 @@ def _monitoring_recent_failures() -> list[dict]:
     )
 
 
+@app.route('/gestion/monitoring/data')
+@admin_required
+@nocache
+def monitoring_data() -> ResponseReturnValue:
+    """Données de monitoring en JSON (polling AJAX)."""
+    redis_ok, stats = _monitoring_redis_stats()
+    recent_failures = _monitoring_recent_failures()
+    return jsonify(
+        redis_ok=redis_ok,
+        total=stats.get('total'),
+        by_status=stats.get('by_status'),
+        hourly=stats.get('hourly'),
+        online=stats.get('online'),
+        online_detail=stats.get('online_detail'),
+        recent_failures=recent_failures,
+    )
+
+
 @app.route('/gestion/monitoring')
 @admin_required
 @nocache
