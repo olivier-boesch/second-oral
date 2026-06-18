@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Monitoring</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+<h1>Monitoring</h1>
+
+<p style="text-align:center">
+    <a href="{{ url_for('index_gestion') }}">← Retour à la gestion</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_of_page }}">Rafraîchir</a>
+</p>
+
+{% if not redis_ok %}
+<p class="error">Redis indisponible — statistiques non accessibles.</p>
+{% else %}
+
+<h2>Requêtes</h2>
+<table class="table_oraux">
+    <tr><th>Total</th><th>2xx</th><th>3xx</th><th>4xx</th><th>5xx</th></tr>
+    <tr class="tr_light">
+        <td><strong>{{ total }}</strong></td>
+        <td>{{ by_status['2xx'] }}</td>
+        <td>{{ by_status['3xx'] }}</td>
+        <td {% if by_status['4xx'] > 0 %}class="red"{% endif %}>{{ by_status['4xx'] }}</td>
+        <td {% if by_status['5xx'] > 0 %}class="red"{% endif %}>{{ by_status['5xx'] }}</td>
+    </tr>
+</table>
+
+<h2>Activité — dernières 24 h</h2>
+<div class="monitor-chart">
+{% set max_count = hourly | map(attribute='count') | max %}
+{% for h in hourly %}
+    <div class="monitor-bar-wrap" title="{{ h['label'] }} : {{ h['count'] }} req.">
+        <div class="monitor-bar"
+             style="height:{{ ((h['count'] / max_count * 100) | int) if max_count > 0 else 0 }}%">
+        </div>
+        <span class="monitor-bar-label">{{ h['label'] }}</span>
+    </div>
+{% endfor %}
+</div>
+
+<h2>Sessions actives</h2>
+<table class="table_mobile">
+    <tr><th>Type</th><th>Identifiant</th><th>IP</th></tr>
+    {% if online['admin'] %}
+        {% for s in online_detail['admin'] %}
+        <tr class="tr_light">
+            <td>Admin</td>
+            <td>—</td>
+            <td><code>{{ s['ip'] }}</code></td>
+        </tr>
+        {% endfor %}
+    {% endif %}
+    {% for s in online_detail['exam'] %}
+    <tr class="tr_light">
+        <td>Examinateur</td>
+        <td>Salle {{ s['id'] }}</td>
+        <td><code>{{ s['ip'] }}</code></td>
+    </tr>
+    {% endfor %}
+    {% for s in online_detail['cand'] %}
+    <tr class="tr_dark">
+        <td>Candidat</td>
+        <td>{{ s['id'] }}</td>
+        <td><code>{{ s['ip'] }}</code></td>
+    </tr>
+    {% endfor %}
+    {% for s in online_detail['loge'] %}
+    <tr class="tr_light">
+        <td>Loge</td>
+        <td>{{ s['id'] }}</td>
+        <td><code>{{ s['ip'] }}</code></td>
+    </tr>
+    {% endfor %}
+    {% if not online['admin'] and not online_detail['exam'] and not online_detail['cand'] and not online_detail['loge'] %}
+    <tr class="tr_light"><td colspan="3">Aucune session active</td></tr>
+    {% endif %}
+</table>
+
+{% endif %}
+
+{% if recent_failures %}
+<h2>Échecs d'authentification récents <small>(5 dernières minutes)</small></h2>
+<table class="table_oraux">
+    <tr><th>IP</th><th>Tentatives</th></tr>
+    {% for f in recent_failures %}
+    <tr class="{% if loop.index % 2 == 1 %}tr_light{% else %}tr_dark{% endif %}">
+        <td>{{ f['ip'] }}</td>
+        <td class="red">{{ f['count'] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+{% include 'footer.html' %}
+</body>
+</html>

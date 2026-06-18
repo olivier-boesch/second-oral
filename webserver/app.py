@@ -296,6 +296,49 @@ def _get_redis_pub_for_ine():
     return _get_redis_pub(app.config.get('REDIS_URL', 'redis://localhost'))
 
 
+def _redis() :
+    """Client Redis partagé (stats + sessions online)."""
+    from flask_sse import _get_redis_pub
+    return _get_redis_pub(app.config.get('REDIS_URL', 'redis://localhost'))
+
+
+@app.after_request
+def _stats_count_request(response):
+    """Incrémente les compteurs de requêtes dans Redis (silencieux si Redis indisponible)."""
+    if getattr(request, 'endpoint', None) in ('sse.stream', 'static', None):
+        return response
+    try:
+        r = _redis()
+        bucket = f"{response.status_code // 100}xx"
+        hour_key = f"stats:req:h:{datetime.now(TIMEZONE).strftime('%Y%m%d%H')}"
+        pipe = r.pipeline()
+        pipe.incr('stats:req:total')
+        pipe.incr(f'stats:req:status:{bucket}')
+        pipe.incr(hour_key)
+        pipe.expire(hour_key, 49 * 3600)
+        pipe.execute()
+    except Exception:
+        pass
+    return response
+
+
+def _online_set(kind: str, ident: str) -> None:
+    """Marque une session comme active avec l'IP (TTL = durée de session maxi)."""
+    try:
+        ip = request.remote_addr or 'inconnue'
+        _redis().set(f'stats:online:{kind}:{ident}', ip, ex=8 * 3600)
+    except Exception:
+        pass
+
+
+def _online_clear(kind: str, ident: str) -> None:
+    """Supprime le marqueur de session active."""
+    try:
+        _redis().delete(f'stats:online:{kind}:{ident}')
+    except Exception:
+        pass
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Utilitaires DB
 # ──────────────────────────────────────────────────────────────────────────────
@@ -899,6 +942,7 @@ def login_examinateur() -> ResponseReturnValue:
         session.clear()
         session['user'] = salle
         session['_ts'] = __import__('time').time()
+        _online_set('exam', salle)
         app.logger.info(f"{salle}: connecté")
         return redirect(url_for('salle', id_salle=salle))
     app.logger.warning(f"{salle}: échec connexion")
@@ -1104,6 +1148,7 @@ def login() -> ResponseReturnValue:
         session.clear()
         session['user'] = 'admin'
         session['_ts'] = __import__('time').time()
+        _online_set('admin', 'admin')
         app.logger.info("admin: connecté")
         return redirect(url or url_for("index"))
 
@@ -1120,6 +1165,8 @@ def logout() -> ResponseReturnValue:
     """Déconnexion de l'utilisateur courant (admin ou examinateur)."""
     if 'user' in session:
         user = session.pop('user')
+        kind = 'admin' if user == 'admin' else 'exam'
+        _online_clear(kind, user if user != 'admin' else 'admin')
         app.logger.info(f"{user}: déconnecté")
     url = _safe_redirect_url(request.args.get("link_back"))
     return redirect(url or url_for('index'))
@@ -1159,6 +1206,7 @@ def login_candidat() -> ResponseReturnValue:
         session.clear()
         session['candidat'] = numero
         session['_ts'] = __import__('time').time()
+        _online_set('cand', numero)
         app.logger.info(f"Candidat {numero}: connecté")
         return redirect(url_for('candidat', id_candidat=numero))
     app.logger.warning(f"Candidat {numero}: échec connexion")
@@ -1172,6 +1220,7 @@ def logout_candidat() -> ResponseReturnValue:
     """Déconnexion d'un candidat."""
     if 'candidat' in session:
         numero = session.pop('candidat')
+        _online_clear('cand', numero)
         app.logger.info(f"Candidat {numero}: déconnecté")
     return redirect(url_for('index'))
 
@@ -1207,6 +1256,7 @@ def login_loge() -> ResponseReturnValue:
         session.clear()
         session['loge'] = loge_nom
         session['_ts'] = __import__('time').time()
+        _online_set('loge', loge_nom)
         app.logger.info(f"Loge {loge_nom}: connectée")
         return redirect(url_for('loge', id_loge=loge_nom))
     app.logger.warning(f"Loge {loge_nom}: échec connexion")
@@ -1221,6 +1271,7 @@ def logout_loge() -> ResponseReturnValue:
     """Déconnexion d'un surveillant de loge."""
     if 'loge' in session:
         loge_nom = session.pop('loge')
+        _online_clear('loge', loge_nom)
         app.logger.info(f"Loge {loge_nom}: déconnectée")
     return redirect(url_for('index'))
 
@@ -1494,6 +1545,63 @@ def verify_logs() -> ResponseReturnValue:
         logs=logs,
         username=get_username(),
         url_of_page=request.url,
+    )
+
+
+@app.route('/gestion/monitoring')
+@admin_required
+@nocache
+def monitoring() -> ResponseReturnValue:
+    """Tableau de bord de monitoring — admin uniquement."""
+    import time as _time
+    redis_ok = False
+    total = by_status = hourly = online = online_detail = None
+    try:
+        r = _redis()
+        total = int(r.get('stats:req:total') or 0)
+        by_status = {
+            b: int(r.get(f'stats:req:status:{b}') or 0)
+            for b in ('2xx', '3xx', '4xx', '5xx')
+        }
+        now = datetime.now(TIMEZONE)
+        hourly = []
+        for i in range(23, -1, -1):
+            h = now - timedelta(hours=i)
+            count = int(r.get(f"stats:req:h:{h.strftime('%Y%m%d%H')}") or 0)
+            hourly.append({'label': h.strftime('%Hh'), 'count': count})
+        online = {'admin': 0, 'exam': 0, 'cand': 0, 'loge': 0}
+        online_detail = {'admin': [], 'exam': [], 'cand': [], 'loge': []}
+        for raw_key in r.scan_iter('stats:online:*'):
+            parts = raw_key.decode().split(':')
+            if len(parts) >= 4:
+                kind, ident = parts[2], ':'.join(parts[3:])
+                ip = (r.get(raw_key) or b'').decode() or '?'
+                if kind in online:
+                    online[kind] += 1
+                if kind in online_detail:
+                    online_detail[kind].append({'id': ident, 'ip': ip})
+        redis_ok = True
+    except Exception:
+        pass
+    now_ts = _time.time()
+    recent_failures = sorted(
+        [{'ip': ip, 'count': len([t for t in ts if now_ts - t < 300])}
+         for ip, ts in _auth_failures.items()
+         if any(now_ts - t < 300 for t in ts)],
+        key=lambda x: -x['count'],
+    )
+    return render_template(
+        'monitoring.html',
+        centre=CENTRE_EXAMEN,
+        username=get_username(),
+        url_of_page=request.url,
+        redis_ok=redis_ok,
+        total=total,
+        by_status=by_status,
+        hourly=hourly,
+        online=online,
+        online_detail=online_detail,
+        recent_failures=recent_failures,
     )
 
 
