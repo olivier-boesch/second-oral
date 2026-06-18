@@ -688,17 +688,19 @@ p.error {
 /* ── Monitoring ──────────────────────────────────────────────────────────── */
 .monitor-chart-wrap {
     display: flex;
-    align-items: stretch;
+    align-items: flex-start;
     max-width: 90%;
     margin: 0 auto 1.5em;
 }
 .monitor-yaxis {
+    /* Couvre exactement la zone des barres (120px − 1.5rem labels) */
+    height: calc(120px - 1.5rem);
+    margin-bottom: 1.5rem;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     align-items: flex-end;
     padding-right: 6px;
-    padding-bottom: 1.5rem; /* aligne avec la zone des barres (sans les labels) */
     font-size: 0.65rem;
     color: var(--text-sm);
     white-space: nowrap;
