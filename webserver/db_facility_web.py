@@ -267,8 +267,8 @@ WHERE Examinateur.id = %(id)s
 """
 
 INSERT_EXAMINATEUR = """
-INSERT INTO Examinateur (nom, etablissements, matiere, salle, loge)
-VALUES (%(nom)s, %(etablissements)s, %(matiere)s, %(salle)s, %(loge)s)
+INSERT INTO Examinateur (nom, etablissements, matiere, salle, loge, password_hash)
+VALUES (%(nom)s, %(etablissements)s, %(matiere)s, %(salle)s, %(loge)s, %(password_hash)s)
 """
 
 # ---------- Documents PDF

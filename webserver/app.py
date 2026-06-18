@@ -48,7 +48,7 @@ import db_facility_web
 import reports
 from app_secrets import (
     CENTRE_EXAMEN, DIGITAL_SIGN, LOGIN_KEY, APP_SECRET_KEY, HOSTNAME,
-    TIMEZONE, hash_password, check_password, verify_log_item,
+    TIMEZONE, hash_password, check_password, verify_log_item, generate_password,
 )
 import app_secrets as _app_secrets
 # FQDN optionnel (ajouté par setup_new_site.py) — fallback sur valeur codée en dur
@@ -1412,15 +1412,39 @@ def delete_examinateur() -> ResponseReturnValue:
 def add_examinateur() -> ResponseReturnValue:
     """Ajout d'un nouvel examinateur."""
     if request.method == "POST":
+        nom   = (request.form.get('nom') or '').strip()
+        salle = (request.form.get('salle') or '').strip()
+        if not nom or not salle:
+            liste_matieres = db_get(db_facility_web.SELECT_LISTE_MATIERES, no_list_auto=False)
+            return render_template(
+                "add_examinateur.html",
+                centre=CENTRE_EXAMEN,
+                liste_matieres=liste_matieres,
+                url_of_page=request.url,
+                username=get_username(),
+                erreur="Le nom et le numéro de salle sont obligatoires.",
+            ), 400
+
+        password = generate_password()
         d = {
-            'nom': request.form.get('nom'),
-            'salle': request.form.get('salle'),
+            'nom': nom,
+            'salle': salle,
             'matiere': request.form.get('matiere'),
             'loge': request.form.get('loge'),
-            'etablissements': request.form.get('etablissements'),  # corrigé (était 'etablissments')
+            'etablissements': request.form.get('etablissements'),
+            'password_hash': hash_password(password, salle),
         }
         db_update(db_facility_web.INSERT_EXAMINATEUR, **d)
-        return redirect(url_for('liste_examinateurs'))
+
+        papillon_filename = f'papillons_salle_{secure_filename(salle)}.pdf'
+        base_url = request.host_url.rstrip('/')
+        reports.liste_papillons_connexion(
+            [(salle, nom, password)],
+            filename=str(Path(app.root_path) / 'static' / 'docs' / papillon_filename),
+            base_url=base_url,
+            centre_examen=CENTRE_EXAMEN,
+        )
+        return redirect(url_for('download', filename=papillon_filename))
 
     # GET
     liste_matieres = db_get(db_facility_web.SELECT_LISTE_MATIERES, no_list_auto=False)
