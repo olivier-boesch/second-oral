@@ -81,8 +81,9 @@
         function render() {
             const rem = remaining();
             display.textContent = secs2display(rem);
-            display.classList.toggle('warn',  rem > 0 && rem <= 60);
-            display.classList.toggle('ended', rem === 0);
+            display.classList.toggle('running', state.running && rem > 60);
+            display.classList.toggle('warn',    rem > 0 && rem <= 60);
+            display.classList.toggle('ended',   rem === 0);
             btnPlay.textContent = state.running ? '⏸' : '▶';
             btnPlay.disabled    = (rem === 0);
         }

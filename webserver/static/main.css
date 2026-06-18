@@ -733,8 +733,9 @@ p.error {
     min-width: 3.5rem;
     color: var(--text);
 }
-.timer-display.warn  { color: var(--warning); }
-.timer-display.ended { color: var(--danger); animation: timer-blink 1s step-start infinite; }
+.timer-display.running { color: var(--success); }
+.timer-display.warn    { color: var(--warning); }
+.timer-display.ended   { color: var(--danger); animation: timer-blink 1s step-start infinite; }
 @keyframes timer-blink { 50% { opacity: 0; } }
 .timer-btn {
     background: var(--primary-dk);
