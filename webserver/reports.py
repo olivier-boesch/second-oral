@@ -195,7 +195,7 @@ def loge_oraux(infos_loge, tempdir=".", file_dir='.', filename_root='',
     data = []
     filename = f"{filename_root}-{infos_loge['salle']}.pdf"
     for o in infos_loge['oraux']:
-        nom = f"{o['candidat']} ({o['ine']})"
+        nom = f"{o['candidat']} ({o['numero']})"
         if o['tiers_temps']:
             nom += " " + WARNING_CHAR
         line = [nom, o['salle'], o['matiere_court'], o['examinateur'],
@@ -268,7 +268,7 @@ def salle_oraux(infos_examinateur, tempdir=".", file_dir='.', filename_root='',
     safe_nom = infos_examinateur['nom'].replace(" ", "_")
     filename = f"{filename_root}-{infos_examinateur['salle']}-{safe_nom}.pdf"
     for o in infos_examinateur['oraux']:
-        nom = f"{o['candidat']} ({o['ine']})"
+        nom = f"{o['candidat']} ({o['numero']})"
         if o['tiers_temps']:
             nom += " " + WARNING_CHAR
         line = [nom, o['sujet'], o['oral']]
@@ -350,13 +350,13 @@ def fiche_candidat(infos_candidat, tempdirname, file_dir='.', filename_root='',
         topMargin=15 * mm,
         bottomMargin=20 * mm,
         pagesize=pagesizes.portrait(pagesizes.A4),
-        title=f"{infos_candidat['nom']} - {infos_candidat['ine']}",
+        title=f"{infos_candidat['nom']} - {infos_candidat['numero']}",
     )
     story = [Paragraph("Oraux de second Groupe", style=title_style)]
     story.append(Paragraph(centre_examen, style=h4_style))
     story.append(Spacer(1, 30))
     story.append(
-        Paragraph(f"{infos_candidat['nom']} (INE : {infos_candidat['ine']})",
+        Paragraph(f"{infos_candidat['nom']} (N° candidat : {infos_candidat['numero']})",
                   style=h1_style)
     )
     story.append(Spacer(1, 30))
@@ -397,7 +397,7 @@ def fiche_candidat(infos_candidat, tempdirname, file_dir='.', filename_root='',
     story.append(Spacer(1, 20))
 
     # QR code vers la fiche en ligne
-    url_candidat = url_for('candidat_court', id_candidat=infos_candidat['ine'],
+    url_candidat = url_for('candidat_court', id_candidat=infos_candidat['numero'],
                            _external=True)
     story.append(Image(make_qr_image(url_candidat, tempdirname, dpi=500),
                        useDPI=True))
@@ -412,7 +412,7 @@ def fiche_candidat(infos_candidat, tempdirname, file_dir='.', filename_root='',
         story.append(Spacer(1, 20))
         story.append(Paragraph("Identifiants de connexion :", style=normal_style))
         story.append(Paragraph(
-            f'INE : <font name="MonoFont"><b>{infos_candidat["ine"]}</b></font> — '
+            f'N° candidat : <font name="MonoFont"><b>{infos_candidat["numero"]}</b></font> — '
             f'Mot de passe : <font name="MonoFont"><b>{login_key}</b></font>',
             style=normal_style,
         ))
@@ -525,7 +525,7 @@ def _build_papillons_pdf(items, filename, title1, title2, id_label,
     :param filename: chemin de sortie PDF
     :param title1: première ligne du titre de chaque papillon
     :param title2: deuxième ligne du titre (souvent le nom du centre)
-    :param id_label: libellé de l'identifiant (ex. 'Salle', 'INE')
+    :param id_label: libellé de l'identifiant (ex. 'Salle', 'N° candidat')
     :param get_id/get_name/get_pwd/get_url: callables item → valeur
     :param qr_size: taille du QR code sur chaque papillon
     """
@@ -592,7 +592,7 @@ def liste_papillons_candidats(candidats, filename='static/docs/papillons_candida
     """
     Génère les papillons de connexion pour les candidats (élèves).
 
-    :param candidats: liste de dicts {'nom', 'ine', 'login_key'}
+    :param candidats: liste de dicts {'nom', 'numero', 'login_key'}
     :param filename: chemin du PDF de sortie
     :param base_url: URL de base du site (ex. 'https://stex.mesoraux.fr')
     :param centre_examen: nom du centre affiché sur chaque papillon
@@ -602,11 +602,11 @@ def liste_papillons_candidats(candidats, filename='static/docs/papillons_candida
         filename=filename,
         title1="Oraux de second groupe — Candidat",
         title2=centre_examen,
-        id_label="INE",
-        get_id=lambda d: d['ine'],
+        id_label="N° candidat",
+        get_id=lambda d: d['numero'],
         get_name=lambda d: d['nom'],
         get_pwd=lambda d: d['login_key'],
-        get_url=lambda d: f"{base_url}/c/{d['ine']}" if base_url else "",
+        get_url=lambda d: f"{base_url}/c/{d['numero']}" if base_url else "",
         qr_size=18 * mm,
     )
 

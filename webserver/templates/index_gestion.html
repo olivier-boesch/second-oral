@@ -44,8 +44,8 @@
             <tr class="{{ loop.cycle("tr_light","tr_light","tr_dark","tr_dark") }}">
             {%  if loop.index0 % 2 == 0 %}
                 <td rowspan="2">
-                    <a href="{{ url_for('candidat', id_candidat=oral['ine']) }}" target="_blank">
-                        {{ oral['nom'] }} ({{ oral['ine'] }})</a> {% if oral['tiers_temps'] %}
+                    <a href="{{ url_for('candidat', id_candidat=oral['numero']) }}" target="_blank">
+                        {{ oral['nom'] }} ({{ oral['numero'] }})</a> {% if oral['tiers_temps'] %}
                         <div class="tooltip">🔴
                             <span class="tooltiptext">aménagement d'épreuves</span>
                         </div> {% endif %}

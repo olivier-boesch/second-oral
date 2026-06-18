@@ -5,7 +5,7 @@ Gestion des oraux de second groupe :
   - Consultation publique (candidats, salles, loges)
   - Authentification examinateurs (mot de passe par salle)
   - Authentification admin (TOTP)
-  - Authentification candidats (INE + papillon)
+  - Authentification candidats (numéro de candidat + papillon)
   - Signature dématérialisée
   - Génération de documents PDF
 """
@@ -209,7 +209,7 @@ def _inject_csp_nonce():
 def _inject_candidat_nom():
     """
     Rend le nom du candidat connecté disponible dans tous les templates —
-    RGPD : l'en-tête (auth_icon.html) doit afficher son nom, jamais son INE.
+    RGPD : l'en-tête (auth_icon.html) doit afficher son nom, jamais son numéro.
     """
     return {'candidat_nom': get_candidat_nom()}
 
@@ -242,7 +242,7 @@ def _sse_channel_allowed(channel: str) -> bool:
     Le nom du canal est entièrement choisi par le client via `?channel=...`
     (cf. flask_sse, qui ne fait lui-même aucune vérification d'autorisation).
     Sans ce contrôle, n'importe quel utilisateur authentifié — y compris un
-    candidat — pourrait s'abonner aux canaux d'autrui (ex. `candidat_<ine>`
+    candidat — pourrait s'abonner aux canaux d'autrui (ex. `candidat_<numero>`
     d'un autre candidat) et récupérer des données personnelles diffusées
     dessus (IDOR / fuite RGPD).
     """
@@ -280,7 +280,7 @@ def protect_sse():
                 and 'loge' not in session):
             abort(401)
         # Plusieurs canaux séparés par des virgules sont acceptés (ex.
-        # `candidat_<ine>,general` : une page écoute à la fois son canal
+        # `candidat_<numero>,general` : une page écoute à la fois son canal
         # dédié et le canal général de rechargement global) — cf. flask_sse.
         channels = (request.args.get('channel') or 'sse').split(',')
         if not all(_sse_channel_allowed(channel) for channel in channels):
@@ -291,7 +291,7 @@ app._otp = pyotp.TOTP(LOGIN_KEY)  # type: ignore[attr-defined]
 
 
 def _get_redis_pub_for_ine():
-    """Client Redis (court-circuit) pour stocker les tokens INE temporaires."""
+    """Client Redis (court-circuit) pour stocker les tokens de numéro candidat temporaires."""
     from flask_sse import _get_redis_pub
     return _get_redis_pub(app.config.get('REDIS_URL', 'redis://localhost'))
 
@@ -417,30 +417,30 @@ def is_any_authenticated():
     return is_authenticated() or is_student_user()
 
 
-def is_student_user(ine=None):
+def is_student_user(numero=None):
     """
     Renvoie True si un candidat est connecté.
-    Si ine est fourni, vérifie que le candidat connecté est bien celui-là.
+    Si numero est fourni, vérifie que le candidat connecté est bien celui-là.
     """
     if 'candidat' not in session:
         return False
-    if ine is not None:
-        return session['candidat'] == str(ine)
+    if numero is not None:
+        return session['candidat'] == str(numero)
     return True
 
 
 def get_candidat_nom():
     """
-    Renvoie le nom (et jamais l'INE) du candidat connecté, ou None.
+    Renvoie le nom (et jamais le numéro) du candidat connecté, ou None.
     Résultat mis en cache dans le contexte de requête (flask.g).
     """
     if '_candidat_nom' in g:
         return g._candidat_nom
-    ine = session.get('candidat')
-    if not ine:
+    numero = session.get('candidat')
+    if not numero:
         g._candidat_nom = None
         return None
-    infos = db_get(db_facility_web.SELECT_CANDIDAT_AUTH, ine, no_list_auto=False)
+    infos = db_get(db_facility_web.SELECT_CANDIDAT_AUTH, numero, no_list_auto=False)
     g._candidat_nom = infos[0]['nom'] if infos else None
     return g._candidat_nom
 
@@ -585,10 +585,10 @@ class LoginLogeForm(FlaskForm):
 
 
 class LoginCandidatForm(FlaskForm):
-    ine = StringField(
-        'INE',
-        render_kw={"autofocus": True, "placeholder": "Numéro INE"},
-        validators=[DataRequired(message="Entrez votre INE")],
+    numero = StringField(
+        'N° candidat',
+        render_kw={"autofocus": True, "placeholder": "Numéro de candidat"},
+        validators=[DataRequired(message="Entrez votre numéro de candidat")],
     )
     password = PasswordField(
         'Mot de passe',
@@ -636,14 +636,14 @@ def index() -> ResponseReturnValue:
 @app.route('/c')
 @nocache
 def candidat_form_court() -> ResponseReturnValue:
-    """Raccourci `/c` → redirige vers le formulaire de recherche par INE."""
+    """Raccourci `/c` → redirige vers le formulaire de recherche par numéro de candidat."""
     return redirect(url_for('candidat_form'))
 
 
 @app.route("/candidat", methods=["GET"])
 @nocache
 def candidat_form() -> ResponseReturnValue:
-    """Formulaire de recherche d'un candidat par numéro INE."""
+    """Formulaire de recherche d'un candidat par numéro de candidat."""
     num = request.args.get("num", type=int, default=0)
     if num != 0:
         return redirect(url_for('candidat', id_candidat=num))
@@ -667,7 +667,7 @@ def candidat(id_candidat: str | None = None) -> ResponseReturnValue:
         abort(403)
     # Toute autre personne non authentifiée
     if not is_any_authenticated():
-        # Stocker l'INE dans Redis (TTL 5 min, token aléatoire) pour éviter
+        # Stocker le numéro dans Redis (TTL 5 min, token aléatoire) pour éviter
         # qu'il apparaisse dans l'URL ET pour éviter qu'il soit lisible en
         # base64 dans le payload du cookie Flask (non chiffré).
         _ine_token = token_urlsafe(16)
@@ -743,11 +743,11 @@ def loge(id_loge: str) -> ResponseReturnValue:
     donnees_loge['oraux'] = db_get(
         db_facility_web.SELECT_ORAUX_LOGE, id_loge, no_list_auto=False
     )
-    students_ine_list = [item['ine'] for item in donnees_loge['oraux']]
+    students_ine_list = [item['numero'] for item in donnees_loge['oraux']]
     return render_template(
         "loge.html",
         data=donnees_loge,
-        students_ine=students_ine_list,
+        students_numeros=students_ine_list,
         authenticated=is_authenticated(),
         username=get_username(),
         centre=CENTRE_EXAMEN,
@@ -954,14 +954,14 @@ def salle(id_salle: str) -> ResponseReturnValue:
     donnees_salle['oraux'] = db_get(
         db_facility_web.SELECT_ORAUX_SALLE, donnees_salle['id'], no_list_auto=False
     )
-    students_ine_list = [item['ine'] for item in donnees_salle['oraux']]
+    students_ine_list = [item['numero'] for item in donnees_salle['oraux']]
     # L'admin peut émarger sur n'importe quelle salle
     is_userpage = is_admin_user() or (session.get('user') == donnees_salle['salle'])
     return render_template(
         "salle.html",
         centre=CENTRE_EXAMEN,
         data=donnees_salle,
-        students_ine=students_ine_list,
+        students_numeros=students_ine_list,
         url_of_page=request.url,
         username=get_username(),
         is_userpage=is_userpage,
@@ -1133,37 +1133,37 @@ def logout() -> ResponseReturnValue:
 @nocache
 @limiter.limit("10 per minute")
 def login_candidat() -> ResponseReturnValue:
-    """Connexion d'un candidat par INE + mot de passe du papillon."""
+    """Connexion d'un candidat par numéro de candidat + mot de passe du papillon."""
     form = LoginCandidatForm()
     if request.method == 'GET':
         message = request.args.get('message', None)
-        # INE récupéré depuis Redis (usage unique, TTL 5 min)
+        # Numéro récupéré depuis Redis (usage unique, TTL 5 min)
         _tok = session.pop('_login_tok', '')
         if _tok:
             _r = _get_redis_pub_for_ine()
             _raw = _r.getdel(f"login_ine:{_tok}")
-            ine = _raw.decode('utf-8') if _raw else ''
+            numero = _raw.decode('utf-8') if _raw else ''
         else:
-            ine = request.args.get('ine', '')
-        if ine:
-            form.ine.data = ine
+            numero = request.args.get('numero', '')
+        if numero:
+            form.numero.data = numero
         return render_template('login_candidat.html', centre=CENTRE_EXAMEN,
                                form=form, message=message)
 
-    ine = form.ine.data.strip() if form.ine.data else ''
+    numero = form.numero.data.strip() if form.numero.data else ''
     password = form.password.data.strip() if form.password.data else ''
     candidat_info = db_get(db_facility_web.SELECT_CANDIDAT_AUTH,
-                           ine, no_list_auto=False)
+                           numero, no_list_auto=False)
     if (len(candidat_info) == 1
-            and check_password(password, ine, candidat_info[0]['password_hash'])):
+            and check_password(password, numero, candidat_info[0]['password_hash'])):
         session.clear()
-        session['candidat'] = ine
+        session['candidat'] = numero
         session['_ts'] = __import__('time').time()
-        app.logger.info(f"Candidat {ine}: connecté")
-        return redirect(url_for('candidat', id_candidat=ine))
-    app.logger.warning(f"Candidat {ine}: échec connexion")
-    _record_auth_failure("candidat", ine)
-    return redirect(url_for('login_candidat', message='INE ou mot de passe incorrect'))
+        app.logger.info(f"Candidat {numero}: connecté")
+        return redirect(url_for('candidat', id_candidat=numero))
+    app.logger.warning(f"Candidat {numero}: échec connexion")
+    _record_auth_failure("candidat", numero)
+    return redirect(url_for('login_candidat', message='Numéro ou mot de passe incorrect'))
 
 
 @app.route('/logout-candidat')
@@ -1171,8 +1171,8 @@ def login_candidat() -> ResponseReturnValue:
 def logout_candidat() -> ResponseReturnValue:
     """Déconnexion d'un candidat."""
     if 'candidat' in session:
-        ine = session.pop('candidat')
-        app.logger.info(f"Candidat {ine}: déconnecté")
+        numero = session.pop('candidat')
+        app.logger.info(f"Candidat {numero}: déconnecté")
     return redirect(url_for('index'))
 
 
@@ -1286,7 +1286,7 @@ def edit_oral() -> ResponseReturnValue:
             'heure_oral': request.form.get('heure_oral'),
             'mis_a_jour': 1 if request.form.get('mis_a_jour') == 'on' else 0,
         }
-        ine = request.form.get('ine')
+        numero = request.form.get('numero')
         db_update(db_facility_web.UPDATE_INFOS_ORAL, **d)
         if d['mis_a_jour'] == 1:
             # Récupère salle et loge pour publier sur les canaux ciblés
@@ -1297,17 +1297,17 @@ def edit_oral() -> ResponseReturnValue:
             )
             # #3 — Le canal 'general' est ouvert à tous les utilisateurs
             # authentifiés (y compris candidats et loges) : ne jamais y
-            # diffuser de donnée personnelle (INE). Les destinataires
+            # diffuser de donnée personnelle (numéro de candidat). Les destinataires
             # légitimes sont notifiés via les canaux ciblés ci-dessous, qui
             # sont désormais soumis à autorisation (cf. _sse_channel_allowed).
             sse.publish(data='', type="data_updated", channel='general')
             if exam:
-                sse.publish(data=ine, type="data_updated",
+                sse.publish(data=numero, type="data_updated",
                             channel=f"salle_{exam[0]['salle']}")
-                sse.publish(data=ine, type="data_updated",
+                sse.publish(data=numero, type="data_updated",
                             channel=f"loge_{exam[0]['loge']}")
-            sse.publish(data=ine, type="data_updated",
-                        channel=f"candidat_{ine}")
+            sse.publish(data=numero, type="data_updated",
+                        channel=f"candidat_{numero}")
         url = _safe_redirect_url(request.form.get("link_back"))
         return redirect(url or url_for('index_gestion', _anchor=str(d['id'])))
 
@@ -1576,14 +1576,14 @@ def archive_download() -> ResponseReturnValue:
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         planning = db_get(db_facility_web.SELECT_DOC_ARCHIVE_PLANNING, no_list_auto=False)
         zf.writestr('planning_oraux.csv', _csv_bytes(
-            ['candidat', 'ine', 'matiere', 'examinateur', 'salle',
+            ['candidat', 'numero', 'matiere', 'examinateur', 'salle',
              'heure_sujet', 'heure_oral', 'heure_fin', 'modifie'],
             planning,
         ))
 
         emargements = db_get(db_facility_web.SELECT_DOC_ARCHIVE_EMARGEMENTS, no_list_auto=False)
         zf.writestr('emargements.csv', _csv_bytes(
-            ['candidat', 'ine', 'examinateur', 'salle', 'heure_oral',
+            ['candidat', 'numero', 'examinateur', 'salle', 'heure_oral',
              'signe', 'heure_emargement', 'hash_emargement'],
             emargements,
         ))

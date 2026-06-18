@@ -34,11 +34,11 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="id"        value="{{ donnees_oral['id'] }}">
     <input type="hidden" name="link_back" value="{{ link_back }}">
-    <input type="hidden" name="ine"       value="{{ donnees_oral['ine'] }}">
+    <input type="hidden" name="numero"    value="{{ donnees_oral['numero'] }}">
 
     <p style="margin:0; font-size:.9rem; color:var(--text-md);">
         {{ donnees_oral['nom'] }}
-        <span style="color:var(--text-sm);">({{ donnees_oral['ine'] }} · {{ donnees_oral['etablissement'] }})</span>
+        <span style="color:var(--text-sm);">({{ donnees_oral['numero'] }} · {{ donnees_oral['etablissement'] }})</span>
         {% if donnees_oral['tiers_temps'] %}<span title="Aménagement">🔴</span>{% endif %}
     </p>
 

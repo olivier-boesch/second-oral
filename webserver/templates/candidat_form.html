@@ -2,15 +2,15 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Mes oraux - {{centre }} - formulaire Candidat par INE</title>
+    <title>Mes oraux - {{centre }} - formulaire Candidat par numéro</title>
     {% include 'style.html' %}
 </head>
 <body class="body-for-sticky">
 {% include 'auth_icon.html' %}
-    <h1 class="centered"> Recherche fiche candidat par INE</h1>
+    <h1 class="centered"> Recherche fiche candidat par numéro</h1>
     <form class="classic" action="{{ url_for('candidat_form') }}" method="get">
         <label for="num">Numéro de candidat: </label>
-        <input name="num" placeholder="INE" type="number">
+        <input name="num" placeholder="Numéro de candidat" type="number">
     </form>
     {% include 'footer.html' %}
 </body>

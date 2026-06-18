@@ -200,14 +200,14 @@ def validate_candidats(rows: list[dict], matieres: set[str], noms_courts: set[st
         else:
             if not _INE_RE.search(cand):
                 issues.append(_err("candidats", i,
-                    f"Format invalide pour '{cand}' : attendu 'Nom Prénom (INE)'."))
+                    f"Format invalide pour '{cand}' : attendu 'Nom Prénom (numéro)'."))
             else:
-                ine = cand.split("(")[-1].rstrip(")")
-                if ine in ines:
+                numero = cand.split("(")[-1].rstrip(")")
+                if numero in ines:
                     issues.append(_err("candidats", i,
-                        f"INE en double : '{ine}' (candidat '{cand}')."))
+                        f"Numéro en double : '{numero}' (candidat '{cand}')."))
                 else:
-                    ines.add(ine)
+                    ines.add(numero)
 
         tt = r.get("TT", "").strip()
         if tt not in ("0", "1"):

@@ -153,7 +153,7 @@ class Candidat:
         """
         :param nom: nom du candidat
         :type nom: str
-        :param numero: ine du candidat
+        :param numero: numéro du candidat
         :type numero: str
         :param choix1: choix de matiere 1
         :type choix1: Matiere
@@ -195,7 +195,7 @@ class Candidat:
     @property
     def infos_connexion(self) -> dict:
         """Renvoie les informations de connexion du candidat pour les papillons."""
-        return {'nom': self.nom, 'ine': self.numero, 'login_key': self.login_key}
+        return {'nom': self.nom, 'numero': self.numero, 'login_key': self.login_key}
 
     def verifie_temps_minimum(self, oral: "Oral", intervalle_minimum: int) -> bool:
         """
@@ -578,7 +578,7 @@ class AlgoOne:
             key=lambda m: m[0],
         )
 
-        # Candidats : {'nom', 'ine', 'login_key'}
+        # Candidats : {'nom', 'numero', 'login_key'}
         liste_candidats = sorted(
             [c.infos_connexion for c in self.liste_candidats],
             key=lambda d: d['nom'],

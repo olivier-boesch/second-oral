@@ -85,7 +85,7 @@ class TestStateChangingRoutesRequirePost:
 class TestSSEChannelAuthorization:
     """`_sse_channel_allowed` doit empêcher un utilisateur de s'abonner aux
     canaux d'autrui (IDOR identifié dans l'audit : un candidat pouvait lire
-    les INE d'autres candidats via `/stream?channel=candidat_<autre_ine>`)."""
+    les numéros d'autres candidats via `/stream?channel=candidat_<autre_numero>`)."""
 
     def _allowed(self, flask_app, session_data, channel):
         from app import _sse_channel_allowed
@@ -147,9 +147,9 @@ class TestNoPersonalDataOnGeneralChannel:
     def test_general_publish_carries_no_ine(self):
         source = APP_PY.read_text(encoding="utf-8")
         # La diffusion vers 'general' doit utiliser une charge utile vide,
-        # jamais la variable contenant l'INE.
+        # jamais la variable contenant le numéro de candidat.
         assert "sse.publish(data='', type=\"data_updated\", channel='general')" in source
-        assert "sse.publish(data=ine, type=\"data_updated\", channel='general')" not in source
+        assert "sse.publish(data=numero, type=\"data_updated\", channel='general')" not in source
 
 
 # ── #4 — Hachage des mots de passe ────────────────────────────────────────────
@@ -245,20 +245,20 @@ class TestAuthFailureCleanup:
 # ── #6 — XSS latent (repr + |safe) ────────────────────────────────────────────
 
 class TestNoUnsafeJsonInjection:
-    """`students_ine` doit être sérialisé via `tojson` (échappement HTML/JS
+    """`students_numeros` doit être sérialisé via `tojson` (échappement HTML/JS
     correct) — l'ancien `repr(...) | safe` n'échappait pas les caractères
-    spéciaux et aurait permis une injection si une valeur d'INE en contenait."""
+    spéciaux et aurait permis une injection si une valeur en contenait."""
 
     def test_no_repr_safe_pattern_in_app(self):
         source = APP_PY.read_text(encoding="utf-8")
-        assert "repr(item['ine'])" not in source
+        assert "repr(item['numero'])" not in source
 
     @pytest.mark.parametrize("template", ["loge.html", "salle.html"])
     def test_templates_use_tojson(self, template):
         path = APP_PY.parent / "templates" / template
         content = path.read_text(encoding="utf-8")
-        assert "students_ine | tojson" in content
-        assert "students_ine | safe" not in content
+        assert "students_numeros | tojson" in content
+        assert "students_numeros | safe" not in content
 
 
 # ── #7 — Pas de secret en clair dans les logs ─────────────────────────────────
@@ -336,7 +336,7 @@ class TestSafeRedirectUrl:
 
 class TestCandidatPdfAccessControl:
     """Vuln audit : la route `/download` servait les fichiers `candidat_*.pdf`
-    sans aucune authentification. Ces PDFs contiennent le nom, l'INE, le
+    sans aucune authentification. Ces PDFs contiennent le nom, le numéro de candidat, le
     planning d'oraux et les identifiants de connexion du candidat."""
 
     def test_candidat_pdf_denied_without_session(self, client):

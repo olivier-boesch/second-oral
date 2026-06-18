@@ -25,7 +25,7 @@
         // Mise à jour d'un oral : modal si la page concerne ce candidat,
         // sinon rechargement direct (ex. liste générale sans modal)
         source.addEventListener("data_updated", function (event) {
-            var ine = event.data;
+            var numero = event.data;
             var modal = document.getElementById("modal");
 
             if (!modal) {
@@ -34,7 +34,7 @@
             }
 
             // Filtre : concerne-t-il un candidat affiché sur cette page ?
-            if (typeof data === "undefined" || data.indexOf(ine) === -1) {
+            if (typeof data === "undefined" || data.indexOf(numero) === -1) {
                 return;
             }
 

@@ -13,11 +13,11 @@
         <strong>Erreur : {{ message }}</strong>
     </p>
 {% endif %}
-<p class="centered">Entrez votre numéro INE et le mot de passe figurant sur votre papillon.</p>
+<p class="centered">Entrez votre numéro de candidat et le mot de passe figurant sur votre papillon.</p>
 <form class="form-salle" action="{{ url_for('login_candidat') }}" method="post">
     {{ form.hidden_tag() }}
-    {{ form.ine.label }}
-    {{ form.ine }}
+    {{ form.numero.label }}
+    {{ form.numero }}
     {{ form.password.label }}
     <div class="password">
         {{ form.password(id="id_password_candidat") }}
@@ -37,9 +37,9 @@
     (function () {
         const btn = document.getElementById('togglePassword');
         const pwd = document.getElementById('id_password_candidat');
-        const ineField = document.querySelector('input[name="ine"]');
+        const ineField = document.querySelector('input[name="numero"]');
 
-        // Si l'INE est déjà rempli (pré-rempli depuis /c/ ou /candidat/),
+        // Si le numéro est déjà rempli (pré-rempli depuis /c/ ou /candidat/),
         // placer le curseur directement sur le mot de passe.
         if (ineField && ineField.value.trim() !== '') {
             pwd.focus();

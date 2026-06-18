@@ -5,7 +5,7 @@
     <title>Mes Oraux - {{centre }} - Salle {{ data['salle'] }}</title>
     {% include 'style.html' %}
     <script nonce="{{ csp_nonce }}">
-        let data = {{ students_ine | tojson }};
+        let data = {{ students_numeros | tojson }};
     </script>
     {% include 'script_reload.html' %}
     <script nonce="{{ csp_nonce }}">
@@ -44,7 +44,7 @@
     <table class="table_mobile">
         <tr>
             <th>Ordre</th>
-            <th>Candidat (INE)</th>
+            <th>Candidat (N°)</th>
             <th>Heure Sujet</th>
             <th>Heure Oral</th>
             {%  if is_userpage %}
@@ -60,7 +60,7 @@
             {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
             {{ loop.index }}</td>
             {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
-                <a href="{{ url_for('candidat', id_candidat=oral['ine']) }}" target="_blank">{{ oral['candidat'] }}</a> ({{ oral['ine'] }})
+                <a href="{{ url_for('candidat', id_candidat=oral['numero']) }}" target="_blank">{{ oral['candidat'] }}</a> ({{ oral['numero'] }})
                 {% if oral['tiers_temps'] %}
                         <div class="tooltip">🔴
                             <span class="tooltiptext">le candidat dispose d'un aménagement d'épreuves

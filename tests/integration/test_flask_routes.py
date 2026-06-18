@@ -250,17 +250,17 @@ class TestLoginCandidat:
     def test_wrong_password_redirects_to_login_candidat(self, client, db_mock):
         db_mock.make_sql_select.return_value = [{"password_hash": "bad-hash"}]
         r = client.post("/login-candidat",
-                        data={"ine": "111111111AA", "password": "wrong"},
+                        data={"numero": "111111111AA", "password": "wrong"},
                         follow_redirects=False)
         assert r.status_code == 302
         assert "/login-candidat" in r.headers["Location"]
         with client.session_transaction() as sess:
             assert "candidat" not in sess
 
-    def test_unknown_ine_redirects_to_login_candidat(self, client, db_mock):
+    def test_unknown_numero_redirects_to_login_candidat(self, client, db_mock):
         db_mock.make_sql_select.return_value = []
         r = client.post("/login-candidat",
-                        data={"ine": "000000000ZZ", "password": "anything"},
+                        data={"numero": "000000000ZZ", "password": "anything"},
                         follow_redirects=False)
         assert r.status_code == 302
         assert "/login-candidat" in r.headers["Location"]
@@ -268,16 +268,16 @@ class TestLoginCandidat:
     def test_correct_password_sets_session(self, client, db_mock):
         import sys
         app_secrets = sys.modules["app_secrets"]
-        ine = "111111111AA"
-        good_hash = app_secrets.hash_password("motdepasse", ine)
+        numero = "111111111AA"
+        good_hash = app_secrets.hash_password("motdepasse", numero)
         db_mock.make_sql_select.return_value = [{"password_hash": good_hash}]
         r = client.post("/login-candidat",
-                        data={"ine": ine, "password": "motdepasse"},
+                        data={"numero": numero, "password": "motdepasse"},
                         follow_redirects=False)
         assert r.status_code == 302
         assert "/login-candidat" not in r.headers["Location"]
         with client.session_transaction() as sess:
-            assert sess.get("candidat") == ine
+            assert sess.get("candidat") == numero
 
     def test_logout_candidat_clears_session(self, client):
         with client.session_transaction() as sess:
@@ -419,7 +419,7 @@ class TestCandidatRoutes:
         """Un candidat authentifié peut accéder à sa fiche."""
         db_mock.make_sql_select.return_value = [{
             "id": 1, "nom": "Martin", "prenom": "Paul",
-            "ine": "111111111AA", "etablissement": "Lycée Test",
+            "numero": "111111111AA", "etablissement": "Lycée Test",
             "login_key": "key", "tt": 0,
         }]
         with client.session_transaction() as sess:
@@ -435,12 +435,12 @@ class TestCandidatRoutes:
 
 class TestArchiveRoutes:
     PLANNING_ROW = {
-        "candidat": "Dupont Jean", "ine": "111111111AA", "matiere": "Maths",
+        "candidat": "Dupont Jean", "numero": "111111111AA", "matiere": "Maths",
         "examinateur": "Martin", "salle": "101", "heure_sujet": "08:00",
         "heure_oral": "08:30", "heure_fin": "08:50", "modifie": None,
     }
     EMARGEMENT_ROW = {
-        "candidat": "Dupont Jean", "ine": "111111111AA", "examinateur": "Martin",
+        "candidat": "Dupont Jean", "numero": "111111111AA", "examinateur": "Martin",
         "salle": "101", "heure_oral": "08:30", "signe": 1,
         "heure_emargement": "08:50", "hash_emargement": "abc123",
     }

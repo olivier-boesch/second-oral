@@ -41,7 +41,7 @@
             {%  if loop.index % 2 != 0 %}
                 {% if dont_scroll %}
                 <td rowspan="2">
-                <a href="{{ url_for('candidat', id_candidat=oral['ine']) }}" target="_blank">
+                <a href="{{ url_for('candidat', id_candidat=oral['numero']) }}" target="_blank">
                     {{ oral['nom'] }}</a></td>
                 {% else %}
                 <td rowspan="2">{{ oral['nom'] }}</td>

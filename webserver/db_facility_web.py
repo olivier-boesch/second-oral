@@ -13,7 +13,7 @@ INIT_DB = "SET @salt = %(salt)s"
 # ---------- Candidat
 
 SELECT_INFOS_CANDIDAT = """
-SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS ine,
+SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Candidat.login_key AS login_key
 FROM Candidat
 WHERE Candidat.numero = %s
@@ -32,13 +32,13 @@ ORDER BY Oral.heure_sujet
 
 SELECT_CANDIDAT_AUTH = """
 SELECT Candidat.id AS id, Candidat.nom AS nom,
-       Candidat.numero AS ine, Candidat.password_hash AS password_hash
+       Candidat.numero AS numero, Candidat.password_hash AS password_hash
 FROM Candidat
 WHERE Candidat.numero = %s
 """
 
 SELECT_ALL_CANDIDATS_PAPILLONS = """
-SELECT Candidat.nom AS nom, Candidat.numero AS ine, Candidat.login_key AS login_key
+SELECT Candidat.nom AS nom, Candidat.numero AS numero, Candidat.login_key AS login_key
 FROM Candidat
 ORDER BY Candidat.nom
 """
@@ -61,7 +61,7 @@ WHERE Examinateur.salle = %s
 """
 
 SELECT_ORAUX_SALLE = """
-SELECT Oral.id AS id, Candidat.nom AS candidat, Candidat.numero AS ine,
+SELECT Oral.id AS id, Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Oral.heure_sujet AS sujet,
        Oral.heure_oral AS oral, Oral.mis_a_jour AS maj, Oral.emargement AS emargement,
        Oral.heure_emargement AS heure_emargement
@@ -84,7 +84,7 @@ SELECT nom, password_hash FROM Loge WHERE nom = %s
 
 SELECT_LISTE_ORAUX = """
 SELECT Oral.id AS id_oral, Candidat.id AS id_candidat, Candidat.nom AS nom,
-       Candidat.numero AS ine, Candidat.tiers_temps AS tiers_temps,
+       Candidat.numero AS numero, Candidat.tiers_temps AS tiers_temps,
        Matiere.nom AS matiere, Oral.heure_sujet AS heure,
        Examinateur.salle AS salle, Oral.mis_a_jour AS maj
 FROM Oral
@@ -109,7 +109,7 @@ WHERE Examinateur.loge = %s
 """
 
 SELECT_ORAUX_LOGE = """
-SELECT Examinateur.loge AS loge, Candidat.nom AS candidat, Candidat.numero AS ine,
+SELECT Examinateur.loge AS loge, Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Examinateur.salle AS salle,
        Oral.heure_sujet AS sujet, Oral.mis_a_jour AS maj, Oral.heure_oral AS oral,
        Matiere.nom AS matiere, Matiere.nom_court AS matiere_court,
@@ -136,7 +136,7 @@ WHERE Examinateur.matiere = %s
 """
 
 SELECT_INFOS_ORAL = """
-SELECT Oral.id AS id, Candidat.nom AS nom, Candidat.numero AS ine,
+SELECT Oral.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
        Candidat.etablissement AS etablissement, Candidat.tiers_temps AS tiers_temps,
        Candidat.id AS id_candidat, Examinateur.id AS id_examinateur,
        Examinateur.matiere AS id_matiere, Oral.heure_sujet AS heure_sujet,
@@ -205,7 +205,7 @@ WHERE id = %(id)s
 """
 
 SELECT_SIGNATURE_ORAL = """
-SELECT Oral.id AS id_oral, Candidat.nom AS nom, Candidat.numero AS ine,
+SELECT Oral.id AS id_oral, Candidat.nom AS nom, Candidat.numero AS numero,
        Examinateur.salle AS salle, Examinateur.nom AS examinateur,
        Oral.emargement AS emargement, Oral.heure_emargement AS heure_emargement,
        Matiere.nom AS matiere
@@ -243,7 +243,7 @@ GROUP BY Examinateur.nom
 """
 
 SELECT_ORAUX_EXAMINATEUR = """
-SELECT Candidat.nom AS candidat, Candidat.numero AS ine,
+SELECT Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.etablissement AS etablissement, Candidat.tiers_temps AS tiers_temps,
        Oral.heure_sujet AS heure, Oral.mis_a_jour AS maj, Oral.id AS id
 FROM Oral
@@ -292,7 +292,7 @@ ORDER BY Examinateur.salle
 """
 
 SELECT_DOC_LISTE_SALLES_ORAUX = """
-SELECT Candidat.nom AS candidat, Candidat.numero AS ine,
+SELECT Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Oral.heure_sujet AS sujet,
        Oral.heure_oral AS oral, Oral.emargement AS emargement,
        Oral.heure_emargement AS heure_emargement
@@ -304,7 +304,7 @@ ORDER BY Oral.heure_sujet
 """
 
 SELECT_DOC_LISTE_CANDIDATS = """
-SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS ine,
+SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Candidat.etablissement,
        Candidat.login_key AS login_key
 FROM Candidat
@@ -321,7 +321,7 @@ ORDER BY Oral.heure_sujet
 """
 
 SELECT_DOC_INFOS_CANDIDAT = """
-SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS ine,
+SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Candidat.etablissement,
        Candidat.login_key AS login_key
 FROM Candidat
@@ -340,7 +340,7 @@ ORDER BY Oral.heure_sujet
 # ---------- Archive de fin de session (RGPD : données à conserver uniquement)
 
 SELECT_DOC_ARCHIVE_PLANNING = """
-SELECT Candidat.nom AS candidat, Candidat.numero AS ine,
+SELECT Candidat.nom AS candidat, Candidat.numero AS numero,
        Matiere.nom AS matiere, Examinateur.nom AS examinateur,
        Examinateur.salle AS salle, Oral.heure_sujet AS heure_sujet,
        Oral.heure_oral AS heure_oral, Oral.heure_fin AS heure_fin,
@@ -353,7 +353,7 @@ ORDER BY Oral.heure_sujet, Examinateur.salle
 """
 
 SELECT_DOC_ARCHIVE_EMARGEMENTS = """
-SELECT Candidat.nom AS candidat, Candidat.numero AS ine,
+SELECT Candidat.nom AS candidat, Candidat.numero AS numero,
        Examinateur.nom AS examinateur, Examinateur.salle AS salle,
        Oral.heure_oral AS heure_oral,
        (Oral.emargement != '') AS signe,

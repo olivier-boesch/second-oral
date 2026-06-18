@@ -60,7 +60,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | **Admin** (TOTP) | `session['user'] = 'admin'` | ✅ toutes | ✅ toutes | ✅ toutes | ✅ |
 | **Examinateur** | `session['user'] = '<salle>'` | ✅ toutes | ✅ sa salle | ✅ sa loge | ✅ |
 | **Loge** | `session['loge'] = '<nom>'` | ✅ toutes | ✅ salles de sa loge | ✅ sa loge | ✅ |
-| **Candidat** | `session['candidat'] = '<ine>'` | ✅ sa fiche uniquement | ❌ | ❌ | ❌ |
+| **Candidat** | `session['candidat'] = '<numero>'` | ✅ sa fiche uniquement | ❌ | ❌ | ❌ |
 | **Anonyme** | — | ❌ → login | ❌ → login | ❌ → login | ❌ → login |
 
 **Pages de connexion :**
@@ -70,7 +70,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | Admin | `/login` | Code TOTP 6 chiffres (toutes les 30 s) |
 | Examinateur | `/login-examinateur` | Mot de passe par salle |
 | Surveillant de loge | `/login-loge` | Mot de passe par loge |
-| Candidat | `/login-candidat` | Numéro INE + mot de passe du papillon |
+| Candidat | `/login-candidat` | Numéro de candidat + mot de passe du papillon |
 
 ---
 
@@ -165,7 +165,7 @@ Trois fichiers CSV sont nécessaires dans `data/` :
 
 | Fichier | Colonnes |
 |---|---|
-| `candidats.csv` | `CANDIDAT` (Nom Prénom (INE)) ; `CHOIX DISCIPLINE 1` ; `CHOIX DISCIPLINE 2` ; `TT` (0/1) ; `Etab` ; `Profs` |
+| `candidats.csv` | `CANDIDAT` (Nom Prénom (numéro)) ; `CHOIX DISCIPLINE 1` ; `CHOIX DISCIPLINE 2` ; `TT` (0/1) ; `Etab` ; `Profs` |
 | `examinateurs.csv` | `Nom` ; `Disc.poste` ; `Salle` ; `Heure mini` ; `Etab` ; `Loge` |
 | `preps.csv` | `Matiere` ; `Matière court` ; `Temps preparation (min)` ; `Duree (min)` |
 
@@ -194,7 +194,7 @@ lance `algo.py` dans Docker, puis redémarre l'app.
 | Fichier | Contenu | Regénérable depuis le web |
 |---|---|---|
 | `papillons_examinateurs.pdf` | Salle + nom + mot de passe | ❌ (hash uniquement en base) |
-| `papillons_candidats.pdf` | INE + mot de passe + QR code | ✅ via `/gestion/algo` |
+| `papillons_candidats.pdf` | N° candidat + mot de passe + QR code | ✅ via `/gestion/algo` |
 | `papillons_loges.pdf` | Loge + mot de passe | ❌ (hash uniquement en base) |
 
 ### Télécharger les documents depuis l'interface web
@@ -262,12 +262,12 @@ et les autres PDF générables à la demande (papillons, fiches candidats/loges,
 | Mesure | Détail |
 |---|---|
 | **SQL** | Paramètres liés `%s` / `%(name)s` — aucune interpolation |
-| **Mots de passe** | `scrypt(n=2**15, r=8, p=2)` + pepper + sel dérivé par compte (INE / salle / loge), encodé base64 ; comparaison via `hmac.compare_digest` (protection timing attack) |
+| **Mots de passe** | `scrypt(n=2**15, r=8, p=2)` + pepper + sel dérivé par compte (numéro candidat / salle / loge), encodé base64 ; comparaison via `hmac.compare_digest` (protection timing attack) |
 | **TOTP admin** | `pyotp`, fenêtre ±1 intervalle, rate limit 10 req/min |
 | **CSRF** | `CSRFProtect` (Flask-WTF) enregistré globalement — vérifie le jeton sur toute requête mutante (POST/PUT/PATCH/DELETE) |
 | **CSP** | `default-src 'self'`, nonce par requête + `'strict-dynamic'` sur `script-src`, `form-action 'self'`, `base-uri 'self'` via Flask-Talisman |
 | **Sessions** | `HttpOnly`, `Secure`, `SameSite=Lax` ; expiration 8 h ; `session.clear()` avant chaque login (protection fixation de session) |
-| **INE en session** | Stocké en Redis (TTL 5 min, token aléatoire) — jamais en clair dans le cookie |
+| **N° candidat en session** | Stocké en Redis (TTL 5 min, token aléatoire) — jamais en clair dans le cookie |
 | **Rate limiting** | Flask-Limiter + Redis ; 10 req/min sur toutes les routes de connexion (`login`, `login-examinateur`, `login-candidat`, `login-loge`) ; 30 connexions/min sur le flux SSE (`/stream`) — limite dédiée (et non une exemption totale) pour ne pas pénaliser les reconnexions EventSource légitimes tout en empêchant un compte d'ouvrir un flot de connexions en boucle (chacune retient indéfiniment un greenlet + une souscription Redis) |
 | **Alerting auth** | Compteur d'échecs par IP (fenêtre glissante de 5 min, purgée des entrées obsolètes) ; `WARNING` gunicorn après 5 tentatives — sans journaliser le mot de passe ni le code OTP soumis |
 | **HSTS** | `max-age=31536000; includeSubDomains; preload` côté Talisman et nginx |
