@@ -4,40 +4,6 @@
     <meta charset="UTF-8">
     <title>Mes Oraux - {{centre }} - Loge {{ data['salle'] }}</title>
     {% include 'style.html' %}
-    <style nonce="{{ csp_nonce }}">
-        .timer-cell {
-            white-space: nowrap;
-            text-align: center;
-            border: 2px solid var(--primary);
-            border-radius: 6px;
-            padding: 0.3em 0.5em;
-        }
-        .timer-display {
-            font-family: monospace;
-            font-size: 1.25rem;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            display: inline-block;
-            min-width: 3.5rem;
-            color: var(--text);
-        }
-        .timer-display.warn  { color: var(--warning); }
-        .timer-display.ended { color: var(--danger); animation: blink 1s step-start infinite; }
-        @keyframes blink { 50% { opacity: 0; } }
-        .timer-btn {
-            background: var(--primary-dk);
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            padding: 0.2em 0.5em;
-            font-size: 1rem;
-            cursor: pointer;
-            margin-left: 0.3em;
-            line-height: 1.4;
-        }
-        .timer-btn:hover   { background: var(--primary); }
-        .timer-btn:disabled { background: var(--text-sm); cursor: default; }
-    </style>
     <script nonce="{{ csp_nonce }}">
         let data = {{ students_numeros | tojson }};
     </script>

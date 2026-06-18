@@ -668,3 +668,50 @@ body.tv_screen {
         background-color: #1e1b4b;
     }
 }
+
+/* ── Messages contextuels ────────────────────────────────────────────────── */
+p.success {
+    color: var(--success);
+    background: #ecfdf5;
+    border: 1px solid var(--success);
+    border-radius: 6px;
+    padding: 0.5em 1em;
+}
+p.error {
+    color: var(--danger);
+    background: #fef2f2;
+    border: 1px solid var(--danger);
+    border-radius: 6px;
+    padding: 0.5em 1em;
+}
+
+/* ── Minuteurs de loge ────────────────────────────────────────────────────── */
+.timer-cell { white-space: nowrap; text-align: center; }
+.timer-display {
+    font-family: monospace;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    display: inline-block;
+    min-width: 3.5rem;
+    color: var(--text);
+}
+.timer-display.warn  { color: var(--warning); }
+.timer-display.ended { color: var(--danger); animation: timer-blink 1s step-start infinite; }
+@keyframes timer-blink { 50% { opacity: 0; } }
+.timer-btn {
+    background: var(--primary-dk);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.2em 0.5em;
+    font-size: 1rem;
+    cursor: pointer;
+    margin-left: 0.3em;
+    line-height: 1.4;
+}
+.timer-btn:hover    { background: var(--primary); }
+.timer-btn:disabled { background: var(--text-sm); cursor: default; }
+
+/* ── Sélecteur multiple établissements ───────────────────────────────────── */
+select[multiple] { width: 100%; max-width: 600px; }

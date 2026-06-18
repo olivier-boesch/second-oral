@@ -19,7 +19,7 @@
         </p>
         <p>
             <label for="etablissements">Établissements: </label><br>
-            <select name="etablissements" multiple size="8" style="width:100%;max-width:600px">
+            <select name="etablissements" multiple size="8">
                 {% for lycee in liste_lycees %}
                 <option value="{{ lycee }}">{{ lycee }}</option>
                 {% endfor %}
