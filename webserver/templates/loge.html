@@ -85,6 +85,6 @@
 {% include 'footer.html' %}
 
 <script nonce="{{ csp_nonce }}">window.LOGE_ID = {{ data['salle'] | tojson }};</script>
-<script src="{{ url_for('static', filename='timer.js') }}"></script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='timer.js') }}"></script>
 </body>
 </html>
