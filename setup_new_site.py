@@ -136,7 +136,7 @@ DPD_EMAIL      = "{dpd_email}"
 
 # ── Authentification admin (TOTP) ─────────────────────────────────────────────
 # Conserver cette clé et la configurer dans votre application TOTP
-# (Aegis, Google Authenticator, etc.).
+# (Open authenticator, FreeOTP, Google Authenticator, etc.).
 LOGIN_KEY = '{otp_key}'
 
 # ── Fuseaux horaires ──────────────────────────────────────────────────────────
@@ -436,7 +436,7 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
     story.append(Paragraph("Authentification Administrateur (TOTP)", st_section))
     story.append(Paragraph(
         "Scannez ce QR code avec votre application TOTP "
-        "(Aegis, Google Authenticator, etc.)",
+        "(Open authenticator, FreeOTP, Google Authenticator, etc.)",
         st_subtitle,
     ))
 
