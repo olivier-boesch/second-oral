@@ -686,16 +686,34 @@ p.error {
 }
 
 /* ── Monitoring ──────────────────────────────────────────────────────────── */
+.monitor-chart-wrap {
+    display: flex;
+    align-items: stretch;
+    max-width: 90%;
+    margin: 0 auto 1.5em;
+}
+.monitor-yaxis {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-right: 6px;
+    padding-bottom: 1.5rem; /* aligne avec la zone des barres (sans les labels) */
+    font-size: 0.65rem;
+    color: var(--text-sm);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
 .monitor-chart {
     display: flex;
     align-items: flex-end;
     gap: 2px;
     height: 120px;
-    padding: 0 1rem 1.5rem;
+    padding: 0 0.5rem 1.5rem 0;
     border-bottom: 2px solid var(--border);
-    margin: 0 auto 1.5em;
-    max-width: 90%;
+    border-left: 1px solid var(--border);
     overflow-x: auto;
+    flex: 1;
 }
 .monitor-bar-wrap {
     display: flex;

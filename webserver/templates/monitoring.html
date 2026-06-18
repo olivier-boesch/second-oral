@@ -32,16 +32,28 @@
 </table>
 
 <h2>Activité — dernières 24 h</h2>
-<div id="m-chart" class="monitor-chart">
-{% if hourly %}
-{% set max_count = hourly | map(attribute='count') | max %}
-{% for h in hourly %}
-    <div class="monitor-bar-wrap" title="{{ h['label'] }} : {{ h['count'] }} req.">
-        <div class="monitor-bar" style="height:{{ ((h['count'] / max_count * 100) | int) if max_count > 0 else 0 }}%"></div>
-        <span class="monitor-bar-label">{{ h['label'] }}</span>
-    </div>
-{% endfor %}
-{% endif %}
+<div class="monitor-chart-wrap">
+  <div class="monitor-yaxis" id="m-yaxis">
+  {% if hourly %}
+  {% set max_count = hourly | map(attribute='count') | max %}
+    <span>{{ max_count }}</span>
+    <span>{{ (max_count // 2) }}</span>
+    <span>0</span>
+  {% else %}
+    <span>—</span><span></span><span>0</span>
+  {% endif %}
+  </div>
+  <div id="m-chart" class="monitor-chart">
+  {% if hourly %}
+  {% set max_count = hourly | map(attribute='count') | max %}
+  {% for h in hourly %}
+      <div class="monitor-bar-wrap" title="{{ h['label'] }} : {{ h['count'] }} req.">
+          <div class="monitor-bar" style="height:{{ ((h['count'] / max_count * 100) | int) if max_count > 0 else 0 }}%"></div>
+          <span class="monitor-bar-label">{{ h['label'] }}</span>
+      </div>
+  {% endfor %}
+  {% endif %}
+  </div>
 </div>
 
 <h2>Sessions actives</h2>
@@ -103,14 +115,16 @@
     function pad(n) { return String(n).padStart(2, '0'); }
 
     function buildChart(hourly) {
-        if (!hourly || !hourly.length) return '';
+        if (!hourly || !hourly.length) return { bars: '', yaxis: '<span>—</span><span></span><span>0</span>' };
         const max = Math.max(...hourly.map(function (h) { return h.count; }), 1);
-        return hourly.map(function (h) {
+        const bars = hourly.map(function (h) {
             const pct = Math.round(h.count / max * 100);
             return '<div class="monitor-bar-wrap" title="' + h.label + ' : ' + h.count + ' req.">'
                 + '<div class="monitor-bar" style="height:' + pct + '%"></div>'
                 + '<span class="monitor-bar-label">' + h.label + '</span></div>';
         }).join('');
+        const yaxis = '<span>' + max + '</span><span>' + Math.floor(max / 2) + '</span><span>0</span>';
+        return { bars: bars, yaxis: yaxis };
     }
 
     function buildSessions(online, detail) {
@@ -157,7 +171,9 @@
                     c4.textContent = s['4xx']; c4.className = s['4xx'] > 0 ? 'red' : '';
                     var c5 = document.getElementById('m-5xx');
                     c5.textContent = s['5xx']; c5.className = s['5xx'] > 0 ? 'red' : '';
-                    document.getElementById('m-chart').innerHTML = buildChart(d.hourly);
+                    var chart = buildChart(d.hourly);
+                    document.getElementById('m-chart').innerHTML = chart.bars;
+                    document.getElementById('m-yaxis').innerHTML = chart.yaxis;
                     document.getElementById('m-sessions').innerHTML = buildSessions(d.online, d.online_detail || {});
                 }
 
