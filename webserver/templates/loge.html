@@ -4,6 +4,32 @@
     <meta charset="UTF-8">
     <title>Mes Oraux - {{centre }} - Loge {{ data['salle'] }}</title>
     {% include 'style.html' %}
+    <style nonce="{{ csp_nonce }}">
+        .timer-cell { white-space: nowrap; text-align: center; }
+        .timer-display {
+            font-family: monospace;
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            display: inline-block;
+            min-width: 3.5rem;
+            color: var(--text);
+        }
+        .timer-display.warn  { color: var(--warning); }
+        .timer-display.ended { color: var(--danger); animation: blink 1s step-start infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+        .timer-btn {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.1em 0.4em;
+            font-size: 0.95rem;
+            cursor: pointer;
+            margin-left: 0.3em;
+            line-height: 1.4;
+        }
+        .timer-btn:hover { background: var(--surface-2); }
+    </style>
     <script nonce="{{ csp_nonce }}">
         let data = {{ students_numeros | tojson }};
     </script>
@@ -28,6 +54,7 @@
             <th>Examinateur</th>
             <th>Heure Sujet</th>
             <th>Heure Oral</th>
+            <th>Minuteur</th>
         </tr>
     {%for oral in data['oraux'] %}
         {% if loop.index % 2 == 1 %}
@@ -59,6 +86,19 @@
             {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
                 {{ oral['oral'] }}
             </td>
+            {% if oral['sujet'] and oral['oral'] %}
+            <td class="timer-cell"
+                data-timer
+                data-numero="{{ oral['numero'] }}"
+                data-sujet="{{ oral['sujet'] }}"
+                data-oral="{{ oral['oral'] }}">
+                <span class="timer-display">--:--</span>
+                <button class="timer-btn" title="Démarrer / Pause">▶</button>
+                <button class="timer-btn" title="Réinitialiser">↺</button>
+            </td>
+            {% else %}
+            <td class="timer-cell">—</td>
+            {% endif %}
         </tr>
     {% endfor %}
     </table>
@@ -69,5 +109,159 @@
     <p><a href="{{ url_for('loge_form') }}" target="_blank">liste des loges</a></p>
     <p><a href="{{ url_for('salle_form') }}" target="_blank">liste des salles</a></p>
 {% include 'footer.html' %}
+
+<script nonce="{{ csp_nonce }}">
+(function () {
+    const LOGE_ID = {{ data['salle'] | tojson }};
+
+    // ── AudioContext — créé au premier son joué ───────────────────────────────
+    let _ctx = null;
+    function audioCtx() {
+        if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (_ctx.state === 'suspended') _ctx.resume();
+        return _ctx;
+    }
+    function beep(freq, dur, vol, delay) {
+        delay = delay || 0;
+        const ctx = audioCtx();
+        const t   = ctx.currentTime + delay;
+        const osc = ctx.createOscillator();
+        const g   = ctx.createGain();
+        osc.connect(g); g.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        g.gain.setValueAtTime(vol || 0.3, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.start(t); osc.stop(t + dur);
+    }
+    function playWarning() {
+        beep(880, 0.12, 0.25);
+    }
+    function playEnd() {
+        beep(880,  0.15, 0.35, 0.00);
+        beep(880,  0.15, 0.35, 0.30);
+        beep(1100, 0.45, 0.40, 0.60);
+    }
+
+    // ── Utilitaires temps ─────────────────────────────────────────────────────
+    function hhmm2secs(hhmm) {
+        const p = hhmm.split(':').map(Number);
+        return p[0] * 3600 + p[1] * 60;
+    }
+    function secs2display(s) {
+        if (s <= 0) return '00:00';
+        const m = Math.floor(s / 60), sec = s % 60;
+        return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+    }
+
+    // ── localStorage ─────────────────────────────────────────────────────────
+    function lsKey(numero, sujet) {
+        return 'timer_' + LOGE_ID + '_' + numero + '_' + sujet;
+    }
+    function loadState(numero, sujet) {
+        try {
+            const raw = localStorage.getItem(lsKey(numero, sujet));
+            if (!raw) return null;
+            const s = JSON.parse(raw);
+            if (s.running && s.startedAt) {
+                // Rattraper le temps écoulé pendant le rechargement
+                s.elapsed = (s.elapsed || 0) + Math.floor((Date.now() - s.startedAt) / 1000);
+                s.startedAt = Date.now();
+            }
+            return s;
+        } catch (e) { return null; }
+    }
+    function saveState(numero, sujet, state) {
+        try { localStorage.setItem(lsKey(numero, sujet), JSON.stringify(state)); } catch (e) {}
+    }
+
+    // ── Initialisation de chaque timer ────────────────────────────────────────
+    document.querySelectorAll('[data-timer]').forEach(function (cell) {
+        const numero    = cell.dataset.numero;
+        const sujet     = cell.dataset.sujet;
+        const oral      = cell.dataset.oral;
+        const totalSecs = hhmm2secs(oral) - hhmm2secs(sujet);
+
+        if (totalSecs <= 0) { cell.textContent = '—'; return; }
+
+        const display  = cell.querySelector('.timer-display');
+        const btnPlay  = cell.querySelector('.timer-btn:nth-child(2)');
+        const btnReset = cell.querySelector('.timer-btn:nth-child(3)');
+
+        let state = loadState(numero, sujet) || { elapsed: 0, running: false, startedAt: null };
+        let interval  = null;
+        let warnDone  = state.elapsed >= totalSecs - 60;
+        let endDone   = state.elapsed >= totalSecs;
+
+        function remaining() { return Math.max(0, totalSecs - state.elapsed); }
+
+        function render() {
+            const rem = remaining();
+            display.textContent = secs2display(rem);
+            display.classList.toggle('warn',  rem > 0 && rem <= 60);
+            display.classList.toggle('ended', rem === 0);
+            btnPlay.textContent = state.running ? '⏸' : '▶';
+            btnPlay.disabled    = (rem === 0);
+        }
+
+        function tick() {
+            state.elapsed++;
+            const rem = remaining();
+
+            if (!warnDone && rem <= 60 && rem > 0) { warnDone = true; playWarning(); }
+
+            if (rem === 0 && !endDone) {
+                endDone = true;
+                state.running = false;
+                clearInterval(interval); interval = null;
+                playEnd();
+            }
+
+            state.startedAt = Date.now();
+            saveState(numero, sujet, state);
+            render();
+        }
+
+        function start() {
+            if (state.running || remaining() === 0) return;
+            state.running   = true;
+            state.startedAt = Date.now();
+            saveState(numero, sujet, state);
+            render();
+            interval = setInterval(tick, 1000);
+        }
+
+        function pause() {
+            state.running   = false;
+            state.startedAt = null;
+            clearInterval(interval); interval = null;
+            saveState(numero, sujet, state);
+            render();
+        }
+
+        function reset() {
+            clearInterval(interval); interval = null;
+            state    = { elapsed: 0, running: false, startedAt: null };
+            warnDone = false;
+            endDone  = false;
+            saveState(numero, sujet, state);
+            render();
+        }
+
+        btnPlay.addEventListener('click',  function () { state.running ? pause() : start(); });
+        btnReset.addEventListener('click', reset);
+
+        // Restaurer l'état si le timer tournait avant le rechargement
+        if (state.running && remaining() > 0) {
+            interval = setInterval(tick, 1000);
+        } else if (state.running && remaining() === 0) {
+            state.running = false;
+            endDone = true;
+        }
+
+        render();
+    });
+}());
+</script>
 </body>
 </html>
