@@ -25,7 +25,8 @@
         <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_candidats", id_doc=0) }}">Fiches des candidats (pdf)</a><br>
         <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_salles", id_doc=0) }}">Fiches des salles (pdf)</a><br>
         <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_loges", id_doc=0) }}">Fiches des loges (pdf)</a><br>
-        <a href="{{ url_for("verify_logs") }}">Vérifier l'intégrité des données</a>
+        <a href="{{ url_for("verify_logs") }}">Vérifier l'intégrité des données</a><br>
+        <a href="{{ url_for('add_examinateur') }}">Ajouter un nouvel examinateur</a>
     </div>
     <table class="table_oraux">
         <tr>
@@ -102,7 +103,6 @@
             </tr>
         {% endfor %}
     </table>
-    <p><a href="{{ url_for('add_examinateur') }}">Ajouter un nouvel examinateur</a></p>
     {% include 'footer.html' %}
 </body>
 </html>
