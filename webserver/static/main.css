@@ -531,7 +531,7 @@ form {
 body.tv_screen {
     padding-top: 0;
     padding-bottom: 0;
-    font-size: clamp(1rem, 1.6vw, 1.8rem);
+    font-size: clamp(1rem, 1.3vw, 1.8rem);
     cursor: none;
 }
 .tv_screen h1 {
