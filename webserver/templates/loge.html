@@ -88,6 +88,6 @@
     window.LOGE_ID    = {{ data['salle'] | tojson }};
     window.CSRF_TOKEN = {{ csrf_token() | tojson }};
 </script>
-<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='timer.js') }}"></script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='timer.js') }}?v={{ sv }}"></script>
 </body>
 </html>

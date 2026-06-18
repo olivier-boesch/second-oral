@@ -76,6 +76,20 @@ app = Flask("2ndOral_app")
 
 _REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost')
 
+# Version des fichiers statiques pour cache-busting (hash git court, ou mtime fallback)
+try:
+    import subprocess as _sp
+    _STATIC_VERSION = _sp.check_output(
+        ['git', 'rev-parse', '--short', 'HEAD'],
+        cwd=Path(__file__).parent,
+        stderr=_sp.DEVNULL, text=True,
+    ).strip()
+except Exception:
+    try:
+        _STATIC_VERSION = str(int((Path(__file__).parent / 'static' / 'main.css').stat().st_mtime))
+    except OSError:
+        _STATIC_VERSION = '0'
+
 if dev_on:
     app.config.update(
         REDIS_URL=_REDIS_URL,
@@ -92,7 +106,7 @@ if dev_on:
 else:
     app.config.update(
         REDIS_URL=_REDIS_URL,
-        SEND_FILE_MAX_AGE_DEFAULT=0,
+        SEND_FILE_MAX_AGE_DEFAULT=31_536_000,  # 1 an — cache-busting via ?v=<git_hash>
         TEMPLATES_AUTO_RELOAD=True,
         PREFERRED_URL_SCHEME='https',
         SERVER_NAME=FQDN,
@@ -203,6 +217,12 @@ def _inject_csp_nonce():
     # pas dans g.csp_nonce. Lire depuis request pour que {{ csp_nonce }}
     # dans les templates reçoive la valeur correcte.
     return {'csp_nonce': getattr(request, 'csp_nonce', '')}
+
+
+@app.context_processor
+def _inject_static_version():
+    """Version des fichiers statiques pour cache-busting dans les templates."""
+    return {'sv': _STATIC_VERSION}
 
 
 @app.context_processor
@@ -1880,14 +1900,16 @@ def download() -> ResponseReturnValue:
 @app.route('/about')
 def about() -> ResponseReturnValue:
     """Page « à propos » — crédits et description du projet."""
-    return render_template("about.html", centre=CENTRE_EXAMEN,
-                           hostname=HOSTNAME, username=get_username())
+    resp = make_response(render_template("about.html", centre=CENTRE_EXAMEN,
+                                        hostname=HOSTNAME, username=get_username()))
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    return resp
 
 
 @app.route('/mentions-legales')
 def mentions_legales() -> ResponseReturnValue:
     """Mentions légales et politique de confidentialité (RGPD)."""
-    return render_template(
+    resp = make_response(render_template(
         "mentions_legales.html",
         centre=CENTRE_EXAMEN,
         fqdn=FQDN,
@@ -1897,7 +1919,9 @@ def mentions_legales() -> ResponseReturnValue:
         hebergeur=HEBERGEUR,
         dpd_email=DPD_EMAIL,
         username=get_username(),
-    )
+    ))
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    return resp
 
 
 # ── Gestion de algo.py (admin) ────────────────────────────────────────────────

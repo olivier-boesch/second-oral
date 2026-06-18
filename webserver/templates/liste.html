@@ -5,7 +5,7 @@
     <title>Mes Oraux - {{ centre }} - Liste des oraux</title>
     {% include 'style.html' %}
     {% if not dont_scroll %}
-    <script src="{{ url_for("static", filename="scroll.js") }}" nonce="{{ csp_nonce }}"></script>
+    <script src="{{ url_for("static", filename="scroll.js") }}?v={{ sv }}" nonce="{{ csp_nonce }}"></script>
     {% endif %}
     {% include 'script_reload.html' %}
 </head>

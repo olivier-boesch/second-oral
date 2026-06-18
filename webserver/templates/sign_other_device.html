@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Mes Oraux - {{ centre }} - Signer l'émargement</title>
     {% include 'style.html' %}
-    <script src="{{ url_for("static", filename="signature_pad.umd.min.js") }}" nonce="{{ csp_nonce }}"></script>
+    <script src="{{ url_for("static", filename="signature_pad.umd.min.js") }}?v={{ sv }}" nonce="{{ csp_nonce }}"></script>
     </head>
 <body class="body-for-sticky">
 <h1>Signature de {{ data['nom'] }}, passation de l'oral de {{ data['matiere'] }} avec {{ data['examinateur'] }} </h1>
