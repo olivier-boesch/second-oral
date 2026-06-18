@@ -18,8 +18,13 @@
             <input type="text" name="nom" placeholder="Nom complet">
         </p>
         <p>
-            <label for="etablissements">Etablissements: </label>
-            <input type="text" name="etablissements" title="Etablissements (séparés par des virgules)" placeholder="etab1,etab2">
+            <label for="etablissements">Établissement: </label>
+            <select name="etablissements">
+                <option value="">— choisir —</option>
+                {% for lycee in liste_lycees %}
+                <option value="{{ lycee }}">{{ lycee }}</option>
+                {% endfor %}
+            </select>
         </p>
         <p>
             <label for="matiere">Matière: </label>

@@ -294,6 +294,9 @@ LYCEES_SHEET_NAME = "lycees"
 LYCEES_N_DATA_ROWS = len(_LYCEES_AIM)  # 249
 LYCEES_HEADERS = ["UAI", "Nom", "Ville", "Téléphone", "Etab"]
 
+# Liste affichable : même format que la colonne E de l'ODS ("Ville — Nom (UAI)")
+LYCEES_DISPLAY = [f"{ville} — {nom} ({uai})" for uai, nom, ville, _ in _LYCEES_AIM]
+
 PREPS_HEADERS     = ["Matiere", "Matière court", "Temps preparation (min)", "Duree (min)"]
 EXAM_HEADERS      = ["Nom", "Disc.poste", "Salle", "Heure mini", "Etab", "Loge"]
 CANDIDATS_HEADERS = ["CANDIDAT", "CHOIX DISCIPLINE 1", "CHOIX DISCIPLINE 2", "TT", "Etab", "Profs"]

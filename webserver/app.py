@@ -46,6 +46,7 @@ from werkzeug.utils import secure_filename
 
 import db_facility_web
 import reports
+from ods_handler import LYCEES_DISPLAY as _LYCEES_DISPLAY
 from app_secrets import (
     CENTRE_EXAMEN, DIGITAL_SIGN, LOGIN_KEY, APP_SECRET_KEY, HOSTNAME,
     TIMEZONE, hash_password, check_password, verify_log_item, generate_password,
@@ -1423,6 +1424,7 @@ def add_examinateur() -> ResponseReturnValue:
                 "add_examinateur.html",
                 centre=CENTRE_EXAMEN,
                 liste_matieres=liste_matieres,
+                liste_lycees=_LYCEES_DISPLAY,
                 url_of_page=request.url,
                 username=get_username(),
                 erreur="Le nom et le numéro de salle sont obligatoires.",
@@ -1455,6 +1457,7 @@ def add_examinateur() -> ResponseReturnValue:
         "add_examinateur.html",
         centre=CENTRE_EXAMEN,
         liste_matieres=liste_matieres,
+        liste_lycees=_LYCEES_DISPLAY,
         url_of_page=request.url,
         username=get_username(),
     )
