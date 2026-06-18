@@ -8,6 +8,12 @@
 <body class="body-for-sticky">
 {% include 'auth_icon.html' %}
     <h1>Liste des Examinateurs</h1>
+    {% if new_papillon %}
+    <p class="success">
+        Examinateur créé.
+        <a href="{{ url_for('download', filename=new_papillon) }}" target="_blank">Imprimer le papillon d'accès</a>
+    </p>
+    {% endif %}
     <div>
         <a href="{{ url_for('index_gestion') }}">Liste des oraux</a><br>
         <form method="post" action="{{ url_for('reload_pages') }}" style="display:inline">

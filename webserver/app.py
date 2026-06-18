@@ -1345,6 +1345,8 @@ def edit_oral() -> ResponseReturnValue:
 def liste_examinateurs() -> ResponseReturnValue:
     """Liste des examinateurs avec leurs salles, loges et nombre d'oraux."""
     examinateurs = db_get(db_facility_web.SELECT_LISTE_EXAMINATEURS, no_list_auto=False)
+    _raw = request.args.get('new_papillon', '')
+    new_papillon = _raw if re.match(r'^papillons_salle_[\w\-]+\.pdf$', _raw) else ''
     return render_template(
         'liste_examinateurs.html',
         centre=CENTRE_EXAMEN,
@@ -1352,6 +1354,7 @@ def liste_examinateurs() -> ResponseReturnValue:
         admin=is_admin_user(),
         url_of_page=request.url,
         username=get_username(),
+        new_papillon=new_papillon,
     )
 
 
@@ -1444,7 +1447,7 @@ def add_examinateur() -> ResponseReturnValue:
             base_url=base_url,
             centre_examen=CENTRE_EXAMEN,
         )
-        return redirect(url_for('download', filename=papillon_filename))
+        return redirect(url_for('liste_examinateurs', new_papillon=papillon_filename))
 
     # GET
     liste_matieres = db_get(db_facility_web.SELECT_LISTE_MATIERES, no_list_auto=False)
