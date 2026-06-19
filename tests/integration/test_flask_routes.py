@@ -407,6 +407,181 @@ class TestAdminRoutes:
         assert r.status_code in (302, 403)
 
 
+# ── Intégration ODS complète ─────────────────────────────────────────────────
+
+class TestOdsUploadIntegration:
+    """Tests d'intégration couvrant le round-trip ODS → CSV et le téléchargement du modèle."""
+
+    @staticmethod
+    def _make_full_ods() -> bytes:
+        """ODS minimal avec les 3 feuilles de données remplies."""
+        import io as _io
+        from odf.opendocument import OpenDocumentSpreadsheet
+        from odf.table import Table, TableCell, TableRow
+        from odf.text import P
+
+        def add_sheet(doc, name, headers, rows):
+            sheet = Table(name=name)
+            hr = TableRow()
+            for h in headers:
+                cell = TableCell(valuetype="string")
+                cell.addElement(P(text=h))
+                hr.addElement(cell)
+            sheet.addElement(hr)
+            for row_data in rows:
+                tr = TableRow()
+                for h in headers:
+                    cell = TableCell(valuetype="string")
+                    cell.addElement(P(text=str(row_data.get(h, ""))))
+                    tr.addElement(cell)
+                sheet.addElement(tr)
+            doc.spreadsheet.addElement(sheet)
+
+        doc = OpenDocumentSpreadsheet()
+        add_sheet(doc, "candidats",
+                  ["Nom", "Prenom", "Numero", "Etablissement"],
+                  [{"Nom": "Dupont", "Prenom": "Jean",
+                    "Numero": "111111111AA", "Etablissement": "Lycée Test"}])
+        add_sheet(doc, "examinateurs",
+                  ["Nom", "Prenom", "Matière court", "Salle"],
+                  [{"Nom": "Martin", "Prenom": "Paul",
+                    "Matière court": "Maths", "Salle": "101"}])
+        add_sheet(doc, "preps",
+                  ["Matiere", "Matière court", "Temps preparation (min)", "Duree (min)"],
+                  [{"Matiere": "Mathématiques", "Matière court": "Maths",
+                    "Temps preparation (min)": "20", "Duree (min)": "20"}])
+        buf = _io.BytesIO()
+        doc.save(buf)
+        return buf.getvalue()
+
+    def test_upload_all_three_csvs_created(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """Un ODS avec les 3 feuilles remplies crée 3 fichiers CSV."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        r = admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(self._make_full_ods()), "data.ods")},
+            content_type="multipart/form-data",
+        )
+        body = json.loads(r.data)
+        assert set(body["uploaded"]) == {"candidats.csv", "examinateurs.csv", "preps.csv"}
+        assert (tmp_path / "candidats.csv").exists()
+        assert (tmp_path / "examinateurs.csv").exists()
+        assert (tmp_path / "preps.csv").exists()
+
+    def test_upload_csv_has_bom_and_semicolons(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """Le CSV généré depuis ODS est encodé UTF-8 avec BOM et des séparateurs ';'."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(self._make_full_ods()), "data.ods")},
+            content_type="multipart/form-data",
+        )
+        raw = (tmp_path / "preps.csv").read_bytes()
+        assert raw[:3] == b"\xef\xbb\xbf", "BOM UTF-8 attendu en tête du CSV"
+        text = raw.decode("utf-8-sig")
+        assert ";" in text
+
+    def test_upload_backup_created_on_overwrite(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """Si un CSV existe déjà, il est sauvegardé en .csv.bak avant d'être remplacé."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        original = b"ancien contenu"
+        (tmp_path / "preps.csv").write_bytes(original)
+
+        admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(self._make_full_ods()), "data.ods")},
+            content_type="multipart/form-data",
+        )
+        assert (tmp_path / "preps.csv.bak").exists()
+        assert (tmp_path / "preps.csv.bak").read_bytes() == original
+        assert (tmp_path / "preps.csv").read_bytes() != original
+
+    def test_upload_lycees_sheet_not_exported(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """La feuille 'lycees' (référentiel) ne génère pas de CSV."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(self._make_full_ods()), "data.ods")},
+            content_type="multipart/form-data",
+        )
+        assert not (tmp_path / "lycees.csv").exists()
+        assert not (tmp_path / "etablissements.csv").exists()
+
+    def test_upload_empty_sheet_reports_named_error(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """Une feuille vide dans l'ODS génère un message d'erreur mentionnant son nom."""
+        import app as app_module
+        import sys
+        from pathlib import Path as _Path
+        sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "webserver"))
+        from ods_handler import generate_ods_modele
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        # Le modèle par défaut a candidats et examinateurs vides
+        r = admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(generate_ods_modele()), "modele.ods")},
+            content_type="multipart/form-data",
+        )
+        body = json.loads(r.data)
+        errors = body["errors"]
+        assert any("candidats" in e for e in errors)
+        assert any("examinateurs" in e for e in errors)
+
+    def test_upload_response_contains_validation_key(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """La réponse de l'upload contient toujours la clé 'validation' avec 'ok'."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        r = admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(self._make_full_ods()), "data.ods")},
+            content_type="multipart/form-data",
+        )
+        body = json.loads(r.data)
+        assert "validation" in body
+        assert "ok" in body["validation"]
+
+    def test_download_modele_has_attachment_header(self, admin_client):
+        """Le téléchargement du modèle ODS inclut un header Content-Disposition attachment."""
+        r = admin_client.get("/gestion/algo/download-modele-ods")
+        assert r.status_code == 200
+        cd = r.headers.get("Content-Disposition", "")
+        assert "attachment" in cd
+        assert ".ods" in cd
+
+    def test_download_modele_with_custom_preps_from_csv(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """Si preps.csv est présent dans DATA_DIR, le modèle ODS reflète ces disciplines."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        preps_csv = (
+            "﻿Matiere;Matière court;Temps preparation (min);Duree (min)\n"
+            "TestMatiere;TM;25;15\n"
+        )
+        (tmp_path / "preps.csv").write_text(preps_csv, encoding="utf-8")
+
+        r = admin_client.get("/gestion/algo/download-modele-ods")
+        assert r.status_code == 200
+
+        import sys
+        from pathlib import Path as _Path
+        sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "webserver"))
+        from ods_handler import parse_ods
+        sheets = parse_ods(r.data)
+        preps = sheets["preps"]
+        assert len(preps) == 1
+        assert preps[0]["Matière court"] == "TM"
+        assert preps[0]["Matiere"] == "TestMatiere"
+
+
 # ── Candidat (route protégée) ─────────────────────────────────────────────────
 
 class TestCandidatRoutes:
