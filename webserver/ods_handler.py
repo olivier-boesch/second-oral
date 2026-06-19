@@ -185,6 +185,10 @@ PREPS_HEADERS     = ["Matiere", "Matière court", "Temps preparation (min)", "Du
 EXAM_HEADERS      = ["Nom", "Disc.poste", "Salle", "Heure mini", "Etab", "Loge"]
 CANDIDATS_HEADERS = ["CANDIDAT", "CHOIX DISCIPLINE 1", "CHOIX DISCIPLINE 2", "TT", "Etab", "Profs"]
 
+# En-têtes de la feuille ODS examinateurs : 3 colonnes Etab distinctes,
+# fusionnées en un seul champ "Etab" lors de la lecture (parse_ods).
+_EXAM_ODS_HEADERS = ["Nom", "Disc.poste", "Salle", "Heure mini", "Etab1", "Etab2", "Etab3", "Loge"]
+
 
 # ── Lecture ODS ───────────────────────────────────────────────────────────────
 
@@ -229,10 +233,36 @@ def _sheet_to_rows(table) -> list[dict]:
     return rows
 
 
+def _merge_exam_etabs(rows: list[dict]) -> list[dict]:
+    """
+    Convertit les colonnes Etab1/Etab2/Etab3 en un seul champ Etab (virgule-séparé).
+    Appelé sur la feuille examinateurs quand le modèle ODS à 3 colonnes est utilisé.
+    """
+    if not rows or "Etab1" not in rows[0]:
+        return rows
+    merged = []
+    for r in rows:
+        new_row: dict = {}
+        for k, v in r.items():
+            if k == "Etab1":
+                new_row["Etab"] = ",".join(
+                    r.get(f"Etab{n}", "").strip()
+                    for n in (1, 2, 3)
+                    if r.get(f"Etab{n}", "").strip()
+                )
+            elif k in ("Etab2", "Etab3"):
+                continue
+            else:
+                new_row[k] = v
+        merged.append(new_row)
+    return merged
+
+
 def parse_ods(data: bytes) -> dict[str, list[dict]]:
     """
     Parse un fichier ODS et retourne un dict {nom_feuille_normalisé: list[dict]}.
     Les noms de feuilles sont normalisés en minuscules.
+    Pour la feuille examinateurs, fusionne Etab1/Etab2/Etab3 → Etab.
     Lève ValueError si le fichier est illisible.
     """
     try:
@@ -244,7 +274,8 @@ def parse_ods(data: bytes) -> dict[str, list[dict]]:
     for table in doc.spreadsheet.getElementsByType(Table):
         name = table.getAttribute("name") or ""
         key = name.strip().lower()
-        result[key] = _sheet_to_rows(table)
+        rows = _sheet_to_rows(table)
+        result[key] = _merge_exam_etabs(rows) if key == "examinateurs" else rows
     return result
 
 
@@ -422,18 +453,18 @@ def generate_ods_modele(preps_rows: list[dict] | None = None) -> bytes:
     _add_empty_rows_with_validation(doc, sheet_cands, CANDIDATS_HEADERS, cand_col_validations, 200)
 
     # ── Feuille examinateurs ──────────────────────────────────────────────────
-    # Nom(0) Disc.poste(1) Salle(2) Heure mini(3) Etab(4) Loge(5)
+    # Nom(0) Disc.poste(1) Salle(2) Heure mini(3) Etab1(4) Etab2(5) Etab3(6) Loge(7)
     sheet_exam = Table(name="examinateurs")
     doc.spreadsheet.addElement(sheet_exam)
 
-    exam_col_validations = {1: "vDisc", 3: "vHeure", 4: "vEtab"}
+    exam_col_validations = {1: "vDisc", 3: "vHeure", 4: "vEtab", 5: "vEtab", 6: "vEtab"}
 
     hr2 = TableRow()
-    for h in EXAM_HEADERS:
+    for h in _EXAM_ODS_HEADERS:
         hr2.addElement(_make_cell(doc, h, header_style))
     sheet_exam.addElement(hr2)
 
-    _add_empty_rows_with_validation(doc, sheet_exam, EXAM_HEADERS, exam_col_validations, 50)
+    _add_empty_rows_with_validation(doc, sheet_exam, _EXAM_ODS_HEADERS, exam_col_validations, 50)
 
     # ── Feuille preps (ajout au doc après candidats/examinateurs) ─────────────
     doc.spreadsheet.addElement(sheet_preps)

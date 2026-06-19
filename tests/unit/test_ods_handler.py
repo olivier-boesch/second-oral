@@ -7,14 +7,22 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "webserver"))
 
+import io as _io
+
+from odf.opendocument import load as odf_load
+from odf.table import Table, TableCell, TableRow as OdfTableRow
+from odf.text import P
+
 from ods_handler import (
     generate_ods_modele,
     parse_ods,
+    _merge_exam_etabs,
     PREPS_HEADERS,
     EXAM_HEADERS,
     CANDIDATS_HEADERS,
     LYCEES_HEADERS,
     LYCEES_SHEET_NAME,
+    _EXAM_ODS_HEADERS,
     _DEFAULT_PREPS,
     _LYCEES_AIM,
 )
@@ -143,3 +151,126 @@ class TestParseOds:
         from ods_handler import _LYCEES_AIM
         sheets = parse_ods(generate_ods_modele())
         assert len(sheets[LYCEES_SHEET_NAME]) == len(_LYCEES_AIM)
+
+
+# ── ODS examinateurs : 3 colonnes Etab ───────────────────────────────────────
+
+class TestExamEtabMerge:
+    """Vérifie la fusion Etab1/Etab2/Etab3 → Etab dans parse_ods / _merge_exam_etabs."""
+
+    @staticmethod
+    def _make_exam_ods(rows: list[dict]) -> bytes:
+        """Construit un ODS minimal avec une feuille examinateurs contenant rows."""
+        from odf.opendocument import OpenDocumentSpreadsheet
+        doc = OpenDocumentSpreadsheet()
+        sheet = Table(name="examinateurs")
+        # En-tête
+        hr = OdfTableRow()
+        for h in _EXAM_ODS_HEADERS:
+            c = TableCell(valuetype="string")
+            c.addElement(P(text=h))
+            hr.addElement(c)
+        sheet.addElement(hr)
+        # Données
+        for r in rows:
+            tr = OdfTableRow()
+            for h in _EXAM_ODS_HEADERS:
+                c = TableCell(valuetype="string")
+                c.addElement(P(text=str(r.get(h, ""))))
+                tr.addElement(c)
+            sheet.addElement(tr)
+        doc.spreadsheet.addElement(sheet)
+        buf = _io.BytesIO()
+        doc.save(buf)
+        return buf.getvalue()
+
+    def test_three_etabs_merged(self):
+        """Etab1=A, Etab2=B, Etab3=C → Etab='A,B,C'."""
+        data = self._make_exam_ods([{
+            "Nom": "Dupont", "Disc.poste": "Maths", "Salle": "101",
+            "Heure mini": "8",
+            "Etab1": "Paul Cézanne — Aix-en-Provence (0130002G)",
+            "Etab2": "Montgrand — Marseille (0130042A)",
+            "Etab3": "Thiers — Marseille (0130040Y)",
+            "Loge": "A",
+        }])
+        sheets = parse_ods(data)
+        row = sheets["examinateurs"][0]
+        assert "Etab" in row
+        assert row["Etab"] == (
+            "Paul Cézanne — Aix-en-Provence (0130002G),"
+            "Montgrand — Marseille (0130042A),"
+            "Thiers — Marseille (0130040Y)"
+        )
+        assert "Etab1" not in row
+        assert "Etab2" not in row
+        assert "Etab3" not in row
+
+    def test_only_etab1_filled(self):
+        """Etab2 et Etab3 vides → Etab contient seulement Etab1."""
+        data = self._make_exam_ods([{
+            "Nom": "Martin", "Disc.poste": "Maths", "Salle": "102",
+            "Heure mini": "8",
+            "Etab1": "Marie Curie — Marseille (0130051K)",
+            "Etab2": "", "Etab3": "", "Loge": "B",
+        }])
+        sheets = parse_ods(data)
+        assert sheets["examinateurs"][0]["Etab"] == "Marie Curie — Marseille (0130051K)"
+
+    def test_all_etabs_empty(self):
+        """Tous les Etab vides → Etab = '' (ligne peut être filtrée si tout vide)."""
+        rows = _merge_exam_etabs([{"Nom": "X", "Etab1": "", "Etab2": "", "Etab3": "", "Loge": "A"}])
+        assert rows[0]["Etab"] == ""
+
+    def test_etab_key_order_preserved(self):
+        """Etab doit apparaître à la position de Etab1 dans l'ordre des clés."""
+        rows = _merge_exam_etabs([{
+            "Nom": "X", "Disc.poste": "M", "Salle": "1",
+            "Heure mini": "8",
+            "Etab1": "Paul Cézanne — Aix-en-Provence (0130002G)",
+            "Etab2": "", "Etab3": "", "Loge": "A",
+        }])
+        keys = list(rows[0].keys())
+        assert keys.index("Etab") == 4  # position 4, avant Loge
+
+    def test_no_etab_columns_unchanged(self):
+        """Si Etab1 absent, la fusion est ignorée (rétrocompatibilité)."""
+        rows = [{"Nom": "X", "Etab": "ancien format", "Loge": "A"}]
+        result = _merge_exam_etabs(rows)
+        assert result == rows
+
+    def test_ods_modele_examinateurs_sheet_has_3_etab_headers(self):
+        """Le modèle ODS généré a bien Etab1/Etab2/Etab3 dans la feuille examinateurs."""
+        doc = odf_load(_io.BytesIO(generate_ods_modele()))
+        for table in doc.spreadsheet.getElementsByType(Table):
+            if table.getAttribute("name") == "examinateurs":
+                rows = table.getElementsByType(OdfTableRow)
+                header_row = rows[0]
+                cells = header_row.getElementsByType(TableCell)
+                headers = [
+                    "".join(n.data for p in c.getElementsByType(P)
+                             for n in p.childNodes if hasattr(n, "data"))
+                    for c in cells
+                ]
+                assert "Etab1" in headers
+                assert "Etab2" in headers
+                assert "Etab3" in headers
+                assert "Etab" not in headers
+                break
+
+    def test_ods_modele_candidats_sheet_has_single_etab(self):
+        """La feuille candidats du modèle garde une seule colonne Etab."""
+        doc = odf_load(_io.BytesIO(generate_ods_modele()))
+        for table in doc.spreadsheet.getElementsByType(Table):
+            if table.getAttribute("name") == "candidats":
+                rows = table.getElementsByType(OdfTableRow)
+                header_row = rows[0]
+                cells = header_row.getElementsByType(TableCell)
+                headers = [
+                    "".join(n.data for p in c.getElementsByType(P)
+                             for n in p.childNodes if hasattr(n, "data"))
+                    for c in cells
+                ]
+                assert "Etab" in headers
+                assert "Etab1" not in headers
+                break

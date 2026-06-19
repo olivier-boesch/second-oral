@@ -581,6 +581,70 @@ class TestOdsUploadIntegration:
         assert preps[0]["Matière court"] == "TM"
         assert preps[0]["Matiere"] == "TestMatiere"
 
+    def test_ods_upload_exam_etab3_merged_in_csv(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """L'upload d'un ODS avec 3 colonnes Etab1/2/3 génère un CSV examinateurs avec Etab fusionné."""
+        import io as _io, sys
+        from pathlib import Path as _Path
+        from odf.opendocument import OpenDocumentSpreadsheet
+        from odf.table import Table, TableCell, TableRow as OdfRow
+        from odf.text import P
+        sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "webserver"))
+        from ods_handler import _EXAM_ODS_HEADERS
+        import app as app_module
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        def add_sheet(doc, name, headers, data_rows):
+            sheet = Table(name=name)
+            hr = OdfRow()
+            for h in headers:
+                c = TableCell(valuetype="string")
+                c.addElement(P(text=h))
+                hr.addElement(c)
+            sheet.addElement(hr)
+            for r in data_rows:
+                tr = OdfRow()
+                for h in headers:
+                    c = TableCell(valuetype="string")
+                    c.addElement(P(text=str(r.get(h, ""))))
+                    tr.addElement(c)
+                sheet.addElement(tr)
+            doc.spreadsheet.addElement(sheet)
+
+        etab1 = "Paul Cézanne — Aix-en-Provence (0130002G)"
+        etab2 = "Montgrand — Marseille (0130042A)"
+        doc = OpenDocumentSpreadsheet()
+        add_sheet(doc, "candidats",
+                  ["CANDIDAT", "CHOIX DISCIPLINE 1", "CHOIX DISCIPLINE 2", "TT", "Etab", "Profs"],
+                  [{"CANDIDAT": "Dupont Jean (111111111AA)", "CHOIX DISCIPLINE 1": "Maths",
+                    "CHOIX DISCIPLINE 2": "SES", "TT": "0", "Etab": etab1, "Profs": ""}])
+        add_sheet(doc, "examinateurs", _EXAM_ODS_HEADERS,
+                  [{"Nom": "Martin Sophie", "Disc.poste": "Maths", "Salle": "101",
+                    "Heure mini": "8", "Etab1": etab1, "Etab2": etab2, "Etab3": "", "Loge": "A"}])
+        add_sheet(doc, "preps",
+                  ["Matiere", "Matière court", "Temps preparation (min)", "Duree (min)"],
+                  [{"Matiere": "Mathématiques", "Matière court": "Maths",
+                    "Temps preparation (min)": "20", "Duree (min)": "20"},
+                   {"Matiere": "SES", "Matière court": "SES",
+                    "Temps preparation (min)": "25", "Duree (min)": "20"}])
+        buf = _io.BytesIO()
+        doc.save(buf)
+        ods_bytes = buf.getvalue()
+
+        r = admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(ods_bytes), "data.ods")},
+            content_type="multipart/form-data",
+        )
+        assert r.status_code == 200
+        body = json.loads(r.data)
+        assert "examinateurs.csv" in body["uploaded"]
+
+        from csv_validator import normalize_csv
+        exam_rows, _ = normalize_csv((tmp_path / "examinateurs.csv").read_bytes())
+        assert exam_rows[0]["Nom"] == "Martin Sophie"
+        assert exam_rows[0]["Etab"] == f"{etab1},{etab2}"
+        assert "Etab1" not in exam_rows[0]
+
 
 # ── Candidat (route protégée) ─────────────────────────────────────────────────
 
