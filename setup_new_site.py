@@ -948,6 +948,8 @@ def main() -> None:
     parser.add_argument("--dpd-email",        help="Email du Délégué à la Protection des Données de l'académie")
     parser.add_argument("--app-port",         type=int, default=None,
                         help="Port hôte du conteneur nginx (défaut: premier port libre ≥ 8080)")
+    parser.add_argument("--no-update-lycees",  action="store_true",
+                        help="Ne pas mettre à jour la liste des lycées depuis data.education.gouv.fr")
     parser.add_argument("--yes",              action="store_true",
                         help="Confirmer sans demander")
     args = parser.parse_args()
@@ -1070,7 +1072,24 @@ def main() -> None:
         ok(f"PDF administrateur généré → {pdf}")
         warn("Imprimez ce document et supprimez le fichier numérique.")
 
-    # ── 1b. Fichier .env Docker ───────────────────────────────────────────────
+    # ── 1b. Mise à jour de la liste des lycées ────────────────────────────────
+    if not args.no_update_lycees:
+        hdr("Mise à jour de la liste des lycées")
+        try:
+            import update_lycees as _ul
+            rc = _ul.run(verbose=True)
+            if rc != 0:
+                warn("La mise à jour de la liste des lycées a échoué.")
+                warn("Relancez manuellement : python update_lycees.py")
+            else:
+                ok("Liste des lycées à jour dans ods_handler.py")
+        except Exception as _exc:
+            warn(f"Impossible de mettre à jour la liste des lycées : {_exc}")
+            warn("Relancez manuellement : python update_lycees.py")
+    else:
+        warn("Mise à jour des lycées ignorée (--no-update-lycees).")
+
+    # ── 1c. Fichier .env Docker ───────────────────────────────────────────────
     hdr("Génération du fichier .env Docker")
     env_path = PROJECT_ROOT / ".env"
     env_content, db_root_password = generate_env_file(db_user, db_password, db_name, app_port)
@@ -1193,6 +1212,9 @@ def main() -> None:
         print(f"  Prochaines étapes manuelles :")
         print(f"    docker compose up -d --build")
         print(f"    ./run_algo.sh")
+        print()
+        print(f"  Pour mettre à jour la liste des lycées :")
+        print(f"    python update_lycees.py")
     else:
         print()
         print(f"  Application accessible sur : https://{fqdn}")
