@@ -96,12 +96,12 @@ class TestGenerateOdsModele:
         assert first["Ville"] == ville
         assert first["Téléphone"] == tel
 
-    def test_lycees_etab_column_contains_ville_nom_uai(self):
-        """La colonne Etab (formule) doit contenir la concaténation ville — nom (UAI)."""
+    def test_lycees_etab_column_contains_nom_ville_uai(self):
+        """La colonne Etab (formule) doit contenir la concaténation nom — ville (UAI)."""
         sheets = parse_ods(generate_ods_modele())
         row = sheets[LYCEES_SHEET_NAME][0]
         uai, nom, ville, _ = _LYCEES_AIM[0]
-        expected = f"{ville} — {nom} ({uai})"
+        expected = f"{nom} — {ville} ({uai})"
         # La cellule formule stocke la valeur cachée pré-calculée
         assert row["Etab"] == expected
 
@@ -139,6 +139,7 @@ class TestParseOds:
         expected = {c for _, c, _, _ in _DEFAULT_PREPS}
         assert short_names == expected
 
-    def test_lycees_249_rows(self):
+    def test_lycees_row_count(self):
+        from ods_handler import _LYCEES_AIM
         sheets = parse_ods(generate_ods_modele())
-        assert len(sheets[LYCEES_SHEET_NAME]) == 249
+        assert len(sheets[LYCEES_SHEET_NAME]) == len(_LYCEES_AIM)
