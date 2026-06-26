@@ -211,10 +211,19 @@ def check_password(password, identifier, hash_value):
 
 # ── Affichage / vérification OTP ─────────────────────────────────────────────
 
-def build_totp_uri(otp_key: str, issuer: str = "2ndOral",
-                   account: str = "Admin") -> str:
-    """Construit l'URI standard otpauth:// pour les applications TOTP."""
-    label = _urlquote(f"{issuer}:{account}", safe="")
+def build_totp_uri(otp_key: str, fqdn: str) -> str:
+    """Construit l'URI standard otpauth:// pour les applications TOTP.
+
+    Format unifié : issuer fixe « 2ndOral », account = fqdn.
+    Cela permet à un admin gérant plusieurs instances de les distinguer
+    dans son appli TOTP tout en les regroupant sous le même issuer.
+
+    :param otp_key: Clé base32 TOTP.
+    :param fqdn:    Nom de domaine complet de l'instance (ex. stex.mesoraux.fr).
+    :returns: URI otpauth:// conforme RFC 6238.
+    """
+    issuer = "2ndOral"
+    label = _urlquote(f"{issuer}:{fqdn}", safe="")
     return (
         f"otpauth://totp/{label}"
         f"?secret={otp_key}"
@@ -224,15 +233,20 @@ def build_totp_uri(otp_key: str, issuer: str = "2ndOral",
 
 
 def show_otp_setup(otp_key: str, centre: str, output_dir: Path,
-                   subdomain: str = "2ndOral") -> None:
+                   fqdn: str = "2ndOral") -> None:
     """
     Affiche les informations de configuration TOTP :
       - QR code dans le terminal (si segno est disponible)
       - Sauvegarde PNG dans output_dir/otp_setup.png
       - Clé brute pour saisie manuelle
       - Vérification interactive optionnelle (si pyotp est disponible)
+
+    :param otp_key:    Clé base32 TOTP.
+    :param centre:     Nom du centre d'examen (affiché en clair uniquement).
+    :param output_dir: Dossier de sortie pour le PNG du QR code.
+    :param fqdn:       FQDN de l'instance, utilisé comme account dans l'URI TOTP.
     """
-    uri = build_totp_uri(otp_key, issuer=subdomain)
+    uri = build_totp_uri(otp_key, fqdn=fqdn)
 
     print()
 
@@ -440,7 +454,7 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
         st_subtitle,
     ))
 
-    uri = build_totp_uri(otp_key)
+    uri = build_totp_uri(otp_key, fqdn=fqdn)
 
     # Génère le QR code dans un fichier temporaire
     with _tempfile.NamedTemporaryFile(suffix='.png', delete=False) as _qr_tmp:
@@ -1063,7 +1077,7 @@ def main() -> None:
 
     # Affichage QR + clé + vérification interactive
     hdr("Configuration TOTP (authentification admin)")
-    show_otp_setup(otp_key, centre, PROJECT_ROOT, subdomain=subdomain)
+    show_otp_setup(otp_key, centre, PROJECT_ROOT, fqdn=fqdn)
 
     # PDF administrateur
     pdf = generate_admin_pdf(otp_key, fqdn, centre, PROJECT_ROOT,
@@ -1182,24 +1196,6 @@ def main() -> None:
     docker_ok = False
     if not skip_docker:
         docker_ok = docker_setup(db_root_password, db_name, db_user, db_password)
-        if docker_ok:
-            # Algo.py optionnel
-            do_algo = input(
-                "\n  Lancer algo.py maintenant pour initialiser la base "
-                "(nécessite les fichiers CSV) ? [o/N] "
-            ).strip().lower()
-            if do_algo in ("o", "oui", "y", "yes"):
-                hdr("Lancement de algo.py")
-                try:
-                    subprocess.run(
-                        ["bash", "run_algo.sh"],
-                        cwd=str(PROJECT_ROOT),
-                        check=True,
-                    )
-                    ok("algo.py terminé.")
-                except subprocess.CalledProcessError as e:
-                    warn(f"algo.py a échoué (code {e.returncode}).")
-                    warn("Relancez manuellement : ./run_algo.sh")
 
     # ── Résumé ────────────────────────────────────────────────────────────────
     hdr("Résumé")

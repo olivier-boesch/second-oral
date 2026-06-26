@@ -56,27 +56,45 @@ class TestIsDomainLabel:
 # ── build_totp_uri ────────────────────────────────────────────────────────────
 
 class TestBuildTotpUri:
+    """Vérifie le format de l'URI TOTP (RFC 6238 / Google Key URI Format).
+
+    Format unifié : issuer fixe « 2ndOral », account = fqdn.
+    """
+
+    FQDN = "stex.mesoraux.fr"
+
     def test_scheme(self):
-        uri = build_totp_uri("ABCDEFGH")
+        """L'URI commence par le schéma otpauth://totp/."""
+        uri = build_totp_uri("ABCDEFGH", fqdn=self.FQDN)
         assert uri.startswith("otpauth://totp/")
 
     def test_contains_secret(self):
+        """La clé secrète est présente dans les paramètres."""
         key = "ABCDEFGHIJKLMNOP"
-        uri = build_totp_uri(key)
+        uri = build_totp_uri(key, fqdn=self.FQDN)
         assert f"secret={key}" in uri
 
-    def test_contains_issuer(self):
-        uri = build_totp_uri("ABCDEFGH", issuer="MonApp")
-        assert "MonApp" in uri
+    def test_issuer_is_2ndoral(self):
+        """L'issuer est toujours « 2ndOral » (fixe pour toutes les instances)."""
+        uri = build_totp_uri("ABCDEFGH", fqdn=self.FQDN)
+        assert "issuer=2ndOral" in uri
+
+    def test_account_is_fqdn(self):
+        """Le compte (account) dans le label est le FQDN de l'instance."""
+        uri = build_totp_uri("ABCDEFGH", fqdn=self.FQDN)
+        assert self.FQDN in uri
 
     def test_algorithm_sha1(self):
-        assert "algorithm=SHA1" in build_totp_uri("ABCDEFGH")
+        """L'algorithme est SHA1 (standard TOTP RFC 6238)."""
+        assert "algorithm=SHA1" in build_totp_uri("ABCDEFGH", fqdn=self.FQDN)
 
     def test_period_30(self):
-        assert "period=30" in build_totp_uri("ABCDEFGH")
+        """La période est de 30 secondes (standard TOTP)."""
+        assert "period=30" in build_totp_uri("ABCDEFGH", fqdn=self.FQDN)
 
     def test_digits_6(self):
-        assert "digits=6" in build_totp_uri("ABCDEFGH")
+        """Le code est à 6 chiffres (standard TOTP)."""
+        assert "digits=6" in build_totp_uri("ABCDEFGH", fqdn=self.FQDN)
 
 
 # ── generate_nginx_conf ───────────────────────────────────────────────────────
