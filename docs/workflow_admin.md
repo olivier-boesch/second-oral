@@ -235,6 +235,13 @@ Après un lancement réussi :
 3. Vérifier qu'aucun candidat n'a deux oraux trop proches
 4. Si besoin, modifier manuellement un oral via `/gestion/edit-oral`
 
+> **Validation lors de la modification d'un oral**
+>
+> L'interface `/gestion/edit-oral` effectue automatiquement deux vérifications lors de la soumission :
+>
+> - **Chevauchement (bloquant)** : si le nouvel horaire chevauche un autre oral du même candidat, la modification est refusée avec un message d'erreur.
+> - **Écart minimum (avertissement)** : si l'écart entre `heure_sujet` des deux oraux du même candidat est inférieur à l'écart configuré (paramètre `ecart_mini`, défaut 80 min), un avertissement s'affiche. L'admin peut forcer la validation en cliquant « Valider quand même ».
+
 ### Étape 6 — Générer et télécharger les documents
 
 Sur la page `/gestion/algo`, section **Télécharger les documents** :

@@ -1329,6 +1329,50 @@ def liste_examinateurs_json() -> ResponseReturnValue:
     return jsonify(liste)
 
 
+def _time_str_to_td(s: str) -> timedelta:
+    """Convertit une chaîne HH:MM en timedelta."""
+    h, m = s.split(':')
+    return timedelta(hours=int(h), minutes=int(m))
+
+
+def _check_conflits_oral(
+    id_oral: int,
+    id_candidat: int,
+    sujet_new: timedelta,
+    fin_new: timedelta,
+    ecart_mini: int,
+) -> tuple[str | None, str | None]:
+    """Vérifie chevauchement et écart minimum lors du déplacement d'un oral.
+
+    Retourne (erreur_bloquante, avertissement) — au plus un des deux est non-None.
+    Le chevauchement est bloquant ; l'écart insuffisant est un avertissement.
+    """
+    autres = db_get(
+        db_facility_web.SELECT_LISTE_EDITION_ORAL,
+        id_candidat,
+        no_list_auto=False,
+    )
+    for o in autres:
+        if o['id'] == id_oral:
+            continue
+        o_debut: timedelta = o['heure_sujet']
+        o_fin: timedelta = o['heure_fin']
+        if sujet_new < o_fin and fin_new > o_debut:
+            return (
+                f"Chevauchement avec l'oral de {o['matiere']} "
+                f"({o_debut} – {o_fin})",
+                None,
+            )
+        gap_min = abs((sujet_new - o_debut).total_seconds()) / 60
+        if gap_min < ecart_mini:
+            return (
+                None,
+                f"Écart insuffisant avec l'oral de {o['matiere']} "
+                f"({gap_min:.0f} min < {ecart_mini} min requis)",
+            )
+    return None, None
+
+
 @app.route("/gestion/edit-oral", methods=["GET", "POST"])
 @admin_required
 @nocache
@@ -1343,6 +1387,59 @@ def edit_oral() -> ResponseReturnValue:
             'mis_a_jour': 1 if request.form.get('mis_a_jour') == 'on' else 0,
         }
         numero = request.form.get('numero')
+
+        # Validation des conflits horaires
+        oral_actuel = db_get(db_facility_web.SELECT_INFOS_ORAL, d['id'])
+        heure_sujet_str: str = request.form.get('heure_sujet') or ''
+        id_oral_int: int = int(request.form.get('id') or 0)
+        sujet_new = _time_str_to_td(heure_sujet_str)
+        duree = oral_actuel['heure_fin'] - oral_actuel['heure_sujet']
+        fin_new = sujet_new + duree
+        error_msg, warning_msg = _check_conflits_oral(
+            id_oral_int,
+            oral_actuel['id_candidat'],
+            sujet_new,
+            fin_new,
+            _load_algo_params()['ecart_mini'],
+        )
+        if error_msg or (warning_msg and request.form.get('force') != '1'):
+            donnees_oral = dict(oral_actuel)
+            donnees_oral['heure_sujet'] = d['heure_sujet']
+            donnees_oral['heure_oral'] = d['heure_oral']
+            donnees_oral['id_matiere'] = (
+                request.form.get('matiere') or donnees_oral['id_matiere']
+            )
+            donnees_oral['id_examinateur'] = (
+                int(d['examinateur']) if d['examinateur'] else donnees_oral['id_examinateur']
+            )
+            liste_oraux = db_get(
+                db_facility_web.SELECT_LISTE_EDITION_ORAL,
+                donnees_oral['id_candidat'], no_list_auto=False,
+            )
+            liste_matieres = db_get(
+                db_facility_web.SELECT_LISTE_MATIERES, no_list_auto=False,
+            )
+            liste_examinateurs = db_get(
+                db_facility_web.SELECT_LISTE_EXAMINATEURS_PAR_MATIERE,
+                donnees_oral['id_matiere'], no_list_auto=False,
+            )
+            url = _safe_redirect_url(request.form.get("link_back"))
+            status = 422 if error_msg else 200
+            return render_template(
+                "edit_oral.html",
+                centre=CENTRE_EXAMEN,
+                donnees_oral=donnees_oral,
+                liste_oraux=liste_oraux,
+                matieres=liste_matieres,
+                examinateurs=liste_examinateurs,
+                username=get_username(),
+                url_of_page=request.url,
+                link_back=url,
+                authenticated=is_authenticated(),
+                error_msg=error_msg,
+                warning_msg=warning_msg,
+            ), status
+
         db_update(db_facility_web.UPDATE_INFOS_ORAL, **d)
         if d['mis_a_jour'] == 1:
             # Récupère salle et loge pour publier sur les canaux ciblés
