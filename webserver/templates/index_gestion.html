@@ -15,13 +15,7 @@
             <input type="hidden" name="link_back" value="{{ url_of_page }}">
             <button type="submit" class="link-button">Recharger toutes les pages ouvertes</button>
         </form><br>
-        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="liste_oraux", id_doc=0) }}">Liste générale des oraux (pdf)</a><br>
-        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_candidats", id_doc=0) }}">Fiches des candidats (pdf)</a><br>
-        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_salles", id_doc=0) }}">Fiches des salles (pdf)</a><br>
-        <a target="_blank" href="{{ url_for('generate_screen_batch', type_doc="fiches_loges", id_doc=0) }}">Fiches des loges (pdf)</a><br>
-        <a href="{{ url_for("verify_logs") }}">Vérifier l'intégrité des données</a><br>
-        <a href="{{ url_for('gestion_credentials') }}">Renouveler les identifiants</a><br>
-        <a href="{{ url_for("archive_page") }}">Archiver les données de fin de session (zip)</a>
+        <a href="{{ url_for("verify_logs") }}">Vérifier l'intégrité des données</a>
     </div>
     <table class="table_oraux">
         <tr>
