@@ -1080,19 +1080,29 @@ class TestCredentialRenewal:
         assert "password_hash" in kwargs
         assert kwargs["login_key"] != ""
 
-    def test_renew_all_candidats(self, admin_client, db_mock):
-        """Renouveler tous les candidats appelle db_update une fois par candidat."""
+    def test_renew_all_candidats(self, admin_client, db_mock, monkeypatch):
+        """Renouveler tous les candidats appelle db_update une fois par candidat
+        et regénère papillons_candidats.pdf."""
+        import app as app_module
         db_mock.make_sql_update.reset_mock()
         candidats = [
             {"id": 1, "nom": "Dupont Jean", "numero": "0001"},
             {"id": 2, "nom": "Martin Paul", "numero": "0002"},
         ]
-        # SELECT_ALL_CANDIDATS_FOR_RENEWAL puis SELECT_INFOS_CANDIDAT × 2
+        candidats_papillons = [
+            {"nom": "Dupont Jean", "numero": "0001", "login_key": "key1"},
+            {"nom": "Martin Paul", "numero": "0002", "login_key": "key2"},
+        ]
+        # SELECT_ALL_CANDIDATS_FOR_RENEWAL, SELECT_INFOS_CANDIDAT × 2,
+        # puis SELECT_ALL_CANDIDATS_PAPILLONS pour la regénération groupée
         db_mock.make_sql_select.side_effect = [
             candidats,                 # liste initiale
             [candidats[0]],            # infos candidat 1
             [candidats[1]],            # infos candidat 2
+            candidats_papillons,       # SELECT_ALL_CANDIDATS_PAPILLONS (regénération)
         ]
+        monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
+                            lambda *a, **kw: None)
         r = admin_client.post("/gestion/credentials/candidats",
                               follow_redirects=False)
         assert r.status_code == 302
@@ -1139,11 +1149,12 @@ class TestCredentialRenewal:
     # ── Loge ─────────────────────────────────────────────────────────────────
 
     def test_renew_loge_updates_db(self, admin_client, db_mock, monkeypatch):
-        """Renouveler une loge appelle db_update avec le nouveau password_hash."""
+        """Renouveler une loge appelle db_update et regénère papillons_loges.pdf."""
         import app as app_module
         db_mock.make_sql_update.reset_mock()
         db_mock.make_sql_select.side_effect = [
             [self.LOGE],   # SELECT_LOGE_BY_NOM (validation existence)
+            [self.LOGE],   # SELECT_ALL_LOGES_FOR_RENEWAL (_regenerer_papillons_loges)
         ]
         monkeypatch.setattr(app_module.reports, "liste_papillons_loges",
                             lambda *a, **kw: None)

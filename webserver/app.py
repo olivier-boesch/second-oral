@@ -2408,6 +2408,69 @@ def _renew_loge(nom_loge: str) -> str:
     return new_password
 
 
+def _regenerer_papillons_examinateurs(base_url: str) -> None:
+    """Regénère papillons_examinateurs.pdf avec tous les mots de passe actuels du store.
+
+    Récupère la liste des examinateurs en DB et associe chaque salle au mot de passe
+    stocké dans credentials.enc. Les examinateurs absents du store sont ignorés
+    (leur mot de passe plaintext n'est plus disponible).
+    """
+    creds = _load_credentials()
+    store_exams = creds.get("examinateurs", {})
+    tous = db_get(db_facility_web.SELECT_ALL_EXAMINATEURS_FOR_RENEWAL, no_list_auto=False)
+    connexions = [
+        (ex['salle'], ex['nom'], store_exams[ex['salle']])
+        for ex in tous
+        if ex['salle'] in store_exams
+    ]
+    if connexions:
+        reports.liste_papillons_connexion(
+            connexions,
+            filename=str(Path(app.root_path) / 'static' / 'docs' / 'papillons_examinateurs.pdf'),
+            base_url=base_url,
+            centre_examen=CENTRE_EXAMEN,
+        )
+
+
+def _regenerer_papillons_loges(base_url: str) -> None:
+    """Regénère papillons_loges.pdf avec tous les mots de passe actuels du store.
+
+    Récupère la liste des loges en DB et associe chaque nom au mot de passe
+    stocké dans credentials.enc. Les loges absentes du store sont ignorées.
+    """
+    creds = _load_credentials()
+    store_loges = creds.get("loges", {})
+    toutes = db_get(db_facility_web.SELECT_ALL_LOGES_FOR_RENEWAL, no_list_auto=False)
+    loges_data = [
+        (lg['nom'], store_loges[lg['nom']])
+        for lg in toutes
+        if lg['nom'] in store_loges
+    ]
+    if loges_data:
+        reports.liste_papillons_loges(
+            loges_data,
+            filename=str(Path(app.root_path) / 'static' / 'docs' / 'papillons_loges.pdf'),
+            base_url=base_url,
+            centre_examen=CENTRE_EXAMEN,
+        )
+
+
+def _regenerer_papillons_candidats(base_url: str) -> None:
+    """Regénère papillons_candidats.pdf avec tous les candidats en DB.
+
+    Le login_key des candidats est stocké en clair dans la DB, donc aucun
+    accès au store chiffré n'est nécessaire.
+    """
+    candidats = db_get(db_facility_web.SELECT_ALL_CANDIDATS_PAPILLONS, no_list_auto=False)
+    if candidats:
+        reports.liste_papillons_candidats(
+            candidats,
+            filename=str(Path(app.root_path) / 'static' / 'docs' / 'papillons_candidats.pdf'),
+            base_url=base_url,
+            centre_examen=CENTRE_EXAMEN,
+        )
+
+
 @app.route("/gestion/credentials")
 @admin_required
 @nocache
@@ -2456,19 +2519,23 @@ def renew_candidats() -> ResponseReturnValue:
     :returns: Redirection vers /gestion/credentials.
     """
     tous = db_get(db_facility_web.SELECT_ALL_CANDIDATS_FOR_RENEWAL, no_list_auto=False)
+    base_url = request.host_url.rstrip('/')
     for c in tous:
         _renew_candidat(c['id'])
-    return redirect(url_for('gestion_credentials'))
+    papillon_filename = 'papillons_candidats.pdf'
+    _regenerer_papillons_candidats(base_url)
+    return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
 
 
 @app.route("/gestion/credentials/examinateur/<int:id>", methods=["POST"])
 @admin_required
 @nocache
 def renew_examinateur(id: int) -> ResponseReturnValue:
-    """Renouvelle le mot de passe d'un examinateur et regénère son papillon PDF.
+    """Renouvelle le mot de passe d'un examinateur, regénère son papillon individuel
+    et met à jour le PDF groupé papillons_examinateurs.pdf pour la cohérence.
 
     :param id: Identifiant DB de l'examinateur.
-    :returns: Redirection vers /gestion/credentials avec lien vers le nouveau papillon.
+    :returns: Redirection vers /gestion/credentials avec lien vers le papillon individuel.
     """
     salle, nom, password = _renew_examinateur(id)
     papillon_filename = f'papillons_salle_{secure_filename(salle)}.pdf'
@@ -2479,6 +2546,7 @@ def renew_examinateur(id: int) -> ResponseReturnValue:
         base_url=base_url,
         centre_examen=CENTRE_EXAMEN,
     )
+    _regenerer_papillons_examinateurs(base_url)
     return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
 
 
@@ -2511,7 +2579,8 @@ def renew_examinateurs() -> ResponseReturnValue:
 @admin_required
 @nocache
 def renew_loge(nom: str) -> ResponseReturnValue:
-    """Renouvelle le mot de passe d'une loge et regénère son papillon PDF.
+    """Renouvelle le mot de passe d'une loge, regénère son papillon individuel
+    et met à jour le PDF groupé papillons_loges.pdf pour la cohérence.
 
     Retourne 404 si la loge n'existe pas en base (table Loge).
 
@@ -2529,6 +2598,7 @@ def renew_loge(nom: str) -> ResponseReturnValue:
         base_url=base_url,
         centre_examen=CENTRE_EXAMEN,
     )
+    _regenerer_papillons_loges(base_url)
     return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
 
 
