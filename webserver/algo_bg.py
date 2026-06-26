@@ -32,14 +32,19 @@ def is_running() -> bool:
 
 
 def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
-             params: dict | None = None) -> bool:
+             params: dict | None = None,
+             on_done: Callable[[int], None] | None = None) -> bool:
     """
     Lance algo.py dans un thread séparé.
 
-    :param publish_fn: callable(data_str) qui publie une ligne sur le canal SSE.
+    :param publish_fn: callable(data_str) publiant une ligne sur le canal SSE.
                        data_str est un JSON : {"line": "...", "done": false}.
     :param db_host:    Hôte MariaDB (surcharge la valeur de app_secrets.py).
     :param params:     Paramètres algo (n_run, ecart_mini, heure_debut, creneaux).
+    :param on_done:    Callback appelé à la fin du processus avec le code de retour.
+                       Utile pour traiter les fichiers produits par algo.py (ex. chiffrement
+                       des credentials). Appelé dans le thread de streaming, pas dans celui
+                       qui appelle run_algo.
     :returns: True si lancé, False si algo tourne déjà.
     """
     global _process
@@ -81,6 +86,7 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
     def _stream() -> None:
         global _process
         _pub("=== Démarrage de algo.py ===")
+        rc = -1
         try:
             assert proc.stdout is not None
             for line in proc.stdout:
@@ -94,6 +100,11 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
         finally:
             with _lock:
                 _process = None
+            if on_done is not None:
+                try:
+                    on_done(rc)
+                except Exception as exc:
+                    _pub(f"=== Avertissement post-algo : {exc} ===")
 
     threading.Thread(target=_stream, daemon=True).start()
     return True

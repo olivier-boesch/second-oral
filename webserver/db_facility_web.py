@@ -272,6 +272,37 @@ INSERT INTO Examinateur (nom, etablissements, matiere, salle, loge, password_has
 VALUES (%(nom)s, %(etablissements)s, %(matiere)s, %(salle)s, %(loge)s, %(password_hash)s)
 """
 
+# ---------- Renouvellement des identifiants
+
+SELECT_ALL_CANDIDATS_FOR_RENEWAL = """
+SELECT id, nom, numero FROM Candidat ORDER BY nom
+"""
+
+UPDATE_CANDIDAT_CREDENTIALS = """
+UPDATE Candidat SET login_key = %(login_key)s, password_hash = %(password_hash)s
+WHERE id = %(id)s
+"""
+
+SELECT_EXAMINATEUR_FOR_RENEWAL = """
+SELECT id, nom, salle FROM Examinateur WHERE id = %s
+"""
+
+SELECT_ALL_EXAMINATEURS_FOR_RENEWAL = """
+SELECT id, nom, salle FROM Examinateur ORDER BY salle
+"""
+
+UPDATE_EXAMINATEUR_PASSWORD = """
+UPDATE Examinateur SET password_hash = %(password_hash)s WHERE id = %(id)s
+"""
+
+SELECT_ALL_LOGES_FOR_RENEWAL = """
+SELECT nom FROM Loge ORDER BY nom
+"""
+
+UPDATE_LOGE_PASSWORD = """
+UPDATE Loge SET password_hash = %(password_hash)s WHERE nom = %(nom)s
+"""
+
 # ---------- Documents PDF
 
 SELECT_DOC_LISTE_ORAUX = """

@@ -271,7 +271,21 @@ Sur `/gestion`, cliquer **Recharger toutes les pages** : tous les navigateurs co
 
 ### Ajouter ou modifier un examinateur
 
-`/gestion/liste-examinateurs` → modifier ou ajouter. Note : un examinateur ajouté depuis l'interface n'a pas de mot de passe généré — utiliser `run_algo.sh` pour régénérer tous les mots de passe, ou contacter l'administrateur système pour définir le hash manuellement.
+`/gestion/liste-examinateurs` → modifier ou ajouter. Après ajout, un papillon PDF est automatiquement généré avec le nouveau mot de passe.
+
+### Renouvellement des identifiants
+
+`/gestion/credentials` (accessible depuis "Renouveler les identifiants" sur la page de gestion) permet de **renouveler les identifiants sans relancer l'algo**, pour chaque catégorie indépendamment :
+
+| Catégorie | Granularité | Effet |
+|---|---|---|
+| **Candidats** | Un ou tous | Génère un nouveau `login_key` + hash en DB |
+| **Examinateurs** | Un ou tous | Génère un nouveau mot de passe + hash en DB + regénère le papillon PDF |
+| **Loges** | Une ou toutes | Génère un nouveau mot de passe + hash en DB + regénère le papillon PDF |
+
+**Stockage sécurisé :** les mots de passe en clair des examinateurs et des loges sont chiffrés (AES-256-GCM) dans `data/credentials.enc`. Ce store est initialisé automatiquement à la fin de chaque lancement de l'algorithme, et mis à jour à chaque renouvellement.
+
+> **Cas d'usage :** un examinateur perd son papillon → aller sur `/gestion/credentials`, cliquer "Renouveler" sur la ligne de cet examinateur → un nouveau papillon PDF est regénéré et disponible au téléchargement.
 
 ---
 

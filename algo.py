@@ -882,6 +882,18 @@ if __name__ == '__main__':
     log.info("Génération de la Base de données")
     liste_connexion_exams, liste_connexion_candidats, liste_connexion_loges = best_alg.save()
 
+    # Écriture des credentials en clair dans un fichier temporaire non chiffré.
+    # Ce fichier est destiné à être immédiatement lu et chiffré par le serveur
+    # Flask (via algo_bg.py on_done), puis supprimé. Il ne doit jamais persister.
+    import json as _json
+    _creds_tmp = _Path('data') / 'credentials_new.json'
+    _creds_tmp.parent.mkdir(parents=True, exist_ok=True)
+    _creds_tmp.write_text(_json.dumps({
+        "examinateurs": {salle: mdp for salle, _nom, mdp in liste_connexion_exams},
+        "loges": {nom: mdp for nom, mdp in liste_connexion_loges},
+    }))
+    log.info(f"Credentials temporaires écrits dans {_creds_tmp}")
+
     log.info("Génération des papillons examinateurs")
     liste_papillons_connexion(
         liste_connexion_exams,

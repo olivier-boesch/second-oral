@@ -41,6 +41,7 @@ from wtforms.validators import DataRequired
 from PIL import Image
 from io import BytesIO, StringIO
 from base64 import b64encode, b64decode
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
@@ -2024,6 +2025,8 @@ def mentions_legales() -> ResponseReturnValue:
 # ── Gestion de algo.py (admin) ────────────────────────────────────────────────
 
 _DATA_DIR = Path(app.root_path).parent / "data"
+_CREDENTIALS_FILE     = _DATA_DIR / "credentials.enc"
+_CREDENTIALS_TMP_FILE = _DATA_DIR / "credentials_new.json"
 _ALLOWED_CSV = {
     "candidats":    "candidats.csv",
     "examinateurs": "examinateurs.csv",
@@ -2038,11 +2041,77 @@ _ALGO_PARAMS_DEFAULTS = {
 }
 
 def _load_algo_params() -> dict:
+    """Charge les paramètres de l'algorithme depuis le fichier JSON, ou retourne les défauts."""
     try:
         import json as _json
         return {**_ALGO_PARAMS_DEFAULTS, **_json.loads(_ALGO_PARAMS_FILE.read_text())}
     except (OSError, ValueError):
         return dict(_ALGO_PARAMS_DEFAULTS)
+
+
+# ── Store chiffré des credentials (AES-256-GCM) ──────────────────────────────
+
+def _aesgcm() -> AESGCM:
+    """Retourne une instance AESGCM avec une clé AES-256 dérivée de APP_SECRET_KEY.
+
+    La clé est dérivée via SHA-256 (32 bytes), ce qui garantit sa longueur correcte
+    sans exposer directement APP_SECRET_KEY.
+    """
+    import hashlib as _hashlib
+    key = _hashlib.sha256(APP_SECRET_KEY.encode()).digest()
+    return AESGCM(key)
+
+
+def _load_credentials() -> dict:
+    """Charge et déchiffre le store de credentials depuis data/credentials.enc.
+
+    Le fichier est chiffré avec AES-256-GCM (nonce 12 bytes préfixé).
+    Retourne un dict vide {"examinateurs": {}, "loges": {}} si le fichier n'existe pas
+    ou si le déchiffrement échoue (fichier corrompu ou clé incorrecte).
+    """
+    empty: dict = {"examinateurs": {}, "loges": {}}
+    if not _CREDENTIALS_FILE.exists():
+        return empty
+    try:
+        raw = _CREDENTIALS_FILE.read_bytes()
+        nonce, ciphertext = raw[:12], raw[12:]
+        plaintext = _aesgcm().decrypt(nonce, ciphertext, None)
+        return json.loads(plaintext.decode())
+    except Exception:
+        app.logger.warning("Impossible de déchiffrer credentials.enc — store réinitialisé.")
+        return empty
+
+
+def _save_credentials(creds: dict) -> None:
+    """Chiffre et persiste le store de credentials dans data/credentials.enc.
+
+    Utilise AES-256-GCM avec un nonce aléatoire 96 bits (jamais réutilisé).
+    Le tag d'authentification GCM (128 bits) est inclus dans le ciphertext.
+    """
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    nonce = os.urandom(12)
+    ciphertext = _aesgcm().encrypt(nonce, json.dumps(creds).encode(), None)
+    _CREDENTIALS_FILE.write_bytes(nonce + ciphertext)
+
+
+def _absorb_credentials_file(rc: int) -> None:
+    """Callback appelé par algo_bg après la fin d'algo.py.
+
+    Si l'algo a réussi (rc == 0), lit data/credentials_new.json (plaintext temporaire
+    écrit par algo.py), l'intègre dans le store chiffré, puis supprime le fichier
+    temporaire pour ne pas laisser de credentials en clair sur le disque.
+    """
+    if rc != 0:
+        return
+    if not _CREDENTIALS_TMP_FILE.exists():
+        app.logger.warning("credentials_new.json introuvable après algo.py")
+        return
+    try:
+        new_creds = json.loads(_CREDENTIALS_TMP_FILE.read_text())
+        _save_credentials(new_creds)
+        app.logger.info("Credentials chiffrés et stockés dans credentials.enc")
+    finally:
+        _CREDENTIALS_TMP_FILE.unlink(missing_ok=True)
 
 
 @app.route("/gestion/algo")
@@ -2245,7 +2314,7 @@ def algo_run() -> ResponseReturnValue:
                              message=json.dumps(msg.to_dict()))
 
     started = _run(_publish, db_host=os.environ.get("DB_HOST", "localhost"),
-                   params=_load_algo_params())
+                   params=_load_algo_params(), on_done=_absorb_credentials_file)
     app.logger.info(f"algo.py: {'démarré' if started else 'déjà en cours'}")
     return jsonify({"ok": started})
 
@@ -2256,6 +2325,184 @@ def algo_status() -> ResponseReturnValue:
     """Statut JSON de algo.py."""
     from algo_bg import is_running as _is_running
     return jsonify({"running": _is_running()})
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Renouvellement des identifiants (découplé de l'algo)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _renew_candidat(candidat_id: int) -> str:
+    """Génère de nouveaux identifiants pour un candidat et met à jour la DB.
+
+    Le login_key est stocké en clair dans la DB (utilisé comme mot de passe candidat)
+    et son hash est mis à jour simultanément.
+
+    :param candidat_id: Identifiant DB du candidat.
+    :returns: Nouvelle login_key en clair (pour regénération du papillon si besoin).
+    """
+    new_key = generate_password()
+    candidat = db_get(db_facility_web.SELECT_INFOS_CANDIDAT, candidat_id)
+    new_hash = hash_password(new_key, str(candidat['numero']))
+    db_update(db_facility_web.UPDATE_CANDIDAT_CREDENTIALS,
+              id=candidat_id, login_key=new_key, password_hash=new_hash)
+    return new_key
+
+
+def _renew_examinateur(exam_id: int) -> tuple[str, str, str]:
+    """Génère un nouveau mot de passe pour un examinateur, met à jour DB et store chiffré.
+
+    La salle est l'identifiant de connexion de l'examinateur ; elle est utilisée comme
+    clé dans le store chiffré (credentials.enc) pour permettre la regénération du papillon.
+
+    :param exam_id: Identifiant DB de l'examinateur.
+    :returns: Tuple (salle, nom, password_plaintext) pour la génération du papillon.
+    """
+    exam = db_get(db_facility_web.SELECT_EXAMINATEUR_FOR_RENEWAL, exam_id)
+    new_password = generate_password()
+    new_hash = hash_password(new_password, exam['salle'])
+    db_update(db_facility_web.UPDATE_EXAMINATEUR_PASSWORD,
+              id=exam_id, password_hash=new_hash)
+    creds = _load_credentials()
+    creds.setdefault("examinateurs", {})[exam['salle']] = new_password
+    _save_credentials(creds)
+    return exam['salle'], exam['nom'], new_password
+
+
+def _renew_loge(nom_loge: str) -> str:
+    """Génère un nouveau mot de passe pour une loge, met à jour DB et store chiffré.
+
+    Le mot de passe d'une loge est partagé entre tous les agents de surveillance
+    de cette loge. La clé dans le store chiffré est le nom de la loge.
+
+    :param nom_loge: Nom de la loge (clé primaire de la table Loge).
+    :returns: Nouveau mot de passe en clair (pour génération du papillon).
+    """
+    new_password = generate_password()
+    new_hash = hash_password(new_password, nom_loge)
+    db_update(db_facility_web.UPDATE_LOGE_PASSWORD, nom=nom_loge, password_hash=new_hash)
+    creds = _load_credentials()
+    creds.setdefault("loges", {})[nom_loge] = new_password
+    _save_credentials(creds)
+    return new_password
+
+
+@app.route("/gestion/credentials")
+@admin_required
+@nocache
+def gestion_credentials() -> ResponseReturnValue:
+    """Page de gestion du renouvellement des identifiants (sans relancer l'algo)."""
+    candidats = db_get(db_facility_web.SELECT_ALL_CANDIDATS_FOR_RENEWAL, no_list_auto=False)
+    examinateurs = db_get(db_facility_web.SELECT_ALL_EXAMINATEURS_FOR_RENEWAL, no_list_auto=False)
+    loges = db_get(db_facility_web.SELECT_ALL_LOGES_FOR_RENEWAL, no_list_auto=False)
+    store_ok = _CREDENTIALS_FILE.exists()
+    return render_template(
+        "credentials.html",
+        centre=CENTRE_EXAMEN,
+        username=get_username(),
+        url_of_page=request.url,
+        authenticated=is_authenticated(),
+        candidats=candidats,
+        examinateurs=examinateurs,
+        loges=loges,
+        store_ok=store_ok,
+    )
+
+
+@app.route("/gestion/credentials/candidat/<int:id>", methods=["POST"])
+@admin_required
+@nocache
+def renew_candidat(id: int) -> ResponseReturnValue:
+    """Renouvelle les identifiants d'un candidat (login_key + password_hash)."""
+    _renew_candidat(id)
+    return redirect(url_for('gestion_credentials'))
+
+
+@app.route("/gestion/credentials/candidats", methods=["POST"])
+@admin_required
+@nocache
+def renew_candidats() -> ResponseReturnValue:
+    """Renouvelle les identifiants de tous les candidats."""
+    tous = db_get(db_facility_web.SELECT_ALL_CANDIDATS_FOR_RENEWAL, no_list_auto=False)
+    for c in tous:
+        _renew_candidat(c['id'])
+    return redirect(url_for('gestion_credentials'))
+
+
+@app.route("/gestion/credentials/examinateur/<int:id>", methods=["POST"])
+@admin_required
+@nocache
+def renew_examinateur(id: int) -> ResponseReturnValue:
+    """Renouvelle le mot de passe d'un examinateur et regénère son papillon PDF."""
+    salle, nom, password = _renew_examinateur(id)
+    papillon_filename = f'papillons_salle_{secure_filename(salle)}.pdf'
+    base_url = request.host_url.rstrip('/')
+    reports.liste_papillons_connexion(
+        [(salle, nom, password)],
+        filename=str(Path(app.root_path) / 'static' / 'docs' / papillon_filename),
+        base_url=base_url,
+        centre_examen=CENTRE_EXAMEN,
+    )
+    return redirect(url_for('liste_examinateurs', new_papillon=papillon_filename))
+
+
+@app.route("/gestion/credentials/examinateurs", methods=["POST"])
+@admin_required
+@nocache
+def renew_examinateurs() -> ResponseReturnValue:
+    """Renouvelle les mots de passe de tous les examinateurs et regénère leurs papillons."""
+    tous = db_get(db_facility_web.SELECT_ALL_EXAMINATEURS_FOR_RENEWAL, no_list_auto=False)
+    connexions = []
+    base_url = request.host_url.rstrip('/')
+    for exam in tous:
+        salle, nom, password = _renew_examinateur(exam['id'])
+        connexions.append((salle, nom, password))
+    if connexions:
+        reports.liste_papillons_connexion(
+            connexions,
+            filename=str(Path(app.root_path) / 'static' / 'docs' / 'papillons_examinateurs.pdf'),
+            base_url=base_url,
+            centre_examen=CENTRE_EXAMEN,
+        )
+    return redirect(url_for('gestion_credentials'))
+
+
+@app.route("/gestion/credentials/loge/<nom>", methods=["POST"])
+@admin_required
+@nocache
+def renew_loge(nom: str) -> ResponseReturnValue:
+    """Renouvelle le mot de passe d'une loge et regénère son papillon PDF."""
+    password = _renew_loge(nom)
+    base_url = request.host_url.rstrip('/')
+    papillon_filename = f'papillons_loge_{secure_filename(nom)}.pdf'
+    reports.liste_papillons_loges(
+        [(nom, password)],
+        filename=str(Path(app.root_path) / 'static' / 'docs' / papillon_filename),
+        base_url=base_url,
+        centre_examen=CENTRE_EXAMEN,
+    )
+    return redirect(url_for('gestion_credentials'))
+
+
+@app.route("/gestion/credentials/loges", methods=["POST"])
+@admin_required
+@nocache
+def renew_loges() -> ResponseReturnValue:
+    """Renouvelle les mots de passe de toutes les loges et regénère leurs papillons."""
+    toutes = db_get(db_facility_web.SELECT_ALL_LOGES_FOR_RENEWAL, no_list_auto=False)
+    loges_data = []
+    base_url = request.host_url.rstrip('/')
+    for loge in toutes:
+        nom = loge['nom']
+        password = _renew_loge(nom)
+        loges_data.append((nom, password))
+    if loges_data:
+        reports.liste_papillons_loges(
+            loges_data,
+            filename=str(Path(app.root_path) / 'static' / 'docs' / 'papillons_loges.pdf'),
+            base_url=base_url,
+            centre_examen=CENTRE_EXAMEN,
+        )
+    return redirect(url_for('gestion_credentials'))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
