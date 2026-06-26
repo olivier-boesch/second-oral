@@ -566,29 +566,66 @@ class AlgoOne:
         """
         Sauvegarde toutes les données en base et génère les informations de connexion.
 
+        Stratégie d'initialisation des identifiants :
+        - **Premier run** : credentials.enc absent → nouveaux identifiants générés pour
+          tous les candidats, examinateurs et loges.
+        - **Runs suivants** : credentials.enc présent → identifiants lus depuis le store
+          chiffré et réutilisés à l'identique. Seul le planning des oraux change.
+          Les entités absentes du store (ajout post-premier-run) reçoivent de nouveaux
+          identifiants.
+
         :return: Tuple (connexions examinateurs, connexions candidats, connexions loges)
         :rtype: tuple[list[tuple], list[dict], list[tuple]]
         """
+        from webserver.credential_store import load_credentials as _load_creds
+        from webserver.app_secrets import APP_SECRET_KEY as _secret_key
+
+        _enc_file = _Path(__file__).resolve().parent / 'data' / 'credentials.enc'
+        is_first_run = not _enc_file.exists()
+
+        if is_first_run:
+            log.info("Premier run — génération de nouveaux identifiants.")
+            existing_store: dict = {"candidats": {}, "examinateurs": {}, "loges": {}}
+        else:
+            log.info("Run suivant — réutilisation des identifiants depuis credentials.enc.")
+            existing_store = _load_creds(_enc_file, _secret_key)
+            # Remplacer les passwords générés en __init__ par les valeurs existantes
+            existing_candidats: dict[str, str] = existing_store.get("candidats", {})
+            existing_exam_pw:   dict[str, str] = existing_store.get("examinateurs", {})
+            for c in self.liste_candidats:
+                if c.numero in existing_candidats:
+                    c.login_key = existing_candidats[c.numero]
+            for e in self.liste_examinateurs:
+                if e.salle in existing_exam_pw:
+                    e.mot_de_passe = existing_exam_pw[e.salle]
+
+        # ── Recréer les tables et insérer toutes les données ───────────────────
         db = DbFacility()
         db.save_all(self)
 
-        # Examinateurs : (salle, nom, mot_de_passe)
+        # ── Examinateurs : (salle, nom, mot_de_passe) ──────────────────────────
         liste_exams = sorted(
             [e.infos_connexion for e in self.liste_examinateurs],
             key=lambda m: m[0],
         )
 
-        # Candidats : {'nom', 'numero', 'login_key'}
+        # ── Candidats : {'nom', 'numero', 'login_key'} ─────────────────────────
         liste_candidats = sorted(
             [c.infos_connexion for c in self.liste_candidats],
             key=lambda d: d['nom'],
         )
 
-        # Loges : un mot de passe unique par loge
+        # ── Loges : un mot de passe unique par loge ────────────────────────────
+        existing_loge_pw: dict[str, str] = existing_store.get("loges", {})
         loges_mdp: dict[str, str] = {}
         for examinateur in self.liste_examinateurs:
-            if examinateur.loge not in loges_mdp:
-                loges_mdp[examinateur.loge] = generate_password()
+            loge = examinateur.loge
+            if loge not in loges_mdp:
+                loges_mdp[loge] = (
+                    existing_loge_pw[loge]
+                    if loge in existing_loge_pw
+                    else generate_password()
+                )
         loges_hashes = {nom: hash_password(mdp, nom) for nom, mdp in loges_mdp.items()}
         db.save_loges(loges_hashes)
         liste_loges = sorted(
@@ -892,8 +929,9 @@ if __name__ == '__main__':
     try:
         _creds_tmp.parent.mkdir(parents=True, exist_ok=True)
         _creds_tmp.write_text(_json.dumps({
+            "candidats":    {d['numero']: d['login_key'] for d in liste_connexion_candidats},
             "examinateurs": {salle: mdp for salle, _nom, mdp in liste_connexion_exams},
-            "loges": {nom: mdp for nom, mdp in liste_connexion_loges},
+            "loges":        {nom: mdp for nom, mdp in liste_connexion_loges},
         }))
         log.info(f"Credentials temporaires écrits dans {_creds_tmp}")
     except OSError as _e:

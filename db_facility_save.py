@@ -344,6 +344,37 @@ VALUES (%(nom)s, %(password_hash)s)
 class DbFacility:
     """Recrée le schéma complet et insère toutes les données."""
 
+    @classmethod
+    def read_existing_credentials(cls) -> dict:
+        """Lit les credentials existants en base SANS modifier le schéma.
+
+        Doit être appelé AVANT __init__() qui recrée les tables.
+        Retourne {"candidats": {numero: {"login_key": str, "password_hash": str}}}
+        ou un dict avec "candidats" vide si la table n'existe pas encore (premier run).
+
+        :returns: Dict des credentials candidats indexés par numero.
+        """
+        result: dict = {"candidats": {}}
+        try:
+            params = dict(DB_PARAMS)
+            db_host = os.environ.get('DB_HOST')
+            if db_host:
+                params['host'] = db_host
+            conn = mysql.connector.connect(**params)
+            with conn.cursor(dictionary=True) as cursor:
+                cursor.execute(
+                    "SELECT numero, login_key, password_hash FROM Candidat"
+                )
+                for row in cursor.fetchall():
+                    result["candidats"][row["numero"]] = {
+                        "login_key":    row["login_key"],
+                        "password_hash": row["password_hash"],
+                    }
+            conn.close()
+        except mysql.connector.Error:
+            pass  # Table inexistante (premier run) ou DB inaccessible
+        return result
+
     def __init__(self):
         params = dict(DB_PARAMS)
         db_host = os.environ.get('DB_HOST')

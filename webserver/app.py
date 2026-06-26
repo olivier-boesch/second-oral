@@ -41,9 +41,7 @@ from wtforms.validators import DataRequired
 from PIL import Image
 from io import BytesIO, StringIO
 from base64 import b64encode, b64decode
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives import hashes as _crypto_hashes
+from credential_store import load_credentials as _cstore_load, save_credentials as _cstore_save
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
@@ -2051,56 +2049,24 @@ def _load_algo_params() -> dict:
         return dict(_ALGO_PARAMS_DEFAULTS)
 
 
-# ── Store chiffré des credentials (AES-256-GCM) ──────────────────────────────
-
-def _aesgcm() -> AESGCM:
-    """Retourne une instance AESGCM avec une clé AES-256 dérivée de APP_SECRET_KEY via HKDF.
-
-    HKDF (RFC 5869, SHA-256) offre une séparation de domaine explicite grâce au salt
-    et à l'info, évitant la réutilisation accidentelle de la clé dans d'autres contextes.
-    La clé résultante a exactement 32 bytes (AES-256).
-    """
-    key = HKDF(
-        algorithm=_crypto_hashes.SHA256(),
-        length=32,
-        salt=b'second_oral_credentials_v1',
-        info=b'aesgcm-credentials-key',
-    ).derive(APP_SECRET_KEY.encode())
-    return AESGCM(key)
-
+# ── Store chiffré des credentials — délégué à credential_store.py ─────────────
 
 def _load_credentials() -> dict:
     """Charge et déchiffre le store de credentials depuis data/credentials.enc.
 
-    Le fichier est chiffré avec AES-256-GCM (nonce 12 bytes préfixé).
-    Retourne un dict vide {"examinateurs": {}, "loges": {}} si le fichier n'existe pas
-    ou si le déchiffrement échoue (fichier corrompu ou clé incorrecte).
+    Délègue à credential_store.load_credentials (AES-256-GCM, HKDF-SHA256).
+    Retourne un dict vide si le fichier n'existe pas ou si le déchiffrement échoue.
     """
-    empty: dict = {"examinateurs": {}, "loges": {}}
-    if not _CREDENTIALS_FILE.exists():
-        return empty
-    try:
-        raw = _CREDENTIALS_FILE.read_bytes()
-        nonce, ciphertext = raw[:12], raw[12:]
-        plaintext = _aesgcm().decrypt(nonce, ciphertext, None)
-        return json.loads(plaintext.decode())
-    except Exception:
-        app.logger.warning("Impossible de déchiffrer credentials.enc — store réinitialisé.")
-        return empty
+    return _cstore_load(_CREDENTIALS_FILE, APP_SECRET_KEY)
 
 
 def _save_credentials(creds: dict) -> None:
     """Chiffre et persiste le store de credentials dans data/credentials.enc.
 
-    Utilise AES-256-GCM avec un nonce aléatoire 96 bits (jamais réutilisé).
-    Le tag d'authentification GCM (128 bits) est inclus dans le ciphertext.
-    Le fichier est créé avec les permissions 0o600 (lecture/écriture propriétaire uniquement).
+    Délègue à credential_store.save_credentials. Nonce aléatoire 96 bits,
+    fichier créé avec les permissions 0o600.
     """
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    nonce = os.urandom(12)
-    ciphertext = _aesgcm().encrypt(nonce, json.dumps(creds).encode(), None)
-    _CREDENTIALS_FILE.write_bytes(nonce + ciphertext)
-    _CREDENTIALS_FILE.chmod(0o600)
+    _cstore_save(_CREDENTIALS_FILE, APP_SECRET_KEY, creds)
 
 
 def _absorb_credentials_file(rc: int) -> None:
