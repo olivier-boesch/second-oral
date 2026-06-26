@@ -886,13 +886,22 @@ if __name__ == '__main__':
     # Ce fichier est destiné à être immédiatement lu et chiffré par le serveur
     # Flask (via algo_bg.py on_done), puis supprimé. Il ne doit jamais persister.
     import json as _json
-    _creds_tmp = _Path('data') / 'credentials_new.json'
-    _creds_tmp.parent.mkdir(parents=True, exist_ok=True)
-    _creds_tmp.write_text(_json.dumps({
-        "examinateurs": {salle: mdp for salle, _nom, mdp in liste_connexion_exams},
-        "loges": {nom: mdp for nom, mdp in liste_connexion_loges},
-    }))
-    log.info(f"Credentials temporaires écrits dans {_creds_tmp}")
+    # Chemin absolu basé sur __file__ : garantit la résolution correcte
+    # quel que soit le répertoire de travail du sous-processus.
+    _creds_tmp = _Path(__file__).resolve().parent / 'data' / 'credentials_new.json'
+    try:
+        _creds_tmp.parent.mkdir(parents=True, exist_ok=True)
+        _creds_tmp.write_text(_json.dumps({
+            "examinateurs": {salle: mdp for salle, _nom, mdp in liste_connexion_exams},
+            "loges": {nom: mdp for nom, mdp in liste_connexion_loges},
+        }))
+        log.info(f"Credentials temporaires écrits dans {_creds_tmp}")
+    except OSError as _e:
+        log.warning(
+            f"Impossible d'écrire credentials_new.json ({_e}) — "
+            "le renouvellement des identifiants devra être fait manuellement "
+            "via /gestion/credentials."
+        )
 
     log.info("Génération des papillons examinateurs")
     liste_papillons_connexion(
