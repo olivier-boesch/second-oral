@@ -299,6 +299,10 @@ SELECT_ALL_LOGES_FOR_RENEWAL = """
 SELECT nom FROM Loge ORDER BY nom
 """
 
+SELECT_LOGE_BY_NOM = """
+SELECT nom FROM Loge WHERE nom = %s
+"""
+
 UPDATE_LOGE_PASSWORD = """
 UPDATE Loge SET password_hash = %(password_hash)s WHERE nom = %(nom)s
 """

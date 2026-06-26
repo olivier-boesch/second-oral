@@ -1142,6 +1142,9 @@ class TestCredentialRenewal:
         """Renouveler une loge appelle db_update avec le nouveau password_hash."""
         import app as app_module
         db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.side_effect = [
+            [self.LOGE],   # SELECT_LOGE_BY_NOM (validation existence)
+        ]
         monkeypatch.setattr(app_module.reports, "liste_papillons_loges",
                             lambda *a, **kw: None)
         r = admin_client.post("/gestion/credentials/loge/Loge%20A",
@@ -1225,3 +1228,38 @@ class TestCredentialRenewal:
 
         assert tmp_json.exists(), "Le fichier temporaire ne doit pas être supprimé en cas d'échec"
         assert not (tmp_path / "credentials.enc").exists()
+
+    def test_absorb_credentials_file_invalid_json(self, tmp_path, monkeypatch):
+        """_absorb_credentials_file supprime le JSON invalide sans planter."""
+        import app as app_module
+        tmp_json = tmp_path / "credentials_new.json"
+        tmp_json.write_text("ce n'est pas du JSON valide")
+        monkeypatch.setattr(app_module, "_CREDENTIALS_TMP_FILE", tmp_json)
+        monkeypatch.setattr(app_module, "_CREDENTIALS_FILE",
+                            tmp_path / "credentials.enc")
+
+        # Ne doit pas lever d'exception
+        app_module._absorb_credentials_file(rc=0)
+
+        # Le fichier temporaire est supprimé même si le chiffrement a échoué
+        assert not tmp_json.exists()
+        # Mais credentials.enc n'est pas créé (JSON invalide → chiffrement annulé)
+        assert not (tmp_path / "credentials.enc").exists()
+
+    def test_load_credentials_corrupted_file(self, tmp_path, monkeypatch):
+        """_load_credentials retourne un dict vide si credentials.enc est corrompu."""
+        import app as app_module
+        enc_file = tmp_path / "credentials.enc"
+        enc_file.write_bytes(b"ceci n'est pas du ciphertext AES-GCM valide" * 3)
+        monkeypatch.setattr(app_module, "_CREDENTIALS_FILE", enc_file)
+
+        result = app_module._load_credentials()
+
+        assert result == {"examinateurs": {}, "loges": {}}
+
+    def test_renew_loge_unknown_returns_404(self, admin_client, db_mock):
+        """Renouveler une loge inexistante retourne 404."""
+        db_mock.make_sql_select.return_value = []  # aucune loge trouvée
+        r = admin_client.post("/gestion/credentials/loge/LogeInexistante",
+                              follow_redirects=False)
+        assert r.status_code == 404

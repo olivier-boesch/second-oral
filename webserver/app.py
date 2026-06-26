@@ -42,6 +42,8 @@ from PIL import Image
 from io import BytesIO, StringIO
 from base64 import b64encode, b64decode
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives import hashes as _crypto_hashes
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
@@ -2052,13 +2054,18 @@ def _load_algo_params() -> dict:
 # ── Store chiffré des credentials (AES-256-GCM) ──────────────────────────────
 
 def _aesgcm() -> AESGCM:
-    """Retourne une instance AESGCM avec une clé AES-256 dérivée de APP_SECRET_KEY.
+    """Retourne une instance AESGCM avec une clé AES-256 dérivée de APP_SECRET_KEY via HKDF.
 
-    La clé est dérivée via SHA-256 (32 bytes), ce qui garantit sa longueur correcte
-    sans exposer directement APP_SECRET_KEY.
+    HKDF (RFC 5869, SHA-256) offre une séparation de domaine explicite grâce au salt
+    et à l'info, évitant la réutilisation accidentelle de la clé dans d'autres contextes.
+    La clé résultante a exactement 32 bytes (AES-256).
     """
-    import hashlib as _hashlib
-    key = _hashlib.sha256(APP_SECRET_KEY.encode()).digest()
+    key = HKDF(
+        algorithm=_crypto_hashes.SHA256(),
+        length=32,
+        salt=b'second_oral_credentials_v1',
+        info=b'aesgcm-credentials-key',
+    ).derive(APP_SECRET_KEY.encode())
     return AESGCM(key)
 
 
@@ -2087,31 +2094,46 @@ def _save_credentials(creds: dict) -> None:
 
     Utilise AES-256-GCM avec un nonce aléatoire 96 bits (jamais réutilisé).
     Le tag d'authentification GCM (128 bits) est inclus dans le ciphertext.
+    Le fichier est créé avec les permissions 0o600 (lecture/écriture propriétaire uniquement).
     """
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
     nonce = os.urandom(12)
     ciphertext = _aesgcm().encrypt(nonce, json.dumps(creds).encode(), None)
     _CREDENTIALS_FILE.write_bytes(nonce + ciphertext)
+    _CREDENTIALS_FILE.chmod(0o600)
 
 
 def _absorb_credentials_file(rc: int) -> None:
     """Callback appelé par algo_bg après la fin d'algo.py.
 
     Si l'algo a réussi (rc == 0), lit data/credentials_new.json (plaintext temporaire
-    écrit par algo.py), l'intègre dans le store chiffré, puis supprime le fichier
-    temporaire pour ne pas laisser de credentials en clair sur le disque.
+    écrit par algo.py), l'intègre dans le store chiffré (AES-256-GCM), puis supprime
+    le fichier temporaire pour ne pas laisser de credentials en clair sur le disque.
+
+    Le fichier temporaire est toujours supprimé (succès ou échec du chiffrement) afin
+    d'éviter que des credentials en clair persistent. En cas d'échec, l'erreur est
+    journalisée pour permettre un diagnostic.
     """
     if rc != 0:
         return
     if not _CREDENTIALS_TMP_FILE.exists():
         app.logger.warning("credentials_new.json introuvable après algo.py")
         return
+    encryption_ok = False
     try:
         new_creds = json.loads(_CREDENTIALS_TMP_FILE.read_text())
         _save_credentials(new_creds)
+        encryption_ok = True
         app.logger.info("Credentials chiffrés et stockés dans credentials.enc")
+    except Exception as exc:
+        app.logger.error(f"Échec du chiffrement des credentials post-algo : {exc}")
     finally:
         _CREDENTIALS_TMP_FILE.unlink(missing_ok=True)
+        if not encryption_ok:
+            app.logger.error(
+                "credentials_new.json supprimé sans chiffrement réussi — "
+                "renouveler les identifiants manuellement via /gestion/credentials"
+            )
 
 
 @app.route("/gestion/algo")
@@ -2412,7 +2434,11 @@ def gestion_credentials() -> ResponseReturnValue:
 @admin_required
 @nocache
 def renew_candidat(id: int) -> ResponseReturnValue:
-    """Renouvelle les identifiants d'un candidat (login_key + password_hash)."""
+    """Renouvelle les identifiants d'un candidat (login_key + password_hash).
+
+    :param id: Identifiant DB du candidat.
+    :returns: Redirection vers /gestion/credentials.
+    """
     _renew_candidat(id)
     return redirect(url_for('gestion_credentials'))
 
@@ -2421,7 +2447,10 @@ def renew_candidat(id: int) -> ResponseReturnValue:
 @admin_required
 @nocache
 def renew_candidats() -> ResponseReturnValue:
-    """Renouvelle les identifiants de tous les candidats."""
+    """Renouvelle les identifiants de tous les candidats en base.
+
+    :returns: Redirection vers /gestion/credentials.
+    """
     tous = db_get(db_facility_web.SELECT_ALL_CANDIDATS_FOR_RENEWAL, no_list_auto=False)
     for c in tous:
         _renew_candidat(c['id'])
@@ -2432,7 +2461,11 @@ def renew_candidats() -> ResponseReturnValue:
 @admin_required
 @nocache
 def renew_examinateur(id: int) -> ResponseReturnValue:
-    """Renouvelle le mot de passe d'un examinateur et regénère son papillon PDF."""
+    """Renouvelle le mot de passe d'un examinateur et regénère son papillon PDF.
+
+    :param id: Identifiant DB de l'examinateur.
+    :returns: Redirection vers /gestion/liste-examinateurs avec lien vers le nouveau papillon.
+    """
     salle, nom, password = _renew_examinateur(id)
     papillon_filename = f'papillons_salle_{secure_filename(salle)}.pdf'
     base_url = request.host_url.rstrip('/')
@@ -2449,7 +2482,10 @@ def renew_examinateur(id: int) -> ResponseReturnValue:
 @admin_required
 @nocache
 def renew_examinateurs() -> ResponseReturnValue:
-    """Renouvelle les mots de passe de tous les examinateurs et regénère leurs papillons."""
+    """Renouvelle les mots de passe de tous les examinateurs et regénère leurs papillons.
+
+    :returns: Redirection vers /gestion/credentials.
+    """
     tous = db_get(db_facility_web.SELECT_ALL_EXAMINATEURS_FOR_RENEWAL, no_list_auto=False)
     connexions = []
     base_url = request.host_url.rstrip('/')
@@ -2470,7 +2506,15 @@ def renew_examinateurs() -> ResponseReturnValue:
 @admin_required
 @nocache
 def renew_loge(nom: str) -> ResponseReturnValue:
-    """Renouvelle le mot de passe d'une loge et regénère son papillon PDF."""
+    """Renouvelle le mot de passe d'une loge et regénère son papillon PDF.
+
+    Retourne 404 si la loge n'existe pas en base (table Loge).
+
+    :param nom: Nom de la loge (clé primaire de la table Loge).
+    :returns: Redirection vers /gestion/credentials, ou 404 si loge introuvable.
+    """
+    if not db_get(db_facility_web.SELECT_LOGE_BY_NOM, nom, no_list_auto=False):
+        abort(404, f"Loge inconnue : {nom!r}")
     password = _renew_loge(nom)
     base_url = request.host_url.rstrip('/')
     papillon_filename = f'papillons_loge_{secure_filename(nom)}.pdf'
@@ -2487,7 +2531,10 @@ def renew_loge(nom: str) -> ResponseReturnValue:
 @admin_required
 @nocache
 def renew_loges() -> ResponseReturnValue:
-    """Renouvelle les mots de passe de toutes les loges et regénère leurs papillons."""
+    """Renouvelle les mots de passe de toutes les loges et regénère leurs papillons.
+
+    :returns: Redirection vers /gestion/credentials.
+    """
     toutes = db_get(db_facility_web.SELECT_ALL_LOGES_FOR_RENEWAL, no_list_auto=False)
     loges_data = []
     base_url = request.host_url.rstrip('/')
