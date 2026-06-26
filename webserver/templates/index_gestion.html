@@ -8,15 +8,6 @@
 <body class="body-for-sticky">
 {% include 'auth_icon.html' %}
     <h1>Edition des Oraux de second groupe</h1>
-    <div>
-        <a href="{{ url_for('liste_examinateurs') }}">Liste des examinateurs</a><br>
-        <form method="post" action="{{ url_for('reload_pages') }}" style="display:inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="link_back" value="{{ url_of_page }}">
-            <button type="submit" class="link-button">Recharger toutes les pages ouvertes</button>
-        </form><br>
-        <a href="{{ url_for("verify_logs") }}">Vérifier l'intégrité des données</a>
-    </div>
     <table class="table_oraux">
         <tr>
             <th>
