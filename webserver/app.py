@@ -1595,6 +1595,11 @@ def add_examinateur() -> ResponseReturnValue:
         }
         db_update(db_facility_web.INSERT_EXAMINATEUR, **d)
 
+        # Stocker le nouveau mot de passe dans credentials.enc
+        creds = _load_credentials()
+        creds.setdefault("examinateurs", {})[salle] = password
+        _save_credentials(creds)
+
         papillon_filename = f'papillons_salle_{secure_filename(salle)}.pdf'
         base_url = request.host_url.rstrip('/')
         reports.liste_papillons_connexion(
@@ -1603,6 +1608,8 @@ def add_examinateur() -> ResponseReturnValue:
             base_url=base_url,
             centre_examen=CENTRE_EXAMEN,
         )
+        # Regénérer le PDF groupé pour la cohérence
+        _regenerer_papillons_examinateurs(base_url)
         return redirect(url_for('liste_examinateurs', new_papillon=papillon_filename))
 
     # GET
