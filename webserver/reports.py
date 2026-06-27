@@ -672,42 +672,41 @@ def _draw_papillon(c_canvas, x: float, y: float, slip_w: float, slip_h: float,
         except Exception:
             pass
 
-    # ── Texte (colonne gauche) ────────────────────────────────────────────────
-    # Positions calculées depuis le haut de la zone contenu.
-    tx = x + pad   # x de départ du texte
+    # ── Texte (colonne gauche) — positions calculées de haut en bas ──────────
+    # Toutes les distances sont relatives à content_top (y du haut du contenu).
+    tx    = x + pad
+    pwd_h = 7 * mm
+    pwd_w = text_w - pad
 
     # Nom
     c_canvas.setFont('PapillonFont', 10)
     c_canvas.setFillColorRGB(_TXR, _TXG, _TXB)
-    c_canvas.drawString(tx, content_top - 7 * mm, name[:26])
+    c_canvas.drawString(tx, content_top - 6.5 * mm, name[:26])
 
-    # Identifiant — label + valeur
+    # Identifiant — label
     c_canvas.setFont('BodyFont', 7)
     c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
-    c_canvas.drawString(tx, content_top - 13 * mm, id_label)
+    c_canvas.drawString(tx, content_top - 12 * mm, id_label)
+
+    # Identifiant — valeur
     c_canvas.setFont('MonoFont', 8.5)
     c_canvas.setFillColorRGB(_TXR, _TXG, _TXB)
-    c_canvas.drawString(tx, content_top - 19 * mm, id_value[:20])
+    c_canvas.drawString(tx, content_top - 17 * mm, id_value[:20])
 
-    # ── Bloc mot de passe — ancré depuis le bas du slip ─────────────────────
-    # On remonte depuis y+pad pour garantir un espace fixe avec le bord inférieur.
-    pwd_h   = 8 * mm
-    pwd_w   = text_w - pad
-    pwd_y   = y + pad + 4 * mm          # 4mm au-dessus du bord bas du slip
-    lbl_y   = pwd_y + pwd_h + 2 * mm    # label au-dessus du cadre
-    sep_y   = lbl_y + 5 * mm            # séparateur au-dessus du label
-
-    # Séparateur horizontal (limité à la colonne texte)
+    # Séparateur (sous la valeur identifiant)
+    sep_y = content_top - 21.5 * mm
     c_canvas.setStrokeColorRGB(0.75, 0.75, 0.75)
     c_canvas.setLineWidth(0.4)
     c_canvas.line(tx, sep_y, tx + text_w, sep_y)
 
-    # Label mot de passe
+    # Label "Mot de passe"
+    lbl_y = sep_y - 4.5 * mm
     c_canvas.setFont('BodyFont', 7)
     c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
     c_canvas.drawString(tx, lbl_y, 'Mot de passe')
 
-    # Encadré mot de passe
+    # Encadré mot de passe (sous le label, avec au moins 4mm du bord inférieur)
+    pwd_y = max(y + 4 * mm, lbl_y - 1.5 * mm - pwd_h)
     c_canvas.setFillColorRGB(_SFR, _SFG, _SFB)
     c_canvas.setStrokeColorRGB(_PDR, _PDG, _PDB)
     c_canvas.setLineWidth(0.8)
