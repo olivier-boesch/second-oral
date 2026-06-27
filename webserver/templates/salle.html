@@ -41,6 +41,7 @@
     </p>
     <p class="centered"></p>
     {% if data['oraux'] != [] %}
+    <div class="table-scroll">
     <table class="table_mobile">
         <tr>
             <th>Ordre</th>
@@ -86,6 +87,7 @@
         </tr>
     {% endfor %}
     </table>
+    </div>
     <p>Note : 🔴 signifie que le candidat bénéficie d'un aménagement</p>
     <p>Les oraux indiqués dans cette <span class="red">couleur</span> ont été modifiés </p>
 {% else %}

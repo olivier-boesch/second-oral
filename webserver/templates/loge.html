@@ -20,6 +20,7 @@
         </a>
     </p>
     {% if data['oraux'] != [] %}
+    <div class="table-scroll">
     <table class="table_mobile">
         <tr>
             <th>Candidat (N°)</th>
@@ -78,6 +79,7 @@
         </tr>
     {% endfor %}
     </table>
+    </div>
 {% else %}
     <p>Pas d'oraux programmés</p>
 {% endif %}

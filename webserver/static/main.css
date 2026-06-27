@@ -638,6 +638,15 @@ body.tv_screen {
     .table_oraux,
     .table_mobile { width: 100%; }
 
+    /* Sur mobile, les tableaux à nombreuses colonnes (loge, salle) peuvent
+       dépasser la largeur du viewport et élargir toute la page.
+       Le wrapper les rend défilables horizontalement sans affecter la page. */
+    .table-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+    }
+
     .block_documents { width: 100%; padding: 1.1em; }
 
     .grid-options { grid-template-columns: 1fr; }
