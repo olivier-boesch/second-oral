@@ -67,8 +67,10 @@
                 data-sujet="{{ oral['sujet'] }}"
                 data-oral="{{ oral['oral'] }}">
                 <span class="timer-display">--:--</span>
-                <button class="timer-btn" title="Démarrer / Pause">▶</button>
-                <button class="timer-btn" title="Réinitialiser">↺</button>
+                {% if can_use_timers %}
+                <button class="timer-btn" data-action="play"  title="Démarrer / Pause">▶</button>
+                <button class="timer-btn" data-action="reset" title="Réinitialiser">↺</button>
+                {% endif %}
             </td>
             {% else %}
             <td class="timer-cell">—</td>

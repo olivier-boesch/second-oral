@@ -69,8 +69,8 @@
         if (totalSecs <= 0) { cell.textContent = '—'; return; }
 
         const display  = cell.querySelector('.timer-display');
-        const btnPlay  = cell.querySelector('.timer-btn:nth-child(2)');
-        const btnReset = cell.querySelector('.timer-btn:nth-child(3)');
+        const btnPlay  = cell.querySelector('.timer-btn[data-action="play"]');
+        const btnReset = cell.querySelector('.timer-btn[data-action="reset"]');
 
         let state = serverState || { elapsed: 0, running: false, startedAt: null };
 
@@ -92,8 +92,7 @@
             display.classList.toggle('running', state.running && rem > 60);
             display.classList.toggle('warn',    rem > 0 && rem <= 60);
             display.classList.toggle('ended',   rem === 0);
-            btnPlay.textContent = state.running ? '⏸' : '▶';
-            btnPlay.disabled    = (rem === 0);
+            if (btnPlay)  { btnPlay.textContent = state.running ? '⏸' : '▶'; btnPlay.disabled = (rem === 0); }
         }
 
         function tick() {
@@ -137,8 +136,8 @@
             render();
         }
 
-        btnPlay.addEventListener('click',  function () { initAudio(); state.running ? pause() : start(); });
-        btnReset.addEventListener('click', reset);
+        if (btnPlay)  btnPlay.addEventListener('click',  function () { initAudio(); state.running ? pause() : start(); });
+        if (btnReset) btnReset.addEventListener('click', reset);
 
         if (state.running && remaining() > 0) {
             interval = setInterval(tick, 1000);
