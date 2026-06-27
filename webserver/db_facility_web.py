@@ -19,6 +19,13 @@ FROM Candidat
 WHERE Candidat.numero = %s
 """
 
+SELECT_INFOS_CANDIDAT_BY_ID = """
+SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
+       Candidat.tiers_temps AS tiers_temps, Candidat.login_key AS login_key
+FROM Candidat
+WHERE Candidat.id = %s
+"""
+
 SELECT_ORAUX_CANDIDAT = """
 SELECT Matiere.nom AS matiere, Oral.heure_sujet AS heure,
        Examinateur.salle AS salle, Oral.mis_a_jour AS maj

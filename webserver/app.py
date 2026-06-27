@@ -2441,7 +2441,7 @@ def _renew_candidat(candidat_id: int) -> str:
     :returns: Nouvelle login_key en clair (pour regénération du papillon si besoin).
     """
     new_key = generate_password()
-    candidat = db_get(db_facility_web.SELECT_INFOS_CANDIDAT, candidat_id)
+    candidat = db_get(db_facility_web.SELECT_INFOS_CANDIDAT_BY_ID, candidat_id)
     new_hash = hash_password(new_key, str(candidat['numero']))
     db_update(db_facility_web.UPDATE_CANDIDAT_CREDENTIALS,
               id=candidat_id, login_key=new_key, password_hash=new_hash)
