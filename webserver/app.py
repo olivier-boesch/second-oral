@@ -820,7 +820,7 @@ def loge(id_loge: str) -> ResponseReturnValue:
         username=get_username(),
         centre=CENTRE_EXAMEN,
         sse_channel=f"loge_{id_loge}",
-        can_use_timers=is_loge_user(id_loge) or is_admin_user(),
+        can_use_timers=is_loge_user(id_loge),
     )
 
 
