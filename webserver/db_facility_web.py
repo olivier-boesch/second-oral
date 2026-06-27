@@ -161,6 +161,15 @@ WHERE Candidat.id = %s
 ORDER BY heure_sujet
 """
 
+SELECT_ORAUX_EXAMINATEUR = """
+SELECT Oral.id AS id, Candidat.nom AS candidat,
+       Oral.heure_sujet AS heure_sujet, Oral.heure_fin AS heure_fin
+FROM Oral
+    JOIN Candidat ON Oral.candidat = Candidat.id
+WHERE Oral.examinateur = %s
+ORDER BY heure_sujet
+"""
+
 UPDATE_INFOS_ORAL = """
 UPDATE Oral SET
     Oral.heure_sujet = %(heure_sujet)s,

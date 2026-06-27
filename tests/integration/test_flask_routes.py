@@ -971,15 +971,40 @@ class TestEditOralValidation:
         })
 
     def test_no_conflict_redirects(self, admin_client, db_mock):
-        """Pas de conflit → mise à jour appliquée et redirection."""
+        """Pas de conflit candidat ni examinateur → mise à jour appliquée."""
         db_mock.make_sql_update.reset_mock()
         db_mock.make_sql_select.side_effect = [
             [self.ORAL_ACTUEL],   # SELECT_INFOS_ORAL
-            [self.AUTRE_ORAL],    # SELECT_LISTE_EDITION_ORAL (dans _check_conflits_oral)
+            [self.AUTRE_ORAL],    # SELECT_LISTE_EDITION_ORAL (candidat)
+            [],                   # SELECT_ORAUX_EXAMINATEUR (aucun conflit)
         ]
         r = self._post(admin_client, heure_sujet="13:00", heure_oral="13:15")
         assert r.status_code == 302
         db_mock.make_sql_update.assert_called_once()
+
+    def test_examiner_overlap_blocked(self, admin_client, db_mock):
+        """Chevauchement examinateur → 422, mise à jour non appliquée."""
+        from datetime import timedelta as _td
+        exam_oral = {
+            "id": 99, "candidat": "Durand Marie",
+            "heure_sujet": _td(hours=13, minutes=30),
+            "heure_fin":   _td(hours=14, minutes=30),
+        }
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.side_effect = [
+            [self.ORAL_ACTUEL],   # SELECT_INFOS_ORAL
+            [self.AUTRE_ORAL],    # SELECT_LISTE_EDITION_ORAL (candidat — pas de conflit)
+            [exam_oral],          # SELECT_ORAUX_EXAMINATEUR (chevauchement 13h00–14h15 vs 13h30–14h30)
+            [self.AUTRE_ORAL],    # re-render: SELECT_LISTE_EDITION_ORAL
+            self.MATIERE,         # re-render: SELECT_LISTE_MATIERES
+            self.EXAM,            # re-render: SELECT_LISTE_EXAMINATEURS_PAR_MATIERE
+        ]
+        # 13:00 + 1h15 = 14:15 → chevauche 13:30–14:30
+        r = self._post(admin_client, heure_sujet="13:00", heure_oral="13:15")
+        assert r.status_code == 422
+        body = r.data.decode("utf-8")
+        assert "Chevauchement examinateur" in body
+        db_mock.make_sql_update.assert_not_called()
 
     def test_overlap_blocked(self, admin_client, db_mock):
         """Chevauchement → 422, mise à jour non appliquée, message d'erreur."""
