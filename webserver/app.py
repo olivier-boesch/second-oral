@@ -47,6 +47,7 @@ from werkzeug.utils import secure_filename
 
 import db_facility_web
 import reports
+from theme import derive_palette as _derive_palette
 from ods_handler import LYCEES_DISPLAY as _LYCEES_DISPLAY
 from app_secrets import (
     CENTRE_EXAMEN, DIGITAL_SIGN, LOGIN_KEY, APP_SECRET_KEY, HOSTNAME,
@@ -61,6 +62,7 @@ CENTRE_ADDRESS = getattr(_app_secrets, "CENTRE_ADDRESS", "")
 ACADEMIE       = getattr(_app_secrets, "ACADEMIE",       "")
 HEBERGEUR      = getattr(_app_secrets, "HEBERGEUR",      "")
 DPD_EMAIL      = getattr(_app_secrets, "DPD_EMAIL",      "")
+ACCENT_COLOR   = getattr(_app_secrets, "ACCENT_COLOR",   "#6c63ff")
 from secrets import token_urlsafe
 from datetime import timedelta
 
@@ -2061,6 +2063,35 @@ def download() -> ResponseReturnValue:
 
     app.logger.info(f"Téléchargement: {filename}")
     return send_from_directory('static/docs', filename)
+
+
+@app.route('/theme.css')
+def theme_css() -> ResponseReturnValue:
+    """Feuille de style dynamique surchargeant la palette CSS selon ACCENT_COLOR.
+
+    Surchage les variables CSS de main.css avec la palette dérivée de ACCENT_COLOR
+    (défini dans app_secrets.py au moment du setup). Mis en cache 24h côté client.
+    """
+    pal = _derive_palette(ACCENT_COLOR)
+    css = (
+        ":root{{\n"
+        "  --primary:     {primary};\n"
+        "  --primary-dk:  {primary_dk};\n"
+        "  --primary-mid: {primary_mid};\n"
+        "  --primary-lt:  {primary_lt};\n"
+        "  --surface:     {surface};\n"
+        "  --surface-2:   {surface_2};\n"
+        "  --border:      {border};\n"
+        "  --text:        {text};\n"
+        "  --text-md:     {text_md};\n"
+        "  --text-sm:     {text_sm};\n"
+        "  --modified:    {primary};\n"
+        "}}"
+    ).format(**pal)
+    resp = make_response(css)
+    resp.headers['Content-Type']  = 'text/css; charset=utf-8'
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
 
 
 @app.route('/about')

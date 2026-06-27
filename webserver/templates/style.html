@@ -1,6 +1,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
 <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}?v={{ sv }}">
+<link rel="stylesheet" href="{{ url_for('theme_css') }}" media="all">
 <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon-32x32.png') }}?v={{ sv }}">
 <script nonce="{{ csp_nonce }}">
 function open_url(url) {

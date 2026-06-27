@@ -100,7 +100,8 @@ def generate_app_secrets(fqdn: str, centre: str, db_user: str,
                          centre_address: str = "",
                          academie: str = "",
                          hebergeur: str = "",
-                         dpd_email: str = "") -> tuple[str, str]:
+                         dpd_email: str = "",
+                         accent_color: str = "#6c63ff") -> tuple[str, str]:
     """
     Génère le contenu de app_secrets.py et retourne (contenu, clé_otp).
     """
@@ -156,6 +157,11 @@ DB_PARAMS = {{
 # ── Secrets applicatifs ───────────────────────────────────────────────────────
 APP_SECRET_KEY = "{secret_key}"
 HOSTNAME = check_output(['hostname']).decode('utf8').strip('\\n')
+
+# ── Couleur d'accent ──────────────────────────────────────────────────────────
+# Utilisée pour la charte graphique du site et des PDFs.
+# Modifier ici uniquement et relancer le setup pour changer le thème.
+ACCENT_COLOR = "{accent_color}"
 DB_SALT = '{db_salt}'
 
 # ── Mots de passe ─────────────────────────────────────────────────────────────
@@ -297,7 +303,8 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
                        output_dir: Path,
                        director_name: str = "",
                        academie: str = "",
-                       dpd_email: str = "") -> Path | None:
+                       dpd_email: str = "",
+                       accent_color: str = "#6c63ff") -> Path | None:
     """
     Génère un PDF confidentiel pour l'administrateur contenant :
     - Titre 2ndOral + centre d'examen
@@ -329,12 +336,18 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
         warn("segno non disponible — PDF admin non généré.")
         return None
 
-    # ── Palette couleurs (identique à main.css) ──────────────────────────────
-    C_PRIMARY  = _rc.HexColor('#6c63ff')   # accent violet
-    C_SURFACE  = _rc.HexColor('#f5f3ff')   # fond léger
-    C_SURFACE2 = _rc.HexColor('#ede9fe')   # bandeau
-    C_TEXT     = _rc.HexColor('#1e1b4b')   # texte principal
-    C_MUTED    = _rc.HexColor('#8b85b3')   # texte secondaire
+    # ── Palette dérivée de la couleur d'accent choisie au setup ─────────────
+    import sys as _sys
+    _wdir = str(PROJECT_ROOT / 'webserver')
+    if _wdir not in _sys.path:
+        _sys.path.insert(0, _wdir)
+    from theme import derive_palette as _derive_palette
+    _pal = _derive_palette(accent_color)
+    C_PRIMARY  = _rc.HexColor(_pal['primary'])
+    C_SURFACE  = _rc.HexColor(_pal['surface'])
+    C_SURFACE2 = _rc.HexColor(_pal['surface_2'])
+    C_TEXT     = _rc.HexColor(_pal['text'])
+    C_MUTED    = _rc.HexColor(_pal['text_sm'])
     C_WHITE    = _rc.white
     C_DANGER   = _rc.HexColor('#dc2626')
 
@@ -1017,6 +1030,45 @@ def main() -> None:
         ).strip().lower()
         digital_sign = ds not in ("n", "non", "no")
 
+    # Couleur d'accent
+    _PALETTES = [
+        ("#6c63ff", "Violet (défaut)"),
+        ("#3b82f6", "Bleu"),
+        ("#059669", "Vert"),
+        ("#dc2626", "Rouge"),
+        ("#ea580c", "Orange"),
+        ("#0891b2", "Turquoise"),
+    ]
+    def _color_swatch(hex_c: str) -> str:
+        """Retourne un carré coloré ANSI True Color pour affichage terminal."""
+        h = hex_c.lstrip('#')
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return f"\033[48;2;{r};{g};{b}m   \033[0m"
+
+    if args.yes:
+        accent_color = _PALETTES[0][0]
+    else:
+        hdr("Couleur d'accent (charte graphique du site et des PDFs)")
+        for i, (hex_c, label) in enumerate(_PALETTES, 1):
+            swatch = _color_swatch(hex_c)
+            print(f"  {i}. {swatch} {label:20s}  {hex_c}")
+        print("  7. Personnalisée (#rrggbb)")
+        choice_str = input("  Votre choix [1] : ").strip()
+        if not choice_str:
+            accent_color = _PALETTES[0][0]
+        elif choice_str == "7":
+            accent_color = ask(
+                "Couleur hex",
+                default="#6c63ff",
+                validator=lambda s: len(s) == 7 and s.startswith("#"),
+            )
+        else:
+            try:
+                accent_color = _PALETTES[int(choice_str) - 1][0]
+            except (ValueError, IndexError):
+                warn("Choix invalide, utilisation du violet par défaut.")
+                accent_color = _PALETTES[0][0]
+
     app_port = args.app_port if args.app_port is not None else find_free_port(8080)
 
     hdr("Récapitulatif")
@@ -1029,6 +1081,7 @@ def main() -> None:
     print(f"  MariaDB        : {db_user}@{db_host}/{db_name}")
     print(f"  Port app       : {app_port}")
     print(f"  Signature      : {'✔ activée' if digital_sign else '✘ désactivée'}")
+    print(f"  Accent         : {accent_color}")
     print(f"  Répertoire     : {PROJECT_ROOT}")
     print()
 
@@ -1050,6 +1103,7 @@ def main() -> None:
     content, otp_key = generate_app_secrets(
         fqdn, centre, db_user, db_password, db_name, db_host, digital_sign,
         director_name, centre_address, academie, hebergeur, dpd_email,
+        accent_color=accent_color,
     )
     secrets_path.write_text(content, encoding="utf-8")
 
@@ -1081,7 +1135,8 @@ def main() -> None:
 
     # PDF administrateur
     pdf = generate_admin_pdf(otp_key, fqdn, centre, PROJECT_ROOT,
-                             director_name, academie, dpd_email)
+                             director_name, academie, dpd_email,
+                             accent_color=accent_color)
     if pdf:
         ok(f"PDF administrateur généré → {pdf}")
         warn("Imprimez ce document et supprimez le fichier numérique.")

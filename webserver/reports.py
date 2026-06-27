@@ -1,7 +1,9 @@
 """
 Génération des documents PDF pour les oraux de second groupe.
 
-Utilise ReportLab (Platypus) pour les tableaux et canvas direct pour les papillons.
+Utilise ReportLab (Platypus + canvas direct) pour l'ensemble des documents.
+La palette de couleurs est dérivée depuis ACCENT_COLOR (app_secrets.py) via theme.py,
+ce qui permet d'adapter la charte graphique au moment du setup sans toucher au code.
 """
 import datetime
 import tempfile
@@ -14,167 +16,462 @@ from PIL import Image as PilImage, ImageDraw, ImageFont
 import pypdftk
 import segno
 from flask import url_for
-from reportlab.lib import colors
-from reportlab.lib import pagesizes
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors, pagesizes
+from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_JUSTIFY
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
-    LongTable, TableStyle, Paragraph, Spacer, Table, Image
+    LongTable, TableStyle, Paragraph, Spacer, Table, Image, HRFlowable
 )
 from reportlab.platypus.doctemplate import SimpleDocTemplate
 
-_FONT_DIR = Path(__file__).resolve().parent / 'static'
+import app_secrets as _app_secrets
+from theme import derive_palette
 
-pdfmetrics.registerFont(TTFont('BodyFont', str(_FONT_DIR / 'PoppinsLatin-Regular.ttf')))
+ACCENT_COLOR: str = getattr(_app_secrets, 'ACCENT_COLOR', '#6c63ff')
+
+_FONT_DIR = Path(__file__).resolve().parent / 'static'
+_ICON_PATH = str(_FONT_DIR / 'icon.png')
+
+pdfmetrics.registerFont(TTFont('BodyFont',    str(_FONT_DIR / 'PoppinsLatin-Regular.ttf')))
 pdfmetrics.registerFont(TTFont('PapillonFont', str(_FONT_DIR / 'DejaVuSerif.ttf')))
-# Monospace pour les mots de passe et identifiants : chaque caractère a la même
-# largeur et les glyphes ambigus (0/O, 1/l/I) sont nettement distincts.
-pdfmetrics.registerFont(TTFont('MonoFont', str(_FONT_DIR / 'DejaVuSansMono.ttf')))
+pdfmetrics.registerFont(TTFont('MonoFont',    str(_FONT_DIR / 'DejaVuSansMono.ttf')))
 
 WARNING_CHAR = "(!)"
 
-# Couleurs — identiques à main.css
-color1 = colors.Color(0xeb / 255, 0xe3 / 255, 0xf5 / 255)
-color2 = colors.Color(0xfe / 255, 0xfe / 255, 0xff / 255)
-color3 = colors.Color(0xd6 / 255, 0xcf / 255, 0xff / 255)
-color4 = colors.Color(0xab / 255, 0xa0 / 255, 0xf9 / 255)
-color5 = colors.Color(0x7c / 255, 0x80 / 255, 0xfc / 255)
+# ── Palette dérivée de la couleur d'accent du site ───────────────────────────
+_pal = derive_palette(ACCENT_COLOR)
 
-# Styles de texte
-normal_style = getSampleStyleSheet()['Normal']
-normal_style.fontName = "BodyFont"
-normal_style.alignment = 4
+C_PRIMARY    = colors.HexColor(_pal['primary'])
+C_PRI_DK     = colors.HexColor(_pal['primary_dk'])
+C_PRI_LT     = colors.HexColor(_pal['primary_lt'])
+C_SURFACE    = colors.HexColor(_pal['surface'])
+C_SURFACE2   = colors.HexColor(_pal['surface_2'])
+C_ROW_ALT    = colors.HexColor(_pal['row_alt'])
+C_BORDER     = colors.HexColor(_pal['border'])
+C_BORDER_DK  = colors.HexColor(_pal['border_dk'])
+C_TEXT       = colors.HexColor(_pal['text'])
+C_TEXT_MD    = colors.HexColor(_pal['text_md'])
+C_TEXT_SM    = colors.HexColor(_pal['text_sm'])
+C_WHITE      = colors.white
+C_DANGER     = colors.HexColor('#c0392b')
+C_WARN_BG    = colors.HexColor('#fff3f3')
 
-title_style = getSampleStyleSheet()['Title']
-title_style.fontName = "BodyFont"
+# Couleurs RGB pour canvas direct (papillons)
+_PR, _PG, _PB   = (int(_pal['primary'][i:i+2], 16)/255 for i in (1, 3, 5))
+_PDR,_PDG,_PDB  = (int(_pal['primary_dk'][i:i+2], 16)/255 for i in (1, 3, 5))
+_SMR,_SMG,_SMB  = (int(_pal['text_sm'][i:i+2], 16)/255 for i in (1, 3, 5))
+_TXR,_TXG,_TXB  = (int(_pal['text'][i:i+2], 16)/255 for i in (1, 3, 5))
+_SFR,_SFG,_SFB  = (int(_pal['surface'][i:i+2], 16)/255 for i in (1, 3, 5))
 
-h1_style = getSampleStyleSheet()['h1']
-h1_style.fontName = "BodyFont"
 
-h4_style = getSampleStyleSheet()['h4']
-h4_style.alignment = 2
-h4_style.fontName = "BodyFont"
+def _ps(name: str, **kw) -> ParagraphStyle:
+    """Crée un style Paragraph avec les défauts de la palette."""
+    kw.setdefault('fontName', 'BodyFont')
+    kw.setdefault('textColor', C_TEXT)
+    return ParagraphStyle(name, **kw)
 
-amenagement_style = getSampleStyleSheet()['Normal']
-amenagement_style.fontName = "BodyFont"
-amenagement_style.alignment = 1
-amenagement_style.textColor = color5
 
+# ── Canvas avec footer ────────────────────────────────────────────────────────
 
 class PageNumCanvas(canvas.Canvas):
-    """
-    Canvas ReportLab avec numérotation de pages (page X / Y).
-    Source : http://code.activestate.com/recipes/546511-page-x-of-y-with-reportlab/
-    """
+    """Canvas ReportLab avec footer : logo + '2ndOral' à gauche, date + page X/Y à droite."""
 
-    pagesize = pagesizes.landscape(pagesizes.A3)
+    pagesize = pagesizes.portrait(pagesizes.A4)
 
     def __init__(self, *args, **kwargs):
         canvas.Canvas.__init__(self, *args, **kwargs)
-        self.pages = []
+        self.pages: list = []
         self.today = datetime.datetime.now().strftime("Édité le %d/%m/%Y à %H:%M")
 
     def showPage(self):
+        """Sauvegarde l'état de la page courante avant d'en démarrer une nouvelle."""
         self.pages.append(dict(self.__dict__))
         self._startPage()
 
     def save(self):
+        """Dessine le footer sur chaque page puis enregistre le PDF."""
         page_count = len(self.pages)
         for page in self.pages:
             self.__dict__.update(page)
-            self.draw_page_number(page_count)
+            self._draw_footer(page_count)
             super().showPage()
         super().save()
 
-    def draw_page_number(self, page_count):
+    def _draw_footer(self, page_count: int) -> None:
+        """Dessine le footer en bas de page : logo + 2ndOral à gauche, date/page à droite."""
+        icon_s = 5 * mm
+        fy = 8 * mm
+        lx = 15 * mm
+        pw = self.pagesize[0]
+
+        # Logo
+        try:
+            self.drawImage(_ICON_PATH, lx, fy, width=icon_s, height=icon_s,
+                           preserveAspectRatio=True, mask='auto')
+        except Exception:
+            pass
+
+        # "2ndOral"
+        self.setFont('BodyFont', 8)
+        self.setFillColorRGB(_PR, _PG, _PB)
+        self.drawString(lx + icon_s + 1.5 * mm, fy + 1 * mm, '2ndOral')
+
+        # Date + numéro de page
         page_info = f"{self.today} - page {self._pageNumber} / {page_count}"
-        self.setFont("BodyFont", 8)
-        self.drawRightString(70 * mm, 15 * mm, page_info)
+        self.setFillColorRGB(_SMR, _SMG, _SMB)
+        self.drawRightString(pw - 15 * mm, fy + 1 * mm, page_info)
 
 
-def make_qr_image(data, directory, dpi=300):
-    """Génère une image QR code dans un répertoire temporaire."""
+class PageNumCanvasA3L(PageNumCanvas):
+    """Variante A3 paysage du canvas avec footer."""
+    pagesize = pagesizes.landscape(pagesizes.A3)
+
+
+# ── Utilitaires ───────────────────────────────────────────────────────────────
+
+def make_qr_image(data: str, directory: str, dpi: int = 300) -> str:
+    """Génère un QR code PNG dans un répertoire temporaire et retourne son chemin."""
     qr = segno.make_qr(data)
     qr_tempfile = tempfile.NamedTemporaryFile(
         dir=directory, suffix='.png', delete_on_close=False, delete=False
     )
-    qr.save(qr_tempfile, scale=20, dpi=dpi)
+    qr.save(qr_tempfile, scale=20, dpi=dpi, dark=_pal['text'], light='#ffffff')
     qr_tempfile.close()
     return qr_tempfile.name
 
 
-def liste_pdf(title, headers, data, subtitle=None, cols=None, filename=None,
-              centre_examen='', pagesize=pagesizes.landscape(pagesizes.A3),
-              should_span=True,
-              cell_backgrounds=(colors.white, colors.white, color1, color1),
-              end=None):
-    """Génère un PDF tabulaire générique avec entête, données et pied de page optionnel."""
-    data.insert(0, headers)
+def image_signature(img: str, horodatage: str) -> BytesIO:
+    """Ajoute l'horodatage en surimpression sur une image de signature base64."""
+    font = ImageFont.truetype(str(_FONT_DIR / 'PoppinsLatin-Regular.ttf'), 25)
+    img_out = BytesIO()
+    img_data = b64decode(img.split(",")[1])
+    imagefile = BytesIO(img_data)
+    imagefile.seek(0)
+    image = PilImage.open(imagefile)
+    imagedraw = ImageDraw.Draw(image)
+    imagedraw.text((0, 0), horodatage, font=font, fill=(0, 0, 0))
+    image.save(img_out, format="PNG")
+    return img_out
+
+
+def _header_band(W: float, title: str, right_text: str = '',
+                 subtitle: str = '') -> list:
+    """Retourne le bandeau d'en-tête (primaire + sous-bande) pour un document."""
+    hdr = Table(
+        [[Paragraph(title, _ps('ht', fontSize=18, textColor=C_WHITE, leading=22)),
+          Paragraph(right_text,
+                    _ps('hr', fontSize=9, textColor=colors.HexColor('#ccc9ff'),
+                        alignment=TA_RIGHT))]],
+        colWidths=[W * 0.6, W * 0.4],
+    )
+    hdr.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_PRIMARY),
+        ('TOPPADDING',    (0, 0), (-1, -1), 5 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5 * mm),
+        ('LEFTPADDING',   (0, 0), (0, -1),  6 * mm),
+        ('RIGHTPADDING',  (-1, 0), (-1, -1), 6 * mm),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROUNDEDCORNERS', [3 * mm, 3 * mm, 0, 0]),
+    ]))
+    items: list = [hdr]
+    if subtitle:
+        sub = Table(
+            [[Paragraph(subtitle, _ps('sub', fontSize=8, textColor=C_TEXT_SM))]],
+            colWidths=[W],
+        )
+        sub.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, -1), C_SURFACE2),
+            ('TOPPADDING',    (0, 0), (-1, -1), 2 * mm),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2 * mm),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 6 * mm),
+            ('LINEBELOW',     (0, 0), (-1, -1), 0.7, C_BORDER_DK),
+            ('ROUNDEDCORNERS', [0, 0, 3 * mm, 3 * mm]),
+        ]))
+        items.append(sub)
+    return items
+
+
+def _table_style_base(data_rows: int, span_col0: bool = False,
+                      font_size: int = 10) -> TableStyle:
+    """Retourne le TableStyle commun aux tableaux de données (hors papillons)."""
+    style = [
+        ('FONT',          (0, 0), (-1, -1), 'BodyFont', font_size),
+        ('BACKGROUND',    (0, 0), (-1, 0),  C_SURFACE),
+        ('LINEBELOW',     (0, 0), (-1, 0),  1.5, C_PRIMARY),
+        ('TOPPADDING',    (0, 0), (-1, -1), 3 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 4 * mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 4 * mm),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
+        ('LINEBELOW',     (0, 1), (-1, -1), 0.5, C_BORDER),
+        ('BOX',           (0, 0), (-1, -1), 0.7, C_BORDER_DK),
+        ('ROUNDEDCORNERS', [2 * mm]),
+    ]
+    # Alternance lignes blanc / gris (visible en impression N&B)
+    for i in range(1, data_rows + 1):
+        bg = C_WHITE if i % 2 == 1 else C_ROW_ALT
+        style.append(('BACKGROUND', (0, i), (-1, i), bg))
+    # Fusion cellule candidat sur 2 lignes (liste générale)
+    if span_col0:
+        for i in range(1, data_rows, 2):
+            style.append(('SPAN', (0, i), (0, i + 1)))
+    return TableStyle(style)
+
+
+# ── Fiche candidat ────────────────────────────────────────────────────────────
+
+def fiche_candidat(infos_candidat: dict, tempdirname: str, file_dir: str = '.',
+                   filename_root: str = '', centre_examen: str = '') -> str:
+    """PDF : fiche individuelle d'un candidat avec ses horaires et identifiants de connexion."""
     buffer = BytesIO()
+    canvas_cls = PageNumCanvas
+    canvas_cls.pagesize = pagesizes.portrait(pagesizes.A4)
+    W_page = pagesizes.A4[0]
+    W = W_page - 30 * mm
+
     doc = SimpleDocTemplate(
         buffer,
-        rightMargin=15 * mm,
-        leftMargin=15 * mm,
-        topMargin=15 * mm,
-        bottomMargin=20 * mm,
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm,  bottomMargin=22 * mm,
+        pagesize=pagesizes.portrait(pagesizes.A4),
+        title=f"{infos_candidat['nom']} - {infos_candidat['numero']}",
+    )
+    story = []
+
+    # En-tête
+    story += _header_band(W,
+        title='Oraux de second Groupe',
+        right_text=centre_examen,
+        subtitle='Fiche individuelle de candidat',
+    )
+    story.append(Spacer(1, 6 * mm))
+
+    # Identité
+    story.append(Paragraph(
+        f"{infos_candidat['nom']} (N° candidat : {infos_candidat['numero']})",
+        _ps('h1', fontSize=18, leading=22, spaceAfter=2 * mm),
+    ))
+    story.append(Paragraph(
+        f"Établissement : {infos_candidat['etablissement']}",
+        _ps('etab', fontSize=10, textColor=C_TEXT_MD, spaceAfter=4 * mm),
+    ))
+
+    # Aménagement — bordure gauche rouge, visible en N&B
+    if infos_candidat['tiers_temps']:
+        amen = Table(
+            [[Paragraph(
+                "~ Candidat disposant d'un aménagement d'épreuve ~",
+                _ps('am', fontSize=10, textColor=C_DANGER))]],
+            colWidths=[W],
+        )
+        amen.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, -1), C_WARN_BG),
+            ('TOPPADDING',    (0, 0), (-1, -1), 2.5 * mm),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5 * mm),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 5 * mm),
+            ('LINEBEFORE',    (0, 0), (0, -1),  4, C_DANGER),
+            ('BOX',           (0, 0), (-1, -1), 0.5, colors.HexColor('#e0a0a0')),
+            ('ROUNDEDCORNERS', [2 * mm]),
+        ]))
+        story.append(amen)
+        story.append(Spacer(1, 4 * mm))
+
+    # Tableau des oraux (Matière / Salle / Heure)
+    col_w = W / 3.0
+    data = [["Matière", "Salle", "Heure"]]
+    for o in infos_candidat['oraux']:
+        data.append([o['matiere'], o['salle'], o['heure']])
+
+    t = LongTable(data, colWidths=[col_w, col_w, col_w], repeatRows=1)
+    t.setStyle(_table_style_base(len(data) - 1))
+    story.append(t)
+    story.append(Spacer(1, 4 * mm))
+
+    # Instructions (texte verbatim de l'ancienne version)
+    story.append(Paragraph(
+        "Les choix inscrits sur cette feuille sont ceux que vous avez donnés en amont "
+        "de cette épreuve. En cas de changement, il vous appartient de nous en faire "
+        "part dès votre arrivée dans l'établissement.",
+        _ps('body', fontSize=9, textColor=C_TEXT_MD, leading=13,
+            alignment=TA_JUSTIFY, spaceAfter=2 * mm),
+    ))
+
+    # Instruction "rester dans l'établissement" — encadrée, bordure noire visible N&B
+    instr = Table(
+        [[Paragraph(
+            "Les informations présentes sur cette feuille sont susceptibles de changer au "
+            "cours de la journée. Il vous est fortement recommandé de rester dans "
+            "l'établissement et de vérifier périodiquement les affichages ou de consulter "
+            "l'adresse ci-dessous.",
+            _ps('instr', fontSize=9, textColor=C_TEXT, leading=13,
+                alignment=TA_JUSTIFY))]],
+        colWidths=[W],
+    )
+    instr.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_SURFACE),
+        ('TOPPADDING',    (0, 0), (-1, -1), 3 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 5 * mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 4 * mm),
+        ('LINEBEFORE',    (0, 0), (0, -1),  3, C_TEXT),
+        ('BOX',           (0, 0), (-1, -1), 0.5, C_BORDER),
+        ('ROUNDEDCORNERS', [2 * mm]),
+    ]))
+    story.append(instr)
+    story.append(Spacer(1, 5 * mm))
+
+    # QR code
+    url_candidat = url_for('candidat_court',
+                           id_candidat=infos_candidat['numero'], _external=True)
+    story.append(Image(make_qr_image(url_candidat, tempdirname, dpi=500),
+                       width=36 * mm, height=36 * mm, useDPI=True))
+    story.append(Paragraph(
+        f"Adresse pour consulter les mises à jour : {url_candidat}",
+        _ps('url', fontSize=8, textColor=C_TEXT_MD, spaceBefore=2 * mm,
+            spaceAfter=4 * mm),
+    ))
+
+    # Identifiants de connexion
+    login_key = infos_candidat.get('login_key', '')
+    if login_key:
+        story.append(HRFlowable(width=W, thickness=0.7, color=C_BORDER_DK))
+        story.append(Paragraph(
+            "Identifiants de connexion :",
+            _ps('id_title', fontSize=9, textColor=C_TEXT_MD,
+                spaceBefore=3 * mm, spaceAfter=1 * mm),
+        ))
+        creds = Table(
+            [[Paragraph(
+                f'N° candidat : <font name="MonoFont"><b>{infos_candidat["numero"]}</b></font>'
+                f'&nbsp;&nbsp;—&nbsp;&nbsp;'
+                f'Mot de passe : <font name="MonoFont"><b>{login_key}</b></font>',
+                _ps('creds', fontSize=11, textColor=C_TEXT)
+            )]],
+            colWidths=[W],
+        )
+        creds.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, -1), C_SURFACE),
+            ('TOPPADDING',    (0, 0), (-1, -1), 3 * mm),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 5 * mm),
+            ('LINEBEFORE',    (0, 0), (0, -1),  4, C_PRIMARY),
+            ('BOX',           (0, 0), (-1, -1), 0.5, C_BORDER),
+            ('ROUNDEDCORNERS', [2 * mm]),
+        ]))
+        story.append(creds)
+
+    doc.build(story, canvasmaker=canvas_cls)
+    buffer.seek(0)
+    safe_nom = infos_candidat['nom'].replace(" ", "_")
+    filename = f"{filename_root}{safe_nom}.pdf"
+    with open(path_join(file_dir, filename), "wb") as f:
+        f.write(buffer.read())
+    return filename
+
+
+def liste_fiches_candidats(candidats: list, file_dir: str = '.',
+                            filename_root: str = 'candidat_',
+                            centre_examen: str = '') -> str:
+    """PDF : concaténation des fiches de tous les candidats."""
+    files = []
+    with tempfile.TemporaryDirectory() as tempdirname:
+        for c in candidats:
+            files.append(
+                path_join(file_dir,
+                          fiche_candidat(c, tempdirname, file_dir,
+                                         filename_root, centre_examen))
+            )
+        pypdftk.concat(files, path_join(file_dir, "liste_candidats.pdf"))
+    return path_join(file_dir, "liste_candidats.pdf")
+
+
+# ── Fiche générique (salle + loge + liste générale) ──────────────────────────
+
+def liste_pdf(title: str, headers: list, data: list, subtitle: str | None = None,
+              cols: list | None = None, filename: str = '',
+              centre_examen: str = '',
+              pagesize=pagesizes.landscape(pagesizes.A3),
+              should_span: bool = True,
+              cell_backgrounds: tuple = (C_WHITE, C_ROW_ALT),
+              end: list | None = None) -> None:
+    """Génère un PDF tabulaire générique avec en-tête, données et pied de page optionnel."""
+    data.insert(0, headers)
+    buffer = BytesIO()
+    W_page = pagesize[0]
+    W = W_page - 30 * mm
+    font_size = 16 if pagesize == pagesizes.landscape(pagesizes.A3) else 10
+
+    doc = SimpleDocTemplate(
+        buffer,
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm,  bottomMargin=22 * mm,
         pagesize=pagesize,
         title=title,
     )
-    table_width = pagesize[0] * 0.92
-    story = [Paragraph(title, style=title_style)]
+    story = []
 
-    if subtitle is not None:
-        story.append(Paragraph(subtitle, style=title_style))
+    # En-tête
+    story += _header_band(W,
+        title=f"{title}{' — ' + subtitle if subtitle else ''}",
+        right_text=centre_examen,
+    )
+    story.append(Spacer(1, 5 * mm))
 
-    if centre_examen:
-        story.append(Paragraph(centre_examen, style=h4_style))
+    # Tableau
+    one_col_w = W / len(headers)
+    col_widths = [one_col_w * c for c in cols] if cols else [one_col_w] * len(headers)
 
-    one_col_width = table_width / len(data[0])
-    if cols is not None:
-        cols_w = [one_col_width * c for c in cols]
-    else:
-        cols_w = [one_col_width for _ in range(len(data[0]))]
-
-    font_size = 16 if pagesize == pagesizes.landscape(pagesizes.A3) else 10
-    table = LongTable(data, repeatRows=1, colWidths=cols_w,
+    table = LongTable(data, repeatRows=1, colWidths=col_widths,
                       minRowHeights=[0] + [40] * len(data))
-    tab_style = TableStyle([
-        ('FONT', (0, 0), (-1, -1), "BodyFont", font_size),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BACKGROUND', (0, 0), (-1, 0), color3),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-        ('GRID', (0, 0), (-1, -1), 2, colors.black),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), cell_backgrounds),
-    ])
+
+    style = [
+        ('FONT',          (0, 0), (-1, -1), 'BodyFont', font_size),
+        ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        ('BACKGROUND',    (0, 0), (-1, 0),  C_SURFACE),
+        ('LINEBELOW',     (0, 0), (-1, 0),  1.5, C_PRIMARY),
+        ('LINEBELOW',     (0, 1), (-1, -1), 0.5, C_BORDER),
+        ('BOX',           (0, 0), (-1, -1), 0.7, C_BORDER_DK),
+        ('TOPPADDING',    (0, 0), (-1, -1), 3 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 4 * mm),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 4 * mm),
+        ('ROUNDEDCORNERS', [2 * mm]),
+    ]
+    # Alternance ROWBACKGROUNDS (compatible N&B)
+    style.append(('ROWBACKGROUNDS', (0, 1), (-1, -1), list(cell_backgrounds)))
 
     if should_span:
         for i in range(1, len(data) - 1, 2):
-            tab_style.add('SPAN', (0, i), (0, i + 1))
+            style.append(('SPAN', (0, i), (0, i + 1)))
 
-    table.setStyle(tab_style)
+    table.setStyle(TableStyle(style))
     story.append(table)
 
-    if end is not None:
-        story.append(Spacer(1, 2 * mm))
+    if end:
+        story.append(Spacer(1, 3 * mm))
         for element in end:
             story.append(element)
 
-    page_canvas = PageNumCanvas
-    page_canvas.pagesize = pagesize
-    doc.build(story, canvasmaker=page_canvas)
+    canvas_cls = PageNumCanvasA3L if pagesize == pagesizes.landscape(pagesizes.A3) \
+        else PageNumCanvas
+    canvas_cls.pagesize = pagesize
+    doc.build(story, canvasmaker=canvas_cls)
 
     buffer.seek(0)
     with open(filename, "wb") as f:
         f.write(buffer.read())
 
 
-def liste_generale_oraux(infos_oraux, filename=None, centre_examen=''):
-    """PDF : liste générale des oraux par candidat."""
+def liste_generale_oraux(infos_oraux: list, filename: str = '',
+                          centre_examen: str = '') -> None:
+    """PDF : liste générale des oraux par candidat (A3 paysage)."""
     data = [
         [oral['candidat'], oral['matiere'], oral['heure'], oral['salle']]
         for oral in infos_oraux
@@ -189,18 +486,17 @@ def liste_generale_oraux(infos_oraux, filename=None, centre_examen=''):
     )
 
 
-def loge_oraux(infos_loge, tempdir=".", file_dir='.', filename_root='',
-               centre_examen=''):
-    """PDF : fiche d'une loge (salle de préparation)."""
+def loge_oraux(infos_loge: dict, tempdir: str = ".", file_dir: str = '.',
+               filename_root: str = '', centre_examen: str = '') -> str:
+    """PDF : fiche d'une loge (salle de préparation), A3 paysage."""
     data = []
     filename = f"{filename_root}-{infos_loge['salle']}.pdf"
     for o in infos_loge['oraux']:
         nom = f"{o['candidat']} ({o['numero']})"
         if o['tiers_temps']:
             nom += " " + WARNING_CHAR
-        line = [nom, o['salle'], o['matiere_court'], o['examinateur'],
-                o['sujet'], o['oral'], "", ""]
-        data.append(line)
+        data.append([nom, o['salle'], o['matiere_court'], o['examinateur'],
+                     o['sujet'], o['oral'], "", ""])
     liste_pdf(
         title=f"Loge {infos_loge['salle']}",
         headers=["Candidat", "Salle", "Matière", "Examinateur",
@@ -211,29 +507,31 @@ def loge_oraux(infos_loge, tempdir=".", file_dir='.', filename_root='',
         centre_examen=centre_examen,
         pagesize=pagesizes.landscape(pagesizes.A3),
         should_span=False,
-        cell_backgrounds=(colors.white, color1),
+        cell_backgrounds=(C_WHITE, C_ROW_ALT),
         end=[
             Paragraph(WARNING_CHAR + " : candidat disposant d'un aménagement",
-                      style=normal_style),
+                      _ps('end', fontSize=10, textColor=C_TEXT_MD,
+                           spaceAfter=3 * mm)),
             Image(
                 make_qr_image(
                     url_for('loge_court', id_loge=infos_loge['salle'], _external=True),
                     tempdir, dpi=500,
                 ),
-                useDPI=True,
+                width=36 * mm, height=36 * mm, useDPI=True,
             ),
             Paragraph(
                 "adresse pour les mises à jour : " + url_for(
                     'loge_court', id_loge=infos_loge['salle'], _external=True
                 ),
-                style=normal_style,
+                _ps('url', fontSize=9, textColor=C_TEXT_MD),
             ),
         ],
     )
     return filename
 
 
-def liste_loge_oraux(liste_loges, file_dir='.', filename_root='', centre_examen=''):
+def liste_loge_oraux(liste_loges: list, file_dir: str = '.', filename_root: str = '',
+                     centre_examen: str = '') -> str:
     """PDF : concaténation des fiches de toutes les loges."""
     liste_fichiers = []
     with tempfile.TemporaryDirectory() as tempdir:
@@ -246,24 +544,9 @@ def liste_loge_oraux(liste_loges, file_dir='.', filename_root='', centre_examen=
     return path_join(file_dir, "liste_loges.pdf")
 
 
-def image_signature(img, horodatage):
-    """Ajoute l'horodatage en surimpression sur une image de signature base64."""
-    font = ImageFont.truetype(str(_FONT_DIR / 'PoppinsLatin-Regular.ttf'), 25)
-    img_out = BytesIO()
-    img_data = b64decode(img.split(",")[1])
-    imagefile = BytesIO(img_data)
-    imagefile.seek(0)
-    image = PilImage.open(imagefile)
-    imagedraw = ImageDraw.Draw(image)
-    # 'fill' est le paramètre correct pour la couleur du texte en PIL
-    imagedraw.text((0, 0), horodatage, font=font, fill=(0, 0, 0))
-    image.save(img_out, format="PNG")
-    return img_out
-
-
-def salle_oraux(infos_examinateur, tempdir=".", file_dir='.', filename_root='',
-                centre_examen=''):
-    """PDF : fiche d'émargement d'une salle (examinateur)."""
+def salle_oraux(infos_examinateur: dict, tempdir: str = ".", file_dir: str = '.',
+                filename_root: str = '', centre_examen: str = '') -> str:
+    """PDF : fiche d'émargement d'une salle (examinateur), portrait A4."""
     data = []
     safe_nom = infos_examinateur['nom'].replace(" ", "_")
     filename = f"{filename_root}-{infos_examinateur['salle']}-{safe_nom}.pdf"
@@ -272,17 +555,16 @@ def salle_oraux(infos_examinateur, tempdir=".", file_dir='.', filename_root='',
         if o['tiers_temps']:
             nom += " " + WARNING_CHAR
         line = [nom, o['sujet'], o['oral']]
-        image = o['emargement']
-        if image == "":
+        if o['emargement'] == "":
             line.append("")
         else:
-            buff = image_signature(image, o['heure_emargement'])
+            buff = image_signature(o['emargement'], o['heure_emargement'])
             buff.seek(0)
             line.append(Image(buff, 30 * mm, 30 * mm))
         data.append(line)
     liste_pdf(
         title=f"{infos_examinateur['salle']} - {infos_examinateur['nom']}",
-        subtitle=f"{infos_examinateur['matiere']}",
+        subtitle=infos_examinateur['matiere'],
         headers=["Candidat", "Sujet", "Oral", "Émargement"],
         data=data,
         cols=[2, 0.5, 0.5, 1],
@@ -290,32 +572,35 @@ def salle_oraux(infos_examinateur, tempdir=".", file_dir='.', filename_root='',
         centre_examen=centre_examen,
         pagesize=pagesizes.portrait(pagesizes.A4),
         should_span=False,
-        cell_backgrounds=(colors.white, color1),
+        cell_backgrounds=(C_WHITE, C_ROW_ALT),
         end=[
-            Paragraph(f"Loge : {infos_examinateur['loge']}", style=normal_style),
+            Paragraph(f"Loge : {infos_examinateur['loge']}",
+                      _ps('end', fontSize=9, textColor=C_TEXT_MD,
+                           spaceAfter=1 * mm)),
             Paragraph(WARNING_CHAR + " : candidat disposant d'un aménagement",
-                      style=normal_style),
+                      _ps('end2', fontSize=9, textColor=C_TEXT_MD,
+                           spaceAfter=3 * mm)),
             Image(
                 make_qr_image(
                     url_for('salle_court',
                             id_salle=infos_examinateur['salle'], _external=True),
                     tempdir, dpi=500,
                 ),
-                useDPI=True,
+                width=36 * mm, height=36 * mm, useDPI=True,
             ),
             Paragraph(
                 "adresse pour les mises à jour : " + url_for(
                     'salle_court', id_salle=infos_examinateur['salle'], _external=True
                 ),
-                style=normal_style,
+                _ps('url', fontSize=9, textColor=C_TEXT_MD),
             ),
         ],
     )
     return filename
 
 
-def liste_salle_oraux(liste_examinateurs, file_dir='.', filename_root='',
-                      centre_examen=''):
+def liste_salle_oraux(liste_examinateurs: list, file_dir: str = '.',
+                      filename_root: str = '', centre_examen: str = '') -> str:
     """PDF : concaténation des fiches de toutes les salles."""
     liste_fichiers = []
     with tempfile.TemporaryDirectory() as tempdir:
@@ -328,206 +613,107 @@ def liste_salle_oraux(liste_examinateurs, file_dir='.', filename_root='',
     return path_join(file_dir, "liste_salles.pdf")
 
 
-def fiche_candidat(infos_candidat, tempdirname, file_dir='.', filename_root='',
-                   centre_examen=''):
-    """PDF : fiche individuelle d'un candidat avec ses horaires et identifiants de connexion."""
-    buffer = BytesIO()
-    canvas_a4 = PageNumCanvas
-    canvas_a4.pagesize = pagesizes.portrait(pagesizes.A4)
-    tab_style = TableStyle([
-        ('FONT', (0, 0), (-1, -1), "BodyFont", 12),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BACKGROUND', (0, 0), (-1, 0), color3),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-        ('GRID', (0, 0), (-1, -1), 2, colors.black),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, color1]),
-    ])
-    doc = SimpleDocTemplate(
-        buffer,
-        rightMargin=15 * mm,
-        leftMargin=15 * mm,
-        topMargin=15 * mm,
-        bottomMargin=20 * mm,
-        pagesize=pagesizes.portrait(pagesizes.A4),
-        title=f"{infos_candidat['nom']} - {infos_candidat['numero']}",
-    )
-    story = [Paragraph("Oraux de second Groupe", style=title_style)]
-    story.append(Paragraph(centre_examen, style=h4_style))
-    story.append(Spacer(1, 30))
-    story.append(
-        Paragraph(f"{infos_candidat['nom']} (N° candidat : {infos_candidat['numero']})",
-                  style=h1_style)
-    )
-    story.append(Spacer(1, 30))
-    story.append(
-        Paragraph(f"Établissement : {infos_candidat['etablissement']}",
-                  style=normal_style)
-    )
-    story.append(Spacer(1, 30))
-    if infos_candidat['tiers_temps']:
-        story.append(
-            Paragraph("~ Candidat disposant d'un aménagement d'épreuve ~",
-                      style=amenagement_style)
-        )
-        story.append(Spacer(1, 30))
+# ── Papillons de connexion ────────────────────────────────────────────────────
 
-    # Tableau des oraux
-    data = [["Matière", "Salle", "Heure"]]
-    for o in infos_candidat['oraux']:
-        data.append([o['matiere'], o['salle'], o['heure']])
-    col_w = pagesizes.portrait(pagesizes.A4)[0] * 0.92 / 3.0
-    story.append(Table(data=data, style=tab_style,
-                       colWidths=[col_w, col_w, col_w]))
-    story.append(Spacer(1, 10))
-    story.append(Paragraph(
-        "Les choix inscrits sur cette feuille sont ceux que vous avez donnés en amont "
-        "de cette épreuve. En cas de changement, il vous appartient de nous en faire "
-        "part dès votre arrivée dans l'établissement.",
-        style=normal_style,
-    ))
-    story.append(Spacer(1, 10))
-    story.append(Paragraph(
-        "Les informations présentes sur cette feuille sont susceptibles de changer au "
-        "cours de la journée. Il vous est fortement recommandé de rester dans "
-        "l'établissement et de vérifier périodiquement les affichages ou de consulter "
-        "l'adresse ci-dessous.",
-        style=normal_style,
-    ))
-    story.append(Spacer(1, 20))
-
-    # QR code vers la fiche en ligne
-    url_candidat = url_for('candidat_court', id_candidat=infos_candidat['numero'],
-                           _external=True)
-    story.append(Image(make_qr_image(url_candidat, tempdirname, dpi=500),
-                       useDPI=True))
-    story.append(
-        Paragraph(f"Adresse pour consulter les mises à jour : {url_candidat}",
-                  style=normal_style)
-    )
-
-    # Identifiants de connexion (si disponibles)
-    login_key = infos_candidat.get('login_key', '')
-    if login_key:
-        story.append(Spacer(1, 20))
-        story.append(Paragraph("Identifiants de connexion :", style=normal_style))
-        story.append(Paragraph(
-            f'N° candidat : <font name="MonoFont"><b>{infos_candidat["numero"]}</b></font> — '
-            f'Mot de passe : <font name="MonoFont"><b>{login_key}</b></font>',
-            style=normal_style,
-        ))
-
-    doc.build(story, canvasmaker=canvas_a4)
-    buffer.seek(0)
-    safe_nom = infos_candidat['nom'].replace(" ", "_")
-    filename = f"{filename_root}{safe_nom}.pdf"
-    with open(path_join(file_dir, filename), "wb") as f:
-        f.write(buffer.read())
-    return filename
-
-
-def liste_fiches_candidats(candidats, file_dir='.', filename_root='candidat_',
-                           centre_examen=''):
-    """PDF : concaténation des fiches de tous les candidats."""
-    files = []
-    with tempfile.TemporaryDirectory() as tempdirname:
-        for c in candidats:
-            files.append(
-                path_join(file_dir,
-                          fiche_candidat(c, tempdirname, file_dir, filename_root,
-                                         centre_examen))
-            )
-        pypdftk.concat(files, path_join(file_dir, "liste_candidats.pdf"))
-    return path_join(file_dir, "liste_candidats.pdf")
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Génération des papillons (slips de connexion imprimables)
-# ──────────────────────────────────────────────────────────────────────────────
-
-def _draw_papillon(c_canvas, x, y, slip_w, slip_h, title_line1, title_line2,
-                  name, id_label, id_value, pwd_value, url='', qr_size=20 * mm):
+def _draw_papillon(c_canvas, x: float, y: float, slip_w: float, slip_h: float,
+                   title_line1: str, title_line2: str, name: str,
+                   id_label: str, id_value: str, pwd_value: str,
+                   url: str = '', qr_size: float = 35 * mm) -> None:
     """Dessine un papillon (slip de connexion) à la position (x, y) sur le canvas."""
-    pad = 3 * mm
+    sw = slip_w - 4 * mm
+    sh = slip_h - 4 * mm
+    pad = 4 * mm
 
-    # Bande d'en-tête colorée — coins du haut arrondis pour suivre la bordure
-    # (un roundRect arrondirait aussi les coins du bas, qui doivent rester
-    # droits pour s'aligner avec le corps du papillon ; on les aplatit en
-    # recouvrant la moitié inférieure de la bande d'un rectangle classique).
-    band_radius = 2 * mm
-    band_x = x + 1 * mm
-    band_y = y + slip_h - 10 * mm - 1 * mm
-    band_w = slip_w - 2 * mm
-    band_h = 10 * mm
-    c_canvas.setFillColorRGB(0.84, 0.81, 0.96)
-    c_canvas.roundRect(band_x, band_y, band_w, band_h, band_radius, fill=1, stroke=0)
-    c_canvas.rect(band_x, band_y, band_w, band_h / 2, fill=1, stroke=0)
-    
-    # Bordure
-    c_canvas.setStrokeColorRGB(0.4, 0.35, 0.8)
-    c_canvas.setLineWidth(1)
-    c_canvas.roundRect(x + 1 * mm, y + 1 * mm,
-                       slip_w - 2 * mm, slip_h - 2 * mm, 2 * mm)
-    
-    c_canvas.setFillColorRGB(0, 0, 0)
+    # Fond blanc + contour
+    c_canvas.setFillColorRGB(1, 1, 1)
+    c_canvas.setStrokeColorRGB(0.55, 0.55, 0.55)
+    c_canvas.setLineWidth(0.6)
+    c_canvas.roundRect(x, y, sw, sh, 3 * mm, fill=1, stroke=1)
 
-    # Titre
-    c_canvas.setFont("PapillonFont", 9)
-    c_canvas.drawCentredString(x + slip_w / 2, y + slip_h - 6 * mm, title_line1)
+    # Bande d'en-tête couleur primaire (coins haut arrondis)
+    hh = 9 * mm
+    c_canvas.setFillColorRGB(_PR, _PG, _PB)
+    c_canvas.roundRect(x, y + sh - hh, sw, hh, 3 * mm, fill=1, stroke=0)
+    c_canvas.rect(x, y + sh - hh, sw, hh / 2, fill=1, stroke=0)
+
+    # Titre ligne 1 (rôle)
+    c_canvas.setFillColorRGB(1, 1, 1)
+    c_canvas.setFont('PapillonFont', 7.5)
+    c_canvas.drawString(x + pad, y + sh - 6 * mm, title_line1)
+
+    # Titre ligne 2 (centre) — à droite
     if title_line2:
-        c_canvas.setFont("PapillonFont", 8)
-        c_canvas.drawCentredString(x + slip_w / 2, y + slip_h - 9.5 * mm, title_line2)
+        c_canvas.setFont('BodyFont', 6.5)
+        c_canvas.setFillColorRGB(0.80, 0.78, 1.0)
+        c_canvas.drawRightString(x + sw - pad, y + sh - 6 * mm, title_line2)
 
     # Nom
-    c_canvas.setFont("PapillonFont", 12)
-    c_canvas.drawString(x + pad, y + slip_h - 16 * mm, name[:35])
+    c_canvas.setFont('PapillonFont', 11)
+    c_canvas.setFillColorRGB(_TXR, _TXG, _TXB)
+    c_canvas.drawString(x + pad, y + sh - hh - 7 * mm, name[:30])
 
-    # Identifiant — monospace pour distinguer les caractères ambigus
-    c_canvas.setFont("PapillonFont", 10)
-    c_canvas.drawString(x + pad, y + slip_h - 22 * mm, f"{id_label} : ")
-    c_canvas.setFont("MonoFont", 10)
-    label_w = c_canvas.stringWidth(f"{id_label} : ", "PapillonFont", 10)
-    c_canvas.drawString(x + pad + label_w, y + slip_h - 22 * mm, id_value)
+    # Identifiant
+    c_canvas.setFont('BodyFont', 7)
+    c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
+    c_canvas.drawString(x + pad, y + sh - hh - 14 * mm, id_label)
+    c_canvas.setFont('MonoFont', 9)
+    c_canvas.setFillColorRGB(_TXR, _TXG, _TXB)
+    c_canvas.drawString(x + pad, y + sh - hh - 20 * mm, id_value)
 
-    # Mot de passe — monospace pour distinguer les caractères ambigus
-    c_canvas.setFont("PapillonFont", 11)
-    c_canvas.drawString(x + pad, y + slip_h - 27 * mm, "Mot de passe : ")
-    c_canvas.setFont("MonoFont", 11)
-    pwd_label_w = c_canvas.stringWidth("Mot de passe : ", "PapillonFont", 11)
-    c_canvas.drawString(x + pad + pwd_label_w, y + slip_h - 27 * mm, pwd_value)
+    # Séparateur
+    sep_y = y + sh - hh - 26 * mm
+    c_canvas.setStrokeColorRGB(0.75, 0.75, 0.75)
+    c_canvas.setLineWidth(0.4)
+    c_canvas.line(x + pad, sep_y, x + sw - pad, sep_y)
 
-    # QR code + URL texte (coin inférieur droit)
+    # Label mot de passe
+    c_canvas.setFont('BodyFont', 7)
+    c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
+    c_canvas.drawString(x + pad, sep_y - 5.5 * mm, 'Mot de passe')
+
+    # Encadré mot de passe (fond gris, visible en N&B)
+    pwd_y = sep_y - 15 * mm
+    pwd_w = 38 * mm
+    c_canvas.setFillColorRGB(_SFR, _SFG, _SFB)
+    c_canvas.setStrokeColorRGB(_PDR, _PDG, _PDB)
+    c_canvas.setLineWidth(0.8)
+    c_canvas.roundRect(x + pad, pwd_y, pwd_w, 8.5 * mm, 1.5 * mm, fill=1, stroke=1)
+    c_canvas.setFillColorRGB(_PR * 0.8, _PG * 0.8, _PB * 0.85)
+    c_canvas.setFont('MonoFont', 11)
+    c_canvas.drawCentredString(x + pad + pwd_w / 2, pwd_y + 2 * mm, pwd_value)
+
+    # QR code (coin bas droit)
     if url:
         try:
             qr_io = BytesIO()
-            segno.make_qr(url).save(qr_io, kind='png', scale=4, dpi=150,
-                                    dark='#1e1b4b', light='#ffffff')
+            segno.make_qr(url).save(qr_io, kind='png', scale=6, dpi=300,
+                                    dark=_pal['text'], light='#ffffff')
             qr_io.seek(0)
+            qr_x = x + sw - qr_size - pad
+            qr_y = y + pad
             c_canvas.drawImage(
-                ImageReader(qr_io),
-                x + slip_w - qr_size - 2 * mm,
-                y + 2 * mm,
-                width=qr_size,
-                height=qr_size,
+                ImageReader(qr_io), qr_x, qr_y,
+                width=qr_size, height=qr_size,
             )
         except Exception:
             pass
-        c_canvas.setFont("MonoFont", 6)
-        c_canvas.drawString(x + pad, y + 3 * mm, url[:45])
+        c_canvas.setFont('MonoFont', 6)
+        c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
+        c_canvas.drawString(x + pad, y + pad + 1 * mm, url[:45])
 
 
-def _build_papillons_pdf(items, filename, title1, title2, id_label,
-                        get_id, get_name, get_pwd, get_url, qr_size=14 * mm):
-    """
-    Moteur générique de génération de papillons.
+def _build_papillons_pdf(items: list, filename: str, title1: str, title2: str,
+                         id_label: str, get_id, get_name, get_pwd, get_url,
+                         qr_size: float = 35 * mm) -> None:
+    """Moteur générique de génération de papillons (2 colonnes × 5 lignes par page A4).
 
-    :param items: liste des objets à imprimer
-    :param filename: chemin de sortie PDF
-    :param title1: première ligne du titre de chaque papillon
-    :param title2: deuxième ligne du titre (souvent le nom du centre)
-    :param id_label: libellé de l'identifiant (ex. 'Salle', 'N° candidat')
-    :param get_id/get_name/get_pwd/get_url: callables item → valeur
-    :param qr_size: taille du QR code sur chaque papillon
+    :param items:    Liste des objets à imprimer.
+    :param filename: Chemin de sortie PDF.
+    :param title1:   Première ligne du titre (rôle).
+    :param title2:   Deuxième ligne du titre (centre).
+    :param id_label: Libellé de l'identifiant (ex. 'Salle', 'N° candidat').
+    :param get_id/get_name/get_pwd/get_url: Callables item → valeur de chaque champ.
+    :param qr_size:  Taille du QR code sur chaque papillon.
     """
     W, H = pagesizes.portrait(pagesizes.A4)
     buffer = BytesIO()
@@ -541,9 +727,13 @@ def _build_papillons_pdf(items, filename, title1, title2, id_label,
     slip_h = (H - 2 * margin_y) / rows_per_page
 
     per_page = cols * rows_per_page
+    total_pages = max(1, -(-len(items) // per_page))   # arrondi supérieur
+
     for i, item in enumerate(items):
         page_pos = i % per_page
         if i > 0 and page_pos == 0:
+            # Footer avant de tourner la page
+            _draw_papillon_footer(c_canvas, W, H, i // per_page, total_pages)
             c_canvas.showPage()
 
         col = page_pos % cols
@@ -558,21 +748,48 @@ def _build_papillons_pdf(items, filename, title1, title2, id_label,
             get_pwd(item), get_url(item), qr_size=qr_size,
         )
 
+    # Footer de la dernière page
+    _draw_papillon_footer(c_canvas, W, H, total_pages, total_pages)
     c_canvas.save()
     buffer.seek(0)
     with open(filename, 'wb') as f:
         f.write(buffer.read())
 
 
-def liste_papillons_connexion(connexions, filename='papillons_examinateurs.pdf',
-                               base_url='', centre_examen=''):
-    """
-    Génère les papillons de connexion pour les examinateurs.
+def _draw_papillon_footer(c_canvas, W: float, H: float,
+                          page_num: int, total_pages: int) -> None:
+    """Dessine le footer standard (logo + 2ndOral + date/page) sur la page courante."""
+    icon_s = 5 * mm
+    fy = 8 * mm
+    lx = 15 * mm
+    today = datetime.datetime.now().strftime("Édité le %d/%m/%Y à %H:%M")
 
-    :param connexions: liste de tuples (salle, nom, mot_de_passe)
-    :param filename: chemin du PDF de sortie
-    :param base_url: URL de base du site (ex. 'https://stex.mesoraux.fr')
-    :param centre_examen: nom du centre affiché sur chaque papillon
+    try:
+        c_canvas.drawImage(_ICON_PATH, lx, fy, width=icon_s, height=icon_s,
+                           preserveAspectRatio=True, mask='auto')
+    except Exception:
+        pass
+
+    c_canvas.setFont('BodyFont', 8)
+    c_canvas.setFillColorRGB(_PR, _PG, _PB)
+    c_canvas.drawString(lx + icon_s + 1.5 * mm, fy + 1 * mm, '2ndOral')
+
+    c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
+    c_canvas.drawRightString(
+        W - 15 * mm, fy + 1 * mm,
+        f"{today} - page {page_num} / {total_pages}",
+    )
+
+
+def liste_papillons_connexion(connexions: list,
+                               filename: str = 'papillons_examinateurs.pdf',
+                               base_url: str = '', centre_examen: str = '') -> None:
+    """Génère les papillons de connexion pour les examinateurs.
+
+    :param connexions:    Liste de tuples (salle, nom, mot_de_passe).
+    :param filename:      Chemin du PDF de sortie.
+    :param base_url:      URL de base du site (ex. 'https://stex.mesoraux.fr').
+    :param centre_examen: Nom du centre affiché sur chaque papillon.
     """
     _build_papillons_pdf(
         items=connexions,
@@ -587,15 +804,15 @@ def liste_papillons_connexion(connexions, filename='papillons_examinateurs.pdf',
     )
 
 
-def liste_papillons_candidats(candidats, filename='static/docs/papillons_candidats.pdf',
-                              base_url='', centre_examen=''):
-    """
-    Génère les papillons de connexion pour les candidats (élèves).
+def liste_papillons_candidats(candidats: list,
+                               filename: str = 'static/docs/papillons_candidats.pdf',
+                               base_url: str = '', centre_examen: str = '') -> None:
+    """Génère les papillons de connexion pour les candidats.
 
-    :param candidats: liste de dicts {'nom', 'numero', 'login_key'}
-    :param filename: chemin du PDF de sortie
-    :param base_url: URL de base du site (ex. 'https://stex.mesoraux.fr')
-    :param centre_examen: nom du centre affiché sur chaque papillon
+    :param candidats:     Liste de dicts {'nom', 'numero', 'login_key'}.
+    :param filename:      Chemin du PDF de sortie.
+    :param base_url:      URL de base du site.
+    :param centre_examen: Nom du centre affiché sur chaque papillon.
     """
     _build_papillons_pdf(
         items=candidats,
@@ -607,19 +824,17 @@ def liste_papillons_candidats(candidats, filename='static/docs/papillons_candida
         get_name=lambda d: d['nom'],
         get_pwd=lambda d: d['login_key'],
         get_url=lambda d: f"{base_url}/c/{d['numero']}" if base_url else "",
-        qr_size=18 * mm,
     )
 
 
-def liste_papillons_loges(loges, filename='papillons_loges.pdf',
-                          base_url='', centre_examen=''):
-    """
-    Génère les papillons de connexion pour les surveillants de loge.
+def liste_papillons_loges(loges: list, filename: str = 'papillons_loges.pdf',
+                           base_url: str = '', centre_examen: str = '') -> None:
+    """Génère les papillons de connexion pour les surveillants de loge.
 
-    :param loges: liste de tuples (nom_loge, mot_de_passe)
-    :param filename: chemin du PDF de sortie
-    :param base_url: URL de base du site (ex. 'https://stex.mesoraux.fr')
-    :param centre_examen: nom du centre affiché sur chaque papillon
+    :param loges:         Liste de tuples (nom_loge, mot_de_passe).
+    :param filename:      Chemin du PDF de sortie.
+    :param base_url:      URL de base du site.
+    :param centre_examen: Nom du centre affiché sur chaque papillon.
     """
     _build_papillons_pdf(
         items=loges,
