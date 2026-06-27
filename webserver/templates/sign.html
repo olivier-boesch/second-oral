@@ -95,11 +95,17 @@
     {% endif %}
 
     function resizeCanvas() {
-        const ratio =  Math.max(window.devicePixelRatio || 1, 1);
-        canvas.width = canvas.offsetWidth * ratio;
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        // Sauvegarder les tracés avant de redimensionner.
+        // Sur mobile, le swipe vertical fait apparaître/disparaître la barre
+        // du navigateur → événement resize → canvas.clear() sans cette
+        // sauvegarde efface la signature en cours.
+        const strokeData = signaturePad.isEmpty() ? null : signaturePad.toData();
+        canvas.width  = canvas.offsetWidth  * ratio;
         canvas.height = canvas.offsetHeight * ratio;
         canvas.getContext("2d").scale(ratio, ratio);
-        signaturePad.clear(); // otherwise isEmpty() might return incorrect value
+        signaturePad.clear();
+        if (strokeData) signaturePad.fromData(strokeData);
     }
     window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
