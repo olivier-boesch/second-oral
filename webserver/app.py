@@ -1721,6 +1721,7 @@ def verify_logs() -> ResponseReturnValue:
 
 
 @app.route('/loge/timer-state', methods=['GET', 'POST'])
+@limiter.exempt   # appelé automatiquement toutes les secondes par oral actif — auth suffit
 @nocache
 def timer_state() -> ResponseReturnValue:
     """API état des timers de loge — lecture/écriture dans Redis."""
