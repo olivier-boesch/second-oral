@@ -18,7 +18,7 @@ import zipfile
 from pathlib import Path
 from datetime import datetime
 from functools import wraps
-from urllib.parse import unquote, quote, urlparse
+from urllib.parse import quote, urlparse
 
 import logging
 import pyotp

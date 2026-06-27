@@ -1,3 +1,0 @@
-#!/usr/bin/zsh
-
-docker compose exec --workdir /app app python verify_logs.py
