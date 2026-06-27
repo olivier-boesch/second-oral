@@ -483,6 +483,7 @@ def liste_generale_oraux(infos_oraux: list, filename: str = '',
         cols=[1.7, 1.3, 0.5, 0.5],
         filename=filename,
         centre_examen=centre_examen,
+        cell_backgrounds=(C_WHITE, C_WHITE, C_ROW_ALT, C_ROW_ALT),
     )
 
 
