@@ -619,87 +619,98 @@ def _draw_papillon(c_canvas, x: float, y: float, slip_w: float, slip_h: float,
                    title_line1: str, title_line2: str, name: str,
                    id_label: str, id_value: str, pwd_value: str,
                    url: str = '', qr_size: float = 35 * mm) -> None:
-    """Dessine un papillon (slip de connexion) à la position (x, y) sur le canvas."""
-    sw = slip_w - 4 * mm
-    sh = slip_h - 4 * mm
-    pad = 4 * mm
+    """Dessine un papillon (slip de connexion) à la position (x, y) sur le canvas.
 
-    # Fond blanc + contour
+    Layout : en-tête 2 lignes (rôle + centre) ; colonne gauche pour le texte ;
+    colonne droite pour le QR. Toutes les zones sont calculées pour ne pas se
+    chevaucher quelle que soit la taille du QR demandée.
+    """
+    sw = slip_w - 4 * mm   # largeur utile du slip (~91 mm pour 2 cols A4)
+    sh = slip_h - 4 * mm   # hauteur utile (~51 mm pour 5 lignes A4)
+    pad = 3 * mm
+
+    # ── Fond blanc + contour ──────────────────────────────────────────────────
     c_canvas.setFillColorRGB(1, 1, 1)
     c_canvas.setStrokeColorRGB(0.55, 0.55, 0.55)
     c_canvas.setLineWidth(0.6)
     c_canvas.roundRect(x, y, sw, sh, 3 * mm, fill=1, stroke=1)
 
-    # Bande d'en-tête couleur primaire (coins haut arrondis)
-    hh = 9 * mm
+    # ── En-tête 2 lignes (rôle + centre) ─────────────────────────────────────
+    # 2 lignes pour éviter le débordement quand titre + centre sont tous deux longs.
+    hh = 11 * mm if title_line2 else 7 * mm
     c_canvas.setFillColorRGB(_PR, _PG, _PB)
     c_canvas.roundRect(x, y + sh - hh, sw, hh, 3 * mm, fill=1, stroke=0)
     c_canvas.rect(x, y + sh - hh, sw, hh / 2, fill=1, stroke=0)
 
-    # Titre ligne 1 (rôle)
     c_canvas.setFillColorRGB(1, 1, 1)
-    c_canvas.setFont('PapillonFont', 7.5)
-    c_canvas.drawString(x + pad, y + sh - 6 * mm, title_line1)
+    c_canvas.setFont('PapillonFont', 7)
+    c_canvas.drawString(x + pad, y + sh - 5.5 * mm, title_line1)
 
-    # Titre ligne 2 (centre) — à droite
     if title_line2:
-        c_canvas.setFont('BodyFont', 6.5)
-        c_canvas.setFillColorRGB(0.80, 0.78, 1.0)
-        c_canvas.drawRightString(x + sw - pad, y + sh - 6 * mm, title_line2)
+        c_canvas.setFont('BodyFont', 6)
+        c_canvas.setFillColorRGB(0.82, 0.80, 1.0)
+        c_canvas.drawString(x + pad, y + sh - 9.5 * mm, title_line2)
 
-    # Nom
-    c_canvas.setFont('PapillonFont', 11)
-    c_canvas.setFillColorRGB(_TXR, _TXG, _TXB)
-    c_canvas.drawString(x + pad, y + sh - hh - 7 * mm, name[:30])
+    # ── Colonnes : texte (gauche) | QR (droite) ───────────────────────────────
+    # La colonne texte ne s'étend jamais sur la colonne QR.
+    text_w = sw - qr_size - pad * 2   # largeur colonne texte
+    content_top = y + sh - hh          # haut de la zone contenu (sous en-tête)
+    content_h   = sh - hh              # hauteur disponible pour le contenu
 
-    # Identifiant
-    c_canvas.setFont('BodyFont', 7)
-    c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
-    c_canvas.drawString(x + pad, y + sh - hh - 14 * mm, id_label)
-    c_canvas.setFont('MonoFont', 9)
-    c_canvas.setFillColorRGB(_TXR, _TXG, _TXB)
-    c_canvas.drawString(x + pad, y + sh - hh - 20 * mm, id_value)
-
-    # Séparateur
-    sep_y = y + sh - hh - 26 * mm
-    c_canvas.setStrokeColorRGB(0.75, 0.75, 0.75)
-    c_canvas.setLineWidth(0.4)
-    c_canvas.line(x + pad, sep_y, x + sw - pad, sep_y)
-
-    # Label mot de passe
-    c_canvas.setFont('BodyFont', 7)
-    c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
-    c_canvas.drawString(x + pad, sep_y - 5.5 * mm, 'Mot de passe')
-
-    # Encadré mot de passe (fond gris, visible en N&B)
-    pwd_y = sep_y - 15 * mm
-    pwd_w = 38 * mm
-    c_canvas.setFillColorRGB(_SFR, _SFG, _SFB)
-    c_canvas.setStrokeColorRGB(_PDR, _PDG, _PDB)
-    c_canvas.setLineWidth(0.8)
-    c_canvas.roundRect(x + pad, pwd_y, pwd_w, 8.5 * mm, 1.5 * mm, fill=1, stroke=1)
-    c_canvas.setFillColorRGB(_PR * 0.8, _PG * 0.8, _PB * 0.85)
-    c_canvas.setFont('MonoFont', 11)
-    c_canvas.drawCentredString(x + pad + pwd_w / 2, pwd_y + 2 * mm, pwd_value)
-
-    # QR code (coin bas droit)
+    # QR : aligné à droite, centré verticalement dans la zone contenu
+    qr_x = x + sw - qr_size - pad
+    qr_size_actual = min(qr_size, content_h - 2 * pad)   # jamais plus grand que la zone
+    qr_y = y + (content_h - qr_size_actual) / 2           # centrage vertical
     if url:
         try:
             qr_io = BytesIO()
             segno.make_qr(url).save(qr_io, kind='png', scale=6, dpi=300,
                                     dark=_pal['text'], light='#ffffff')
             qr_io.seek(0)
-            qr_x = x + sw - qr_size - pad
-            qr_y = y + pad
-            c_canvas.drawImage(
-                ImageReader(qr_io), qr_x, qr_y,
-                width=qr_size, height=qr_size,
-            )
+            c_canvas.drawImage(ImageReader(qr_io), qr_x, qr_y,
+                               width=qr_size_actual, height=qr_size_actual)
         except Exception:
             pass
-        c_canvas.setFont('MonoFont', 6)
-        c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
-        c_canvas.drawString(x + pad, y + pad + 1 * mm, url[:45])
+
+    # ── Texte (colonne gauche) ────────────────────────────────────────────────
+    # Positions calculées depuis le haut de la zone contenu.
+    tx = x + pad   # x de départ du texte
+
+    # Nom
+    c_canvas.setFont('PapillonFont', 10)
+    c_canvas.setFillColorRGB(_TXR, _TXG, _TXB)
+    c_canvas.drawString(tx, content_top - 7 * mm, name[:26])
+
+    # Identifiant — label + valeur
+    c_canvas.setFont('BodyFont', 7)
+    c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
+    c_canvas.drawString(tx, content_top - 13 * mm, id_label)
+    c_canvas.setFont('MonoFont', 8.5)
+    c_canvas.setFillColorRGB(_TXR, _TXG, _TXB)
+    c_canvas.drawString(tx, content_top - 19 * mm, id_value[:20])
+
+    # Séparateur horizontal (limité à la colonne texte)
+    sep_y = content_top - 24 * mm
+    c_canvas.setStrokeColorRGB(0.75, 0.75, 0.75)
+    c_canvas.setLineWidth(0.4)
+    c_canvas.line(tx, sep_y, tx + text_w, sep_y)
+
+    # Label mot de passe
+    c_canvas.setFont('BodyFont', 7)
+    c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
+    c_canvas.drawString(tx, sep_y - 5 * mm, 'Mot de passe')
+
+    # Encadré mot de passe : s'étend sur toute la largeur texte
+    pwd_h  = 8 * mm
+    pwd_y  = sep_y - 5 * mm - pwd_h - 1.5 * mm
+    pwd_w  = text_w - pad
+    c_canvas.setFillColorRGB(_SFR, _SFG, _SFB)
+    c_canvas.setStrokeColorRGB(_PDR, _PDG, _PDB)
+    c_canvas.setLineWidth(0.8)
+    c_canvas.roundRect(tx, pwd_y, pwd_w, pwd_h, 1.5 * mm, fill=1, stroke=1)
+    c_canvas.setFillColorRGB(_PR * 0.8, _PG * 0.8, _PB * 0.85)
+    c_canvas.setFont('MonoFont', 10)
+    c_canvas.drawCentredString(tx + pwd_w / 2, pwd_y + 2 * mm, pwd_value)
 
 
 def _build_papillons_pdf(items: list, filename: str, title1: str, title2: str,
