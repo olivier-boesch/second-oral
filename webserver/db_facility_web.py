@@ -163,11 +163,11 @@ ORDER BY heure_sujet
 
 SELECT_ORAUX_EXAMINATEUR_CONFLITS = """
 SELECT Oral.id AS id, Candidat.nom AS candidat,
-       Oral.heure_sujet AS heure_sujet, Oral.heure_fin AS heure_fin
+       Oral.heure_oral AS heure_oral, Oral.heure_fin AS heure_fin
 FROM Oral
     JOIN Candidat ON Oral.candidat = Candidat.id
 WHERE Oral.examinateur = %s
-ORDER BY heure_sujet
+ORDER BY heure_oral
 """
 
 UPDATE_INFOS_ORAL = """

@@ -1357,18 +1357,22 @@ def _check_conflits_oral(
     id_examinateur: int,
     sujet_new: timedelta,
     fin_new: timedelta,
+    oral_new: timedelta,
+    fin_exam_new: timedelta,
     ecart_mini: int,
 ) -> tuple[str | None, str | None]:
     """Vérifie les conflits horaires lors du déplacement d'un oral.
 
-    Deux types de vérifications, dans l'ordre :
-    - Chevauchement candidat (bloquant) : le candidat a déjà un oral qui chevauche.
-    - Chevauchement examinateur (bloquant) : l'examinateur a déjà un oral qui chevauche.
-    - Écart minimum candidat (avertissement) : moins de ecart_mini min entre deux oraux.
+    Vérifications dans l'ordre :
+    - Chevauchement candidat (bloquant) : basé sur [heure_sujet, heure_fin] — le slot
+      complet du candidat, incluant préparation et oral.
+    - Écart minimum candidat (avertissement) : écart entre heure_sujet des deux oraux.
+    - Chevauchement examinateur (bloquant) : basé sur [heure_oral, heure_fin] seulement —
+      la préparation se déroule en loge, pas avec l'examinateur.
 
     Retourne (erreur_bloquante, avertissement) — au plus un des deux est non-None.
     """
-    # ── Candidat ─────────────────────────────────────────────────────────────
+    # ── Candidat (slot complet : heure_sujet → heure_fin) ─────────────────────
     oraux_candidat = db_get(
         db_facility_web.SELECT_LISTE_EDITION_ORAL,
         id_candidat,
@@ -1393,7 +1397,7 @@ def _check_conflits_oral(
                 f"({gap_min:.0f} min < {ecart_mini} min requis)",
             )
 
-    # ── Examinateur ───────────────────────────────────────────────────────────
+    # ── Examinateur (oral seul : heure_oral → heure_fin) ──────────────────────
     oraux_exam = db_get(
         db_facility_web.SELECT_ORAUX_EXAMINATEUR_CONFLITS,
         id_examinateur,
@@ -1402,12 +1406,12 @@ def _check_conflits_oral(
     for o in oraux_exam:
         if o['id'] == id_oral:
             continue
-        o_debut = _to_td(o['heure_sujet'])
-        o_fin   = _to_td(o['heure_fin'])
-        if sujet_new < o_fin and fin_new > o_debut:
+        o_oral = _to_td(o['heure_oral'])
+        o_fin  = _to_td(o['heure_fin'])
+        if oral_new < o_fin and fin_exam_new > o_oral:
             return (
                 f"Chevauchement examinateur : {o['candidat']} "
-                f"déjà planifié de {o_debut} à {o_fin}",
+                f"déjà en oral de {o_oral} à {o_fin}",
                 None,
             )
 
@@ -1432,10 +1436,16 @@ def edit_oral() -> ResponseReturnValue:
         # Validation des conflits horaires
         oral_actuel = db_get(db_facility_web.SELECT_INFOS_ORAL, d['id'])
         heure_sujet_str: str = request.form.get('heure_sujet') or ''
+        heure_oral_str:  str = request.form.get('heure_oral')  or ''
         id_oral_int: int = int(request.form.get('id') or 0)
         sujet_new = _time_str_to_td(heure_sujet_str)
-        duree = _to_td(oral_actuel['heure_fin']) - _to_td(oral_actuel['heure_sujet'])
-        fin_new = sujet_new + duree
+        oral_new  = _time_str_to_td(heure_oral_str)
+        # Durée totale du slot (sujet → fin) : pour la vérification candidat
+        duree_slot = _to_td(oral_actuel['heure_fin']) - _to_td(oral_actuel['heure_sujet'])
+        fin_new    = sujet_new + duree_slot
+        # Durée de l'oral seul (oral → fin) : pour la vérification examinateur
+        duree_oral    = _to_td(oral_actuel['heure_fin']) - _to_td(oral_actuel['heure_oral'])
+        fin_exam_new  = oral_new + duree_oral
         id_examinateur_int: int = int(request.form.get('examinateur') or 0)
         error_msg, warning_msg = _check_conflits_oral(
             id_oral_int,
@@ -1443,6 +1453,8 @@ def edit_oral() -> ResponseReturnValue:
             id_examinateur_int,
             sujet_new,
             fin_new,
+            oral_new,
+            fin_exam_new,
             _load_algo_params()['ecart_mini'],
         )
         if error_msg or (warning_msg and request.form.get('force') != '1'):
