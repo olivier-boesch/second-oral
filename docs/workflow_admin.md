@@ -237,14 +237,15 @@ Après un lancement réussi :
 
 > **Validation lors de la modification d'un oral**
 >
-> L'interface `/gestion/edit-oral` effectue automatiquement deux vérifications lors de la soumission :
+> L'interface `/gestion/edit-oral` effectue trois vérifications automatiques lors de la soumission :
 >
-> - **Chevauchement (bloquant)** : si le nouvel horaire chevauche un autre oral du même candidat, la modification est refusée avec un message d'erreur.
-> - **Écart minimum (avertissement)** : si l'écart entre `heure_sujet` des deux oraux du même candidat est inférieur à l'écart configuré (paramètre `ecart_mini`, défaut 80 min), un avertissement s'affiche. L'admin peut forcer la validation en cliquant « Valider quand même ».
+> - **Chevauchement candidat (bloquant)** : le nouvel horaire `[heure_sujet, heure_fin]` ne peut pas chevaucher un autre oral du même candidat.
+> - **Écart minimum candidat (avertissement)** : si l'écart entre `heure_sujet` des deux oraux du candidat est inférieur à `ecart_mini` (défaut 80 min), un avertissement s'affiche. L'admin peut forcer la validation en cliquant « Valider quand même ».
+> - **Chevauchement examinateur (bloquant)** : l'intervalle `[heure_oral, heure_fin]` (oral seul, sans la préparation qui se déroule en loge) ne peut pas chevaucher un autre oral du même examinateur.
 
 ### Étape 6 — Générer et télécharger les documents
 
-Sur la page `/gestion/algo`, section **Télécharger les documents** :
+Sur la page `/gestion/documents` (accueil admin → bloc **Préparation** → Documents) :
 
 | Document | Action | À faire |
 |---|---|---|
@@ -254,6 +255,8 @@ Sur la page `/gestion/algo`, section **Télécharger les documents** :
 | Fiches salles (lot) | Générer + télécharger | Afficher ou distribuer aux examinateurs |
 | Fiches loges (lot) | Générer + télécharger | Remettre aux surveillants de loge |
 | Liste générale | Générer + télécharger | Affichage public ou usage interne |
+
+> À la fin d'un run réussi, la page `/gestion/algo` affiche deux raccourcis : **→ Vérifier les oraux** et **→ Documents** pour enchaîner directement sur l'étape suivante.
 
 ---
 
@@ -275,7 +278,7 @@ Sur `/gestion`, cliquer **Recharger toutes les pages** : tous les navigateurs co
 
 ### Renouvellement des identifiants
 
-`/gestion/credentials` (accessible depuis "Renouveler les identifiants" sur la page de gestion) permet de **renouveler les identifiants sans relancer l'algo**, pour chaque catégorie indépendamment :
+`/gestion/credentials` (accessible depuis l'accueil admin → bloc **Préparation** → **Identifiants**) permet de **renouveler les identifiants sans relancer l'algo**, pour chaque catégorie indépendamment :
 
 | Catégorie | Granularité | Effet |
 |---|---|---|
@@ -323,4 +326,4 @@ Sur `/gestion`, cliquer **Recharger toutes les pages** : tous les navigateurs co
 | `Aucun placement valide trouvé` | Contraintes incompatibles (anti-conflit établissement trop restrictif, horaires trop contraints) | Réduire les contraintes `Etab` ou élargir les `Heure mini` |
 | Algo très long (> 15 min) | Données volumineuses ou beaucoup de contraintes | Normal ; attendre. Réduire `N_run` dans `algo.py` si nécessaire (défaut : 1000) |
 | Candidat sans oral | Discipline non couverte par un examinateur | Vérifier que la discipline du candidat a au moins un examinateur dans `examinateurs.csv` |
-| Mot de passe de papillon invalide | Algo relancé (nouveaux mots de passe générés) | Redistribuer les nouveaux papillons |
+| Mot de passe de papillon invalide | Identifiants renouvelés manuellement via `/gestion/credentials` | Redistribuer les nouveaux papillons générés lors du renouvellement |
