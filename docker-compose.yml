@@ -2,7 +2,13 @@ services:
 
   # ── Application Flask / Gunicorn ──────────────────────────────────────────
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # Transmis depuis .env (généré par setup_new_site.py) pour que
+        # appuser dans le conteneur ait le même UID/GID que secondoral sur l'hôte.
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
     image: secondoral-app
     restart: always
     depends_on:

@@ -1662,17 +1662,10 @@ def add_examinateur() -> ResponseReturnValue:
         creds.setdefault("examinateurs", {})[salle] = password
         _save_credentials(creds)
 
-        papillon_filename = f'papillons_salle_{secure_filename(salle)}.pdf'
         base_url = request.host_url.rstrip('/')
-        reports.liste_papillons_connexion(
-            [(salle, nom, password)],
-            filename=str(Path(app.root_path) / 'static' / 'docs' / papillon_filename),
-            base_url=base_url,
-            centre_examen=CENTRE_EXAMEN,
-        )
-        # Regénérer le PDF groupé pour la cohérence
+        papillon_filename = 'papillons_examinateurs.pdf'
         _regenerer_papillons_examinateurs(base_url)
-        return redirect(url_for('liste_examinateurs', new_papillon=papillon_filename))
+        return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
 
     # GET
     liste_matieres = db_get(db_facility_web.SELECT_LISTE_MATIERES, no_list_auto=False)
@@ -2611,20 +2604,14 @@ def renew_candidats() -> ResponseReturnValue:
 @nocache
 def renew_examinateur(id: int) -> ResponseReturnValue:
     """Renouvelle le mot de passe d'un examinateur, regénère son papillon individuel
-    et met à jour le PDF groupé papillons_examinateurs.pdf pour la cohérence.
+    et met à jour le PDF groupé papillons_examinateurs.pdf.
 
     :param id: Identifiant DB de l'examinateur.
-    :returns: Redirection vers /gestion/credentials avec lien vers le papillon individuel.
+    :returns: Redirection vers /gestion/credentials avec lien vers le papillon groupé.
     """
-    salle, nom, password = _renew_examinateur(id)
-    papillon_filename = f'papillons_salle_{secure_filename(salle)}.pdf'
+    _renew_examinateur(id)
     base_url = request.host_url.rstrip('/')
-    reports.liste_papillons_connexion(
-        [(salle, nom, password)],
-        filename=str(Path(app.root_path) / 'static' / 'docs' / papillon_filename),
-        base_url=base_url,
-        centre_examen=CENTRE_EXAMEN,
-    )
+    papillon_filename = 'papillons_examinateurs.pdf'
     _regenerer_papillons_examinateurs(base_url)
     return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
 
@@ -2664,19 +2651,13 @@ def renew_loge(nom: str) -> ResponseReturnValue:
     Retourne 404 si la loge n'existe pas en base (table Loge).
 
     :param nom: Nom de la loge (clé primaire de la table Loge).
-    :returns: Redirection vers /gestion/credentials avec lien vers le papillon, ou 404.
+    :returns: Redirection vers /gestion/credentials avec lien vers le papillon groupé, ou 404.
     """
     if not db_get(db_facility_web.SELECT_LOGE_BY_NOM, nom, no_list_auto=False):
         abort(404, f"Loge inconnue : {nom!r}")
-    password = _renew_loge(nom)
+    _renew_loge(nom)
     base_url = request.host_url.rstrip('/')
-    papillon_filename = f'papillons_loge_{secure_filename(nom)}.pdf'
-    reports.liste_papillons_loges(
-        [(nom, password)],
-        filename=str(Path(app.root_path) / 'static' / 'docs' / papillon_filename),
-        base_url=base_url,
-        centre_examen=CENTRE_EXAMEN,
-    )
+    papillon_filename = 'papillons_loges.pdf'
     _regenerer_papillons_loges(base_url)
     return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
 

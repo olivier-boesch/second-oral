@@ -13,7 +13,7 @@ from pathlib import Path
 from base64 import b64decode
 
 from PIL import Image as PilImage, ImageDraw, ImageFont
-import pypdftk
+from pypdf import PdfWriter as _PdfWriter
 import segno
 from flask import url_for
 from reportlab.lib import colors, pagesizes
@@ -141,6 +141,22 @@ class PageNumCanvasA3L(PageNumCanvas):
 
 
 # ── Utilitaires ───────────────────────────────────────────────────────────────
+
+def _concat_pdfs(input_files: list[str], output_file: str) -> None:
+    """Concatène plusieurs fichiers PDF en un seul (remplace pypdftk.concat).
+
+    Utilise pypdf (pure Python) au lieu de pdftk-java, évitant le démarrage
+    d'une JVM et réduisant significativement l'image Docker.
+    Sans effet si la liste d'entrée est vide.
+    """
+    if not input_files:
+        return
+    writer = _PdfWriter()
+    for f in input_files:
+        writer.append(f)
+    with open(output_file, 'wb') as out:
+        writer.write(out)
+
 
 def make_qr_image(data: str, directory: str, dpi: int = 300) -> str:
     """Génère un QR code PNG dans un répertoire temporaire et retourne son chemin."""
@@ -395,7 +411,7 @@ def liste_fiches_candidats(candidats: list, file_dir: str = '.',
                           fiche_candidat(c, tempdirname, file_dir,
                                          filename_root, centre_examen))
             )
-        pypdftk.concat(files, path_join(file_dir, "liste_candidats.pdf"))
+        _concat_pdfs(files, path_join(file_dir, "liste_candidats.pdf"))
     return path_join(file_dir, "liste_candidats.pdf")
 
 
@@ -549,7 +565,7 @@ def liste_loge_oraux(liste_loges: list, file_dir: str = '.', filename_root: str 
                 path_join(file_dir, loge_oraux(loge, tempdir, file_dir,
                                                filename_root, centre_examen))
             )
-        pypdftk.concat(liste_fichiers, path_join(file_dir, "liste_loges.pdf"))
+        _concat_pdfs(liste_fichiers, path_join(file_dir, "liste_loges.pdf"))
     return path_join(file_dir, "liste_loges.pdf")
 
 
@@ -618,7 +634,7 @@ def liste_salle_oraux(liste_examinateurs: list, file_dir: str = '.',
                 path_join(file_dir, salle_oraux(ex, tempdir, file_dir,
                                                filename_root, centre_examen))
             )
-        pypdftk.concat(liste_fichiers, path_join(file_dir, "liste_salles.pdf"))
+        _concat_pdfs(liste_fichiers, path_join(file_dir, "liste_salles.pdf"))
     return path_join(file_dir, "liste_salles.pdf")
 
 

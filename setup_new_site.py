@@ -795,11 +795,15 @@ server {{
 # ── Fichier .env Docker ──────────────────────────────────────────────────────
 
 def generate_env_file(db_user: str, db_password: str,
-                      db_name: str, app_port: int = 8080) -> tuple[str, str]:
+                      db_name: str, app_port: int = 8080,
+                      app_uid: int = APP_SYSTEM_UID,
+                      app_gid: int = APP_SYSTEM_UID) -> tuple[str, str]:
     """
     Génère le contenu du fichier .env Docker et retourne (contenu, root_password).
-    Le mot de passe root MariaDB est généré aléatoirement et n'est utilisé
-    que par Docker (pas dans app_secrets.py).
+
+    APP_UID/APP_GID sont écrits dans .env afin que `docker compose build`
+    utilise toujours le bon UID/GID pour appuser — sans avoir à passer
+    --build-arg manuellement à chaque rebuild.
     """
     db_root_password = secrets.token_urlsafe(24)
     content = (
@@ -809,6 +813,8 @@ def generate_env_file(db_user: str, db_password: str,
         f"DB_USER={db_user}\n"
         f"DB_PASSWORD={db_password}\n"
         f"APP_PORT={app_port}\n"
+        f"APP_UID={app_uid}\n"
+        f"APP_GID={app_gid}\n"
     )
     return content, db_root_password
 
@@ -1161,7 +1167,18 @@ def main() -> None:
     # ── 1c. Fichier .env Docker ───────────────────────────────────────────────
     hdr("Génération du fichier .env Docker")
     env_path = PROJECT_ROOT / ".env"
-    env_content, db_root_password = generate_env_file(db_user, db_password, db_name, app_port)
+    # Résoudre l'UID/GID du compte système dès ici pour les écrire dans .env,
+    # afin que docker compose build puisse toujours utiliser les bons args.
+    import pwd as _pwd
+    try:
+        _pw = _pwd.getpwnam(APP_SYSTEM_USER)
+        _app_uid, _app_gid = _pw.pw_uid, _pw.pw_gid
+    except KeyError:
+        _app_uid = _app_gid = APP_SYSTEM_UID
+    env_content, db_root_password = generate_env_file(
+        db_user, db_password, db_name, app_port,
+        app_uid=_app_uid, app_gid=_app_gid,
+    )
 
     if env_path.exists():
         env_bak = env_path.with_suffix(".env.bak")

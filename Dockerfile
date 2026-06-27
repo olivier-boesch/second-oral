@@ -8,10 +8,9 @@
 FROM python:3.12-slim
 
 # Dépendances système
-#   - pdftk-java  : concaténation de PDFs (requis par pypdftk)
-#   - gcc         : compilation de certains paquets pip (ex. gevent)
+#   - gcc : compilation de certains paquets pip (ex. gevent)
+#   Note : pdftk-java supprimé — concaténation PDF assurée par pypdf (pure Python)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        pdftk-java \
         gcc \
     && rm -rf /var/lib/apt/lists/*
 

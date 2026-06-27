@@ -47,7 +47,7 @@ gunicorn (gevent, 4 workers)  ←─ code monté en volume
 ```
 
 **Stack :** Python 3.12, Flask, MariaDB, Redis, gunicorn/gevent,
-ReportLab (PDF), pypdftk (concat PDF), nginx (hôte + Docker), Let's Encrypt.
+ReportLab (PDF), pypdf (concat PDF), nginx (hôte + Docker), Let's Encrypt.
 
 ---
 
@@ -385,7 +385,7 @@ second_oral/
 │
 ├── .github/workflows/ci.yml     Pipeline CI : pip-audit + tests
 ├── docker-compose.yml           Stack : app, nginx, redis, mariadb
-├── Dockerfile                   Image runtime (Python + pdftk, non-root)
+├── Dockerfile                   Image runtime (Python, non-root — sans dépendance Java)
 ├── .env.example                 Template des variables Docker à copier en .env
 ├── .dockerignore                Exclut tout sauf requirements.txt du contexte
 │
@@ -400,7 +400,7 @@ second_oral/
     ├── csv_validator.py         Validation et normalisation des fichiers CSV
     ├── ods_handler.py           Lecture et génération ODS (odfpy) + lycées Aix-Marseille
     ├── db_facility_web.py       Requêtes SQL paramétrées
-    ├── reports.py               Génération PDF (ReportLab + pypdftk, palette thème)
+    ├── reports.py               Génération PDF (ReportLab + pypdf, palette thème)
     ├── flask_sse.py             Blueprint SSE avec cache Redis
     ├── patched_app.py           Point d'entrée gunicorn (gevent monkey-patch)
     │
@@ -447,7 +447,7 @@ gunicorn==26.0.0, gevent==26.5.0
 mysql-connector-python==9.7.0
 redis==8.0.0
 pyotp==2.10.0, segno==1.6.6
-reportlab==5.0.0, pypdftk==0.5, pillow==12.2.0
+reportlab==5.0.0, pypdf==6.14.2, pillow==12.2.0
 odfpy>=1.4.0
 cryptography==49.0.0          # Store credentials AES-256-GCM + /theme.css HKDF
 pytz==2026.2, colorama==0.4.6, setuptools==82.0.1
