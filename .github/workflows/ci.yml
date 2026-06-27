@@ -51,8 +51,8 @@ jobs:
                       Flask-Compress==1.24 Flask-SSE==1.0.0 \
                       Flask-Talisman==1.1.0 redis==8.0.0 \
                       mysql-connector-python==9.7.0 \
-                      pyotp==2.9.0 segno==1.6.6 pillow==12.1.1 pytz==2026.2 \
-                      "odfpy>=1.4.0" cryptography
+                      pyotp==2.10.0 segno==1.6.6 pillow==12.2.0 pytz==2026.2 \
+                      "odfpy>=1.4.0" cryptography==49.0.0
 
       - name: Lancer tous les tests
         run: |
@@ -60,6 +60,8 @@ jobs:
             --cov=webserver/csv_validator \
             --cov=webserver/ods_handler \
             --cov=webserver/app \
+            --cov=webserver/theme \
+            --cov=webserver/credential_store \
             --cov=setup_new_site \
             --cov-report=term-missing \
             --cov-report=xml
