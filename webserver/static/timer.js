@@ -139,24 +139,66 @@
         if (btnPlay)  btnPlay.addEventListener('click',  function () { initAudio(); state.running ? pause() : start(); });
         if (btnReset) btnReset.addEventListener('click', reset);
 
-        if (state.running && remaining() > 0) {
-            interval = setInterval(tick, 1000);
-        } else if (state.running && remaining() === 0) {
-            state.running = false;
-            endDone = true;
+        if (btnPlay) {
+            // ── Mode contrôle (loge propriétaire) : tick local + sauvegarde Redis ──
+            if (state.running && remaining() > 0) {
+                interval = setInterval(tick, 1000);
+            } else if (state.running && remaining() === 0) {
+                state.running = false;
+                endDone = true;
+            }
         }
+        // En mode lecture seule (pas de boutons), le rafraîchissement
+        // est géré par le polling partagé démarré après initTimer.
 
         render();
     }
 
-    // ── Chargement batch des états depuis Redis ───────────────────────────────
+    // ── Polling partagé pour les lecteurs (pas de boutons) ───────────────────
+    // Une seule requête par seconde pour tous les timers de la page.
+    function _startReadonlyPolling() {
+        setInterval(function () {
+            fetch(`${API_URL}?loge=${encodeURIComponent(LOGE_ID)}`)
+                .then(function (r) { return r.ok ? r.json() : {}; })
+                .catch(function () { return {}; })
+                .then(function (states) {
+                    document.querySelectorAll('[data-timer]').forEach(function (cell) {
+                        // Ne mettre à jour que les timers sans bouton de contrôle
+                        if (cell.querySelector('.timer-btn[data-action="play"]')) return;
+                        const display = cell.querySelector('.timer-display');
+                        if (!display) return;
+                        const slot = cell.dataset.numero + '_' + cell.dataset.sujet;
+                        const fresh = states[slot];
+                        if (!fresh) return;
+                        const totalSecs = hhmm2secs(cell.dataset.oral) - hhmm2secs(cell.dataset.sujet);
+                        let elapsed = fresh.elapsed || 0;
+                        if (fresh.running && fresh.startedAt) {
+                            elapsed += Math.floor((Date.now() - fresh.startedAt) / 1000);
+                        }
+                        const rem = Math.max(0, totalSecs - elapsed);
+                        display.textContent = secs2display(rem);
+                        display.classList.toggle('running', fresh.running && rem > 60);
+                        display.classList.toggle('warn',    rem > 0 && rem <= 60);
+                        display.classList.toggle('ended',   rem === 0);
+                    });
+                });
+        }, 1000);
+    }
+
+    // ── Chargement initial des états depuis Redis ─────────────────────────────
     fetch(`${API_URL}?loge=${encodeURIComponent(LOGE_ID)}`)
         .then(function (r) { return r.ok ? r.json() : {}; })
         .catch(function () { return {}; })
         .then(function (states) {
+            let hasReadonly = false;
             document.querySelectorAll('[data-timer]').forEach(function (cell) {
                 const slot = cell.dataset.numero + '_' + cell.dataset.sujet;
                 initTimer(cell, states[slot] || null);
+                if (!cell.querySelector('.timer-btn[data-action="play"]')) {
+                    hasReadonly = true;
+                }
             });
+            // Démarrer le polling uniquement s'il y a des timers en lecture seule
+            if (hasReadonly) _startReadonlyPolling();
         });
 }());
