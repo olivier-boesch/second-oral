@@ -24,8 +24,16 @@
             <input type="text" name="nom" value="{{ donnees_examinateur['nom'] }}">
         </p>
         <p>
-            <label for="etablissements">Etablissements: </label>
-            <input type="text" name="etablissements" title="Etablissements (séparés par des virgules)"  value="{{ donnees_examinateur['etablissements'] }}">
+            <label for="etablissements">Établissements: </label><br>
+            <select name="etablissements" multiple size="8">
+                {% for lycee in liste_lycees %}
+                <option value="{{ lycee }}"
+                    {% if lycee in etablissements_actuels %}selected{% endif %}>
+                    {{ lycee }}
+                </option>
+                {% endfor %}
+            </select><br>
+            <small>Ctrl+clic (ou Cmd+clic) pour sélectionner plusieurs établissements.</small>
         </p>
         <p><span>Matière:</span><span>{{ donnees_examinateur['matiere'] }}</span></p>
         <p>

@@ -1578,7 +1578,7 @@ def edit_examinateur() -> ResponseReturnValue:
             'nom': request.form.get('nom'),
             'salle': request.form.get('salle'),
             'loge': request.form.get('loge'),
-            'etablissements': request.form.get('etablissements'),
+            'etablissements': ','.join(request.form.getlist('etablissements')),
         }
         db_update(db_facility_web.UPDATE_EXAMINATEUR_INFOS, **d)
         url = _safe_redirect_url(request.form.get('link_back'))
@@ -1593,10 +1593,15 @@ def edit_examinateur() -> ResponseReturnValue:
     liste_oraux = db_get(
         db_facility_web.SELECT_ORAUX_EXAMINATEUR_CONFLITS, id_examinateur, no_list_auto=False
     )
+    etablissements_actuels = set(
+        e.strip() for e in (donnees_examinateur.get('etablissements') or '').split(',') if e.strip()
+    )
     return render_template(
         "edit_examinateur.html",
         centre=CENTRE_EXAMEN,
         donnees_examinateur=donnees_examinateur,
+        etablissements_actuels=etablissements_actuels,
+        liste_lycees=_LYCEES_DISPLAY,
         liste_oraux=liste_oraux,
         url_of_page=request.url,
         link_back=url,
