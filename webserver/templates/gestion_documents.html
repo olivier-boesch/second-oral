@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux — {{ centre }} — Documents</title>
+    {% include 'style.html' %}
+    <style>
+        .doc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: .8em;
+            margin-top: .8em;
+        }
+        .doc-card {
+            background: white; border: 1px solid #d0c8ef;
+            border-radius: 6px; padding: .8em 1em;
+            display: flex; flex-direction: column; gap: .4em;
+        }
+        .doc-card .doc-title { font-weight: bold; font-size: .95em; }
+        .doc-card .doc-note  { font-size: .78em; color: #666; }
+        .doc-card .doc-actions { display: flex; gap: .5em; flex-wrap: wrap; margin-top: .3em; }
+        .btn-gen, .btn-dl {
+            padding: .3em .8em; border: none; border-radius: 4px;
+            cursor: pointer; font-size: .85em; text-decoration: none;
+            display: inline-flex; align-items: center; gap: .3em;
+        }
+        .btn-gen { background: #7c80fc; color: white; }
+        .btn-gen:hover { background: #5a5ec0; }
+        .btn-gen:disabled { opacity: .5; cursor: not-allowed; }
+        .btn-dl  { background: #aba0f9; color: white; }
+        .btn-dl:hover { background: #7c80fc; }
+        .doc-spinner { display: none; font-size: .8em; color: #666; }
+        .doc-card.loading .doc-spinner { display: inline; }
+        .doc-card.loading .btn-gen { display: none; }
+    </style>
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+
+<h1>Documents</h1>
+
+<p style="font-size:.88em; color:#555; margin-bottom:1em;">
+    Les boutons <strong>Générer</strong> recalculent le PDF à partir de la base courante.
+    Les boutons <strong>Télécharger</strong> servent le dernier fichier produit par algo.py.
+</p>
+
+<div class="doc-grid">
+
+    {# Papillons candidats : regénérable (login_key en clair en base) #}
+    <div class="doc-card" id="card-papillons-candidats">
+        <span class="doc-title">🎫 Papillons candidats</span>
+        <span class="doc-note">N° candidat + mot de passe + QR code, 10 par page A4</span>
+        <div class="doc-actions">
+            <button class="btn-gen"
+                    onclick="generer('papillons_candidats', 'card-papillons-candidats')">
+                ⚙ Générer et télécharger
+            </button>
+            <span class="doc-spinner">⏳ Génération…</span>
+        </div>
+    </div>
+
+    {# Papillons examinateurs : regénérable via credentials.enc #}
+    <div class="doc-card" id="card-papillons-exam">
+        <span class="doc-title">🎫 Papillons examinateurs</span>
+        <span class="doc-note">Généré par algo.py ou via Identifiants</span>
+        <div class="doc-actions" id="actions-papillons-exam">
+            <span class="doc-spinner">⏳ Vérification…</span>
+        </div>
+    </div>
+
+    {# Papillons loges : regénérable via credentials.enc #}
+    <div class="doc-card" id="card-papillons-loges">
+        <span class="doc-title">🎫 Papillons loges</span>
+        <span class="doc-note">Généré par algo.py ou via Identifiants</span>
+        <div class="doc-actions" id="actions-papillons-loges">
+            <span class="doc-spinner">⏳ Vérification…</span>
+        </div>
+    </div>
+
+    {# Fiches candidats (lot) #}
+    <div class="doc-card" id="card-fiches-candidats">
+        <span class="doc-title">📋 Fiches candidats (lot)</span>
+        <span class="doc-note">Toutes les fiches en un seul PDF</span>
+        <div class="doc-actions">
+            <button class="btn-gen"
+                    onclick="generer('fiches_candidats', 'card-fiches-candidats')">
+                ⚙ Générer et télécharger
+            </button>
+            <span class="doc-spinner">⏳ Génération…</span>
+        </div>
+    </div>
+
+    {# Fiches salles (lot) #}
+    <div class="doc-card" id="card-fiches-salles">
+        <span class="doc-title">📋 Fiches salles (lot)</span>
+        <span class="doc-note">Toutes les fiches d'émargement en un seul PDF</span>
+        <div class="doc-actions">
+            <button class="btn-gen"
+                    onclick="generer('fiches_salles', 'card-fiches-salles')">
+                ⚙ Générer et télécharger
+            </button>
+            <span class="doc-spinner">⏳ Génération…</span>
+        </div>
+    </div>
+
+    {# Fiches loges (lot) #}
+    <div class="doc-card" id="card-fiches-loges">
+        <span class="doc-title">📋 Fiches loges (lot)</span>
+        <span class="doc-note">Toutes les fiches de loge en un seul PDF</span>
+        <div class="doc-actions">
+            <button class="btn-gen"
+                    onclick="generer('fiches_loges', 'card-fiches-loges')">
+                ⚙ Générer et télécharger
+            </button>
+            <span class="doc-spinner">⏳ Génération…</span>
+        </div>
+    </div>
+
+    {# Liste générale oraux #}
+    <div class="doc-card" id="card-liste-oraux">
+        <span class="doc-title">📄 Liste générale des oraux</span>
+        <span class="doc-note">Tous les candidats, matières, horaires, salles</span>
+        <div class="doc-actions">
+            <button class="btn-gen"
+                    onclick="generer('liste_oraux', 'card-liste-oraux')">
+                ⚙ Générer et télécharger
+            </button>
+            <span class="doc-spinner">⏳ Génération…</span>
+        </div>
+    </div>
+
+</div>
+
+{% include 'footer.html' %}
+
+<script nonce="{{ csp_nonce }}">
+"use strict";
+
+const BATCH_BASE  = "/generate-doc-batch/";
+const EXISTS_BASE = "{{ url_for('algo_doc_exists', filename='__fn__') }}".replace('__fn__', '');
+const CSRF        = "{{ csrf_token }}";
+
+function generer(type, cardId) {
+    const card = document.getElementById(cardId);
+    card.classList.add('loading');
+    fetch(`${BATCH_BASE}${type}-0`)
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(d => {
+            card.classList.remove('loading');
+            telecharger(d.url);
+        })
+        .catch(e => {
+            card.classList.remove('loading');
+            alert(`Erreur lors de la génération : ${e}`);
+        });
+}
+
+function telecharger(url) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+function makeDlButton(url, label) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    a.className = 'btn-dl';
+    a.textContent = `⬇ ${label}`;
+    return a;
+}
+
+function makeAbsent() {
+    const span = document.createElement('span');
+    span.style.cssText = 'font-size:.8em; color:#856404;';
+    span.textContent = '⚠ Non disponible — lancez algo.py d\'abord';
+    return span;
+}
+
+function checkFile(filename, actionsId) {
+    const container = document.getElementById(actionsId);
+    fetch(`${EXISTS_BASE}${encodeURIComponent(filename)}`)
+        .then(r => r.json())
+        .then(d => {
+            container.innerHTML = '';
+            container.appendChild(d.exists ? makeDlButton(d.url, 'Télécharger') : makeAbsent());
+        })
+        .catch(() => {
+            container.innerHTML = '';
+            container.appendChild(makeAbsent());
+        });
+}
+
+checkFile('papillons_examinateurs.pdf', 'actions-papillons-exam');
+checkFile('papillons_loges.pdf',        'actions-papillons-loges');
+</script>
+</body>
+</html>

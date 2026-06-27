@@ -2109,6 +2109,19 @@ def _absorb_credentials_file(rc: int) -> None:
             )
 
 
+@app.route("/gestion/documents")
+@admin_required
+@nocache
+def gestion_documents() -> ResponseReturnValue:
+    """Page de téléchargement des documents générés (papillons, fiches, liste générale)."""
+    return render_template(
+        "gestion_documents.html",
+        centre=CENTRE_EXAMEN,
+        username=get_username(),
+        csrf_token=generate_csrf(),
+    )
+
+
 @app.route("/gestion/algo")
 @admin_required
 @nocache
