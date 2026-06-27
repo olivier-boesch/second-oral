@@ -1331,9 +1331,24 @@ def liste_examinateurs_json() -> ResponseReturnValue:
 
 
 def _time_str_to_td(s: str) -> timedelta:
-    """Convertit une chaîne HH:MM en timedelta."""
-    h, m = s.split(':')
+    """Convertit une chaîne HH:MM (formulaire) en timedelta."""
+    h, m = s.split(':')[:2]
     return timedelta(hours=int(h), minutes=int(m))
+
+
+def _to_td(val: object) -> timedelta:
+    """Normalise une valeur TIME en timedelta.
+
+    mysql-connector-python peut retourner les champs TIME soit en timedelta
+    (comportement standard) soit en str HH:MM:SS selon la version et le driver.
+    Cette fonction gère les deux cas.
+    """
+    if isinstance(val, timedelta):
+        return val
+    parts = str(val).split(':')
+    h, m = int(parts[0]), int(parts[1])
+    s = int(float(parts[2])) if len(parts) > 2 else 0
+    return timedelta(hours=h, minutes=m, seconds=s)
 
 
 def _check_conflits_oral(
@@ -1356,8 +1371,8 @@ def _check_conflits_oral(
     for o in autres:
         if o['id'] == id_oral:
             continue
-        o_debut: timedelta = o['heure_sujet']
-        o_fin: timedelta = o['heure_fin']
+        o_debut = _to_td(o['heure_sujet'])
+        o_fin   = _to_td(o['heure_fin'])
         if sujet_new < o_fin and fin_new > o_debut:
             return (
                 f"Chevauchement avec l'oral de {o['matiere']} "
@@ -1394,7 +1409,7 @@ def edit_oral() -> ResponseReturnValue:
         heure_sujet_str: str = request.form.get('heure_sujet') or ''
         id_oral_int: int = int(request.form.get('id') or 0)
         sujet_new = _time_str_to_td(heure_sujet_str)
-        duree = oral_actuel['heure_fin'] - oral_actuel['heure_sujet']
+        duree = _to_td(oral_actuel['heure_fin']) - _to_td(oral_actuel['heure_sujet'])
         fin_new = sujet_new + duree
         error_msg, warning_msg = _check_conflits_oral(
             id_oral_int,
