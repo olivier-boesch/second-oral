@@ -1727,8 +1727,9 @@ def timer_state() -> ResponseReturnValue:
     loge = request.args.get('loge') if request.method == 'GET' else (request.json or {}).get('loge')
     if not loge:
         abort(400)
-    # Vérifier que l'utilisateur a accès à cette loge
-    if not is_admin_user() and not is_loge_user(loge):
+    # Lecture (GET) : tout utilisateur authentifié peut voir les états de minuteur
+    # Écriture (POST) : réservé à la loge concernée et à l'admin
+    if request.method == 'POST' and not is_admin_user() and not is_loge_user(loge):
         abort(403)
     try:
         r = _redis()
