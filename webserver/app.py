@@ -1395,7 +1395,7 @@ def _check_conflits_oral(
 
     # ── Examinateur ───────────────────────────────────────────────────────────
     oraux_exam = db_get(
-        db_facility_web.SELECT_ORAUX_EXAMINATEUR,
+        db_facility_web.SELECT_ORAUX_EXAMINATEUR_CONFLITS,
         id_examinateur,
         no_list_auto=False,
     )
@@ -1579,7 +1579,7 @@ def edit_examinateur() -> ResponseReturnValue:
     url = _safe_redirect_url(request.args.get('link_back'))
     donnees_examinateur = db_get(db_facility_web.SELECT_EXAMINATEUR_INFOS, id_examinateur)
     liste_oraux = db_get(
-        db_facility_web.SELECT_ORAUX_EXAMINATEUR, id_examinateur, no_list_auto=False
+        db_facility_web.SELECT_ORAUX_EXAMINATEUR_CONFLITS, id_examinateur, no_list_auto=False
     )
     return render_template(
         "edit_examinateur.html",

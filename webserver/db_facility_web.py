@@ -161,7 +161,7 @@ WHERE Candidat.id = %s
 ORDER BY heure_sujet
 """
 
-SELECT_ORAUX_EXAMINATEUR = """
+SELECT_ORAUX_EXAMINATEUR_CONFLITS = """
 SELECT Oral.id AS id, Candidat.nom AS candidat,
        Oral.heure_sujet AS heure_sujet, Oral.heure_fin AS heure_fin
 FROM Oral
