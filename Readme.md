@@ -91,7 +91,7 @@ git clone ... && cd second_oral
 # 2. Tout-en-un : secrets, TOTP, .env, nginx, certbot, Docker, DB
 sudo python setup_new_site.py
 # Le script demande confirmation avant chaque étape Docker.
-# À la fin il propose de lancer algo.py si les CSV sont prêts.
+# Algo.py se lance ensuite séparément via l'interface web (/gestion/algo) ou run_algo.sh.
 
 # 3. Recharger nginx hôte (si certbot ne l'a pas fait)
 sudo nginx -t && sudo nginx -s reload
@@ -141,14 +141,14 @@ sudo python setup_new_site.py \
 
 **Ce que fait le script (dans l'ordre) :**
 
-1. **`webserver/app_secrets.py`** — génère tous les secrets (clé OTP, `APP_SECRET_KEY`, `DB_SALT`, pepper/sel) + infos légales (directeur de publication, adresse, académie, DPD)
-2. **QR code TOTP** — affiché dans le terminal + sauvegardé en PNG (`otp_setup.png`) + vérification interactive du code
-3. **PDF administrateur** — clé TOTP + démarches légales RGPD à effectuer par le chef de centre
-4. **`.env` Docker** — généré automatiquement avec `DB_ROOT_PASSWORD` aléatoire et credentials cohérents avec `app_secrets.py`
-5. **Config nginx** — écrite dans `nginx-conf/<fqdn>` et installée dans `/etc/nginx/sites-available/` (TLS 1.2+, HTTP→HTTPS, HSTS)
-6. **Certbot** — `certbot --nginx -d <fqdn>` (Let's Encrypt)
-7. **Docker** *(optionnel, demande confirmation)* — `docker compose build`, démarrage MariaDB + Redis, attente de disponibilité, création de la base et de l'utilisateur avec privilèges limités, démarrage de la stack complète
-8. **algo.py** *(optionnel)* — proposé si les fichiers CSV sont disponibles
+1. **`webserver/app_secrets.py`** — génère tous les secrets (clé OTP, `APP_SECRET_KEY`, `DB_SALT`, pepper/sel, `ACCENT_COLOR`) + infos légales (directeur de publication, adresse, académie, DPD)
+2. **Couleur d'accent** — choix interactif parmi 6 palettes prédéfinies (violet, bleu, vert, rouge, orange, turquoise) ou couleur personnalisée `#rrggbb` ; stockée dans `app_secrets.py` et appliquée au site et aux PDFs
+3. **QR code TOTP** — affiché dans le terminal + sauvegardé en PNG (`otp_setup.png`) + vérification interactive du code
+4. **PDF administrateur** — clé TOTP + démarches légales RGPD à effectuer par le chef de centre, aux couleurs de l'accent choisi
+5. **`.env` Docker** — généré automatiquement avec `DB_ROOT_PASSWORD` aléatoire et credentials cohérents avec `app_secrets.py`
+6. **Config nginx** — écrite dans `nginx-conf/<fqdn>` et installée dans `/etc/nginx/sites-available/` (TLS 1.2+, HTTP→HTTPS, HSTS)
+7. **Certbot** — `certbot --nginx -d <fqdn>` (Let's Encrypt)
+8. **Docker** *(optionnel, demande confirmation)* — `docker compose build`, démarrage MariaDB + Redis, attente de disponibilité, création de la base et de l'utilisateur avec privilèges limités, démarrage de la stack complète
 
 > **Fichiers protégés** : `app_secrets.py` (`chmod 640`, root) et `.env` (`chmod 600`) ne doivent jamais être versionnés.
 
@@ -193,26 +193,40 @@ lance `algo.py` dans Docker, puis redémarre l'app.
 
 | Fichier | Contenu | Regénérable depuis le web |
 |---|---|---|
-| `papillons_examinateurs.pdf` | Salle + nom + mot de passe | ❌ (hash uniquement en base) |
-| `papillons_candidats.pdf` | N° candidat + mot de passe + QR code | ✅ via `/gestion/algo` |
-| `papillons_loges.pdf` | Loge + mot de passe | ❌ (hash uniquement en base) |
+| `papillons_examinateurs.pdf` | Salle + nom + mot de passe | ✅ via `/gestion/credentials` |
+| `papillons_candidats.pdf` | N° candidat + mot de passe + QR code | ✅ via `/gestion/documents` |
+| `papillons_loges.pdf` | Loge + mot de passe | ✅ via `/gestion/credentials` |
+
+> **Premier run / runs suivants :** au premier lancement d'`algo.py`, de nouveaux identifiants sont générés pour tous les acteurs et stockés chiffrés (`data/credentials.enc`, AES-256-GCM). Lors des relances suivantes, les identifiants existants sont réutilisés — seul le planning change. Le fichier `credentials.enc` est la référence ; s'il n'existe pas, algo.py génère de nouveaux identifiants.
 
 ### Télécharger les documents depuis l'interface web
 
-La page `/gestion/algo` propose, en plus du lancement :
+La page `/gestion/documents` (accessible depuis l'accueil admin → bloc Préparation) centralise tous les téléchargements :
 
 | Document | Action | Remarque |
 |---|---|---|
 | Papillons candidats | Générer + télécharger | Depuis la base courante |
-| Papillons examinateurs | Télécharger | Produit par algo.py uniquement |
-| Papillons loges | Télécharger | Produit par algo.py uniquement |
+| Papillons examinateurs | Télécharger | Produit par algo.py ou renouvellement |
+| Papillons loges | Télécharger | Produit par algo.py ou renouvellement |
 | Fiches candidats (lot) | Générer + télécharger | Toutes les fiches en un seul PDF |
 | Fiches salles (lot) | Générer + télécharger | Toutes les fiches d'émargement |
 | Fiches loges (lot) | Générer + télécharger | Toutes les fiches de loge |
 | Liste générale des oraux | Générer + télécharger | Tous candidats/matières/salles |
 
 Les boutons **Générer** recalculent le PDF depuis la base de données courante.
-Les boutons **Télécharger** servent le dernier fichier produit par algo.py.
+Les boutons **Télécharger** servent le dernier fichier produit.
+
+### Renouveler les identifiants
+
+La page `/gestion/credentials` (accueil admin → bloc Préparation → Identifiants) permet de renouveler les mots de passe de connexion **sans relancer l'algorithme**, pour chaque acteur individuellement ou en masse :
+
+| Catégorie | Granularité | Effet |
+|---|---|---|
+| Candidats | Un ou tous | Nouveau `login_key` + hash en base |
+| Examinateurs | Un ou tous | Nouveau mot de passe + hash en base + papillon PDF regénéré |
+| Loges | Une ou toutes | Nouveau mot de passe + hash en base + papillon PDF regénéré |
+
+Le store `data/credentials.enc` (AES-256-GCM, clé dérivée via HKDF-SHA256) est mis à jour à chaque renouvellement et reste la source de vérité pour les runs suivants d'algo.py.
 
 ### Distribuer les papillons
 
@@ -273,13 +287,7 @@ La page de loge affiche un minuteur par candidat, pré-réglé sur la durée de 
 | Script | Usage | Notes |
 |---|---|---|
 | `run_algo.sh` | `./run_algo.sh` | Lance algo.py dans Docker, gère le stop/start de l'app |
-| `run_algo.sh --dry-run` | Affiche les commandes sans les exécuter | |
-| `setup_new_site.py` | `sudo python setup_new_site.py` | Configuration complète : secrets, QR TOTP, .env, nginx, certbot, Docker, DB |
-| `verify_logs.py` | `python verify_logs.py` | Vérifie l'intégrité de la chaîne de hash des logs |
-| `verify_logs` | `./verify_logs` | Wrapper shell — exécute `verify_logs.py` dans le conteneur `app` (`docker compose exec`) |
-| `2fa.sh` | `./2fa.sh` | Re-teste la clé OTP existante (QR + vérification interactive) |
-| `login_key_generator.py` | `python login_key_generator.py` | Génère une nouvelle clé OTP base32 |
-| `update_python_packages` | `./update_python_packages` | Met à jour les paquets Python du venv hôte |
+| `setup_new_site.py` | `sudo python setup_new_site.py` | Configuration complète : secrets, couleur d'accent, QR TOTP, .env, nginx, certbot, Docker, DB |
 
 ---
 
@@ -336,7 +344,7 @@ python -m pytest tests/integration/
 
 Le pipeline GitHub Actions (`.github/workflows/ci.yml`) exécute à chaque push sur `main` :
 1. **`pip-audit`** — détection des CVE connues dans les dépendances
-2. **Tests** — 217 tests unitaires + intégration avec couverture (dont vérification
+2. **Tests** — 263 tests unitaires + intégration avec couverture (dont vérification
    automatisée des annotations de type, du PEP8 et de mypy sur `app.py`, et
    non-régression des constats de l'audit de sécurité)
 
@@ -349,14 +357,8 @@ second_oral/
 │
 ├── algo.py                      Algorithme de placement (multiprocessing)
 ├── db_facility_save.py          Création du schéma DB + insertion initiale
-├── reports.py                   Façade : réexporte depuis webserver/reports.py
 ├── setup_new_site.py            Configuration d'un nouveau déploiement (sudo)
 ├── run_algo.sh                  Lance algo.py dans Docker
-├── verify_logs.py               Vérification standalone de l'intégrité des logs
-├── verify_logs                  Wrapper shell
-├── login_key_generator.py       Génère une clé OTP base32
-├── 2fa.sh                       Teste la configuration OTP (QR + vérification)
-├── update_python_packages       Met à jour le venv hôte
 ├── requirements.txt             Dépendances Python (versions épinglées)
 ├── requirements-test.txt        Dépendances de test uniquement
 ├── pytest.ini                   Configuration pytest
@@ -365,7 +367,8 @@ second_oral/
 │   ├── candidats.csv            Données candidats (séparateur ;)
 │   ├── examinateurs.csv         Données examinateurs
 │   ├── preps.csv                Matières et durées
-│   └── algo_params.json         Paramètres algo (généré par l'interface web)
+│   ├── algo_params.json         Paramètres algo (généré par l'interface web)
+│   └── credentials.enc          Store chiffré des identifiants (AES-256-GCM)
 │
 ├── docs/
 │   └── workflow_admin.md        Guide administrateur : CSV, algo, jour J
@@ -390,12 +393,14 @@ second_oral/
 │
 └── webserver/
     ├── app.py                   Application Flask principale
-    ├── app_secrets.py           Secrets (root:root 640, non versionné)
+    ├── app_secrets.py           Secrets (root:root 640, non versionné) + ACCENT_COLOR
     ├── algo_bg.py               Exécution de algo.py en tâche de fond (SSE)
+    ├── credential_store.py      Chiffrement AES-256-GCM du store d'identifiants
+    ├── theme.py                 Dérivation de la palette depuis ACCENT_COLOR
     ├── csv_validator.py         Validation et normalisation des fichiers CSV
-    ├── ods_handler.py           Lecture et génération ODS 4 feuilles (odfpy) + 249 lycées Aix-Marseille
+    ├── ods_handler.py           Lecture et génération ODS (odfpy) + lycées Aix-Marseille
     ├── db_facility_web.py       Requêtes SQL paramétrées
-    ├── reports.py               Génération PDF (ReportLab + pypdftk)
+    ├── reports.py               Génération PDF (ReportLab + pypdftk, palette thème)
     ├── flask_sse.py             Blueprint SSE avec cache Redis
     ├── patched_app.py           Point d'entrée gunicorn (gevent monkey-patch)
     │
@@ -404,7 +409,7 @@ second_oral/
     │   │   └── security.txt     Contact de divulgation responsable (RFC 9116)
     │   ├── templates_csv/       Modèles CSV individuels (examinateurs, candidats, preps)
     │   ├── docs/                PDFs générés (volume Docker nommé)
-    │   └── ...                  CSS, images, JS
+    │   └── ...                  CSS (main.css), polices, timer.js, icônes
     │
     └── templates/
         ├── login.html           Login admin (TOTP)
@@ -412,12 +417,14 @@ second_oral/
         ├── login_loge.html
         ├── login_candidat.html
         ├── candidat.html        Fiche candidat (avec identifiants si autorisé)
-        ├── salle.html           Fiche salle + émargement
-        ├── loge.html            Fiche loge
+        ├── salle.html           Fiche salle + émargement + minuteurs lecture seule
+        ├── loge.html            Fiche loge + minuteurs (contrôle réservé à la loge)
         ├── liste.html           Liste générale (affichage grand écran)
         ├── sign.html            Signature dématérialisée
         ├── mentions_legales.html Mentions légales + politique de confidentialité
         ├── gestion_algo.html    Upload ODS/CSV + paramètres algo + lancement + log
+        ├── gestion_documents.html  Téléchargement centralisé des PDFs générés
+        ├── credentials.html     Renouvellement des identifiants par catégorie
         └── ...
 ```
 
@@ -436,13 +443,14 @@ second_oral/
 ```
 Flask==3.1.3, Flask-SSE==1.0.0, Flask-WTF==1.3.0, Flask-Compress==1.24
 Flask-Limiter==4.1.1, Flask-Talisman==1.1.0
-gunicorn==23.0.0, gevent==25.5.1
+gunicorn==26.0.0, gevent==26.5.0
 mysql-connector-python==9.7.0
 redis==8.0.0
-pyotp==2.9.0, segno==1.6.6
-reportlab==4.5.1, pypdftk==0.5, pillow==12.2.0
+pyotp==2.10.0, segno==1.6.6
+reportlab==5.0.0, pypdftk==0.5, pillow==12.2.0
 odfpy>=1.4.0
-pytz==2026.2, colorama==0.4.6, setuptools==80.9.0
+cryptography==49.0.0          # Store credentials AES-256-GCM + /theme.css HKDF
+pytz==2026.2, colorama==0.4.6, setuptools==82.0.1
 ```
 
 ### Checklist déploiement initial
