@@ -29,6 +29,14 @@ from reportlab.platypus import (
 )
 from reportlab.platypus.doctemplate import SimpleDocTemplate
 
+# reports.py est importé depuis webserver/ (Flask) ET depuis la racine (algo.py).
+# Dans les deux cas, webserver/ doit être sur sys.path pour trouver app_secrets et theme.
+import sys as _sys
+from pathlib import Path as _Path
+_WEBSERVER_DIR = str(_Path(__file__).resolve().parent)
+if _WEBSERVER_DIR not in _sys.path:
+    _sys.path.insert(0, _WEBSERVER_DIR)
+
 import app_secrets as _app_secrets
 from theme import derive_palette
 
