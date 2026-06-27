@@ -732,10 +732,11 @@ def _build_papillons_pdf(items: list, filename: str, title1: str, title2: str,
 
     cols = 2
     rows_per_page = 5
-    margin_x = 10 * mm
-    margin_y = 10 * mm
+    margin_x      = 10 * mm
+    margin_top    = 10 * mm
+    margin_bottom = 18 * mm   # espace suffisant pour le footer (logo 5mm + texte)
     slip_w = (W - 2 * margin_x) / cols
-    slip_h = (H - 2 * margin_y) / rows_per_page
+    slip_h = (H - margin_top - margin_bottom) / rows_per_page
 
     per_page = cols * rows_per_page
     total_pages = max(1, -(-len(items) // per_page))   # arrondi supérieur
@@ -750,7 +751,7 @@ def _build_papillons_pdf(items: list, filename: str, title1: str, title2: str,
         col = page_pos % cols
         row = page_pos // cols
         x = margin_x + col * slip_w
-        y = H - margin_y - (row + 1) * slip_h
+        y = H - margin_top - (row + 1) * slip_h
 
         _draw_papillon(
             c_canvas, x, y, slip_w, slip_h,
