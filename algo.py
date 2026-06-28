@@ -946,12 +946,17 @@ if __name__ == '__main__':
     # Écriture des credentials en clair dans un fichier temporaire non chiffré.
     # Ce fichier est destiné à être immédiatement lu et chiffré par le serveur
     # Flask (via algo_bg.py on_done), puis supprimé. Il ne doit jamais persister.
+    # /dev/shm est un tmpfs en RAM sous Linux : les données n'atteignent jamais le disque.
     import json as _json
-    # Chemin absolu basé sur __file__ : garantit la résolution correcte
-    # quel que soit le répertoire de travail du sous-processus.
-    _creds_tmp = _Path(__file__).resolve().parent / 'data' / 'credentials_new.json'
+    _shm = _Path('/dev/shm')
+    if _shm.exists() and _shm.is_dir():
+        _creds_tmp = _shm / 'second_oral_creds_new.json'
+    else:
+        # Fallback si /dev/shm indisponible (non-Linux, CI, etc.)
+        _creds_tmp = _Path(__file__).resolve().parent / 'data' / 'credentials_new.json'
     try:
-        _creds_tmp.parent.mkdir(parents=True, exist_ok=True)
+        if _creds_tmp.parent != _shm:
+            _creds_tmp.parent.mkdir(parents=True, exist_ok=True)
         _creds_tmp.write_text(_json.dumps({
             "candidats":    {d['numero']: d['login_key'] for d in liste_connexion_candidats},
             "examinateurs": {salle: mdp for salle, _nom, mdp in liste_connexion_exams},

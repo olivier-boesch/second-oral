@@ -2136,7 +2136,12 @@ def mentions_legales() -> ResponseReturnValue:
 
 _DATA_DIR = Path(app.root_path).parent / "data"
 _CREDENTIALS_FILE     = _DATA_DIR / "credentials.enc"
-_CREDENTIALS_TMP_FILE = _DATA_DIR / "credentials_new.json"
+_shm = Path('/dev/shm')
+_CREDENTIALS_TMP_FILE = (
+    _shm / 'second_oral_creds_new.json'
+    if _shm.exists() and _shm.is_dir()
+    else _DATA_DIR / 'credentials_new.json'
+)
 _ALLOWED_CSV = {
     "candidats":    "candidats.csv",
     "examinateurs": "examinateurs.csv",
