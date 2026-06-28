@@ -93,6 +93,17 @@ except Exception:
     except OSError:
         _STATIC_VERSION = '0'
 
+_SENTRY_DSN = os.environ.get('SENTRY_DSN')
+if not dev_on and _SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.flask import FlaskIntegration
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        integrations=[FlaskIntegration()],
+        traces_sample_rate=0.05,   # 5 % des requêtes tracées (éviter le quota gratuit)
+        environment="production",
+    )
+
 if dev_on:
     app.config.update(
         REDIS_URL=_REDIS_URL,
@@ -183,7 +194,7 @@ app.register_blueprint(sse, url_prefix='/stream')
 # compte authentifié pourrait ouvrir un flot de connexions en boucle, chacune
 # retenant indéfiniment un greenlet + une souscription Redis (DoS, cf.
 # flask_sse._get_redis_sub avec socket_timeout=None).
-limiter.limit("30 per minute", override_defaults=True)(sse)
+limiter.limit("300 per minute", override_defaults=True)(sse)
 
 
 _AUTH_FAIL_THRESHOLD = 5   # échecs avant avertissement dans les logs

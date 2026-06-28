@@ -20,6 +20,7 @@ services:
       # Surchargent les valeurs localhost de app_secrets.py pour Docker
       DB_HOST: mariadb
       REDIS_URL: redis://redis:6379
+      SENTRY_DSN: ${SENTRY_DSN:-}
     volumes:
       # ── Code source monté depuis l'hôte (pas dans l'image) ──────────────
       - .:/app
