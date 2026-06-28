@@ -136,6 +136,7 @@ sudo python setup_new_site.py \
     --academie "Académie d'Aix-Marseille" \
     --hebergeur "OVHcloud SAS, 2 rue Kellermann, 59100 Roubaix" \
     --dpd-email "dpd@ac-aix-marseille.fr" \
+    --sentry-dsn "https://xxx@oyyy.ingest.sentry.io/zzz" \  # optionnel
     --no-digital-sign   # optionnel : désactive l'émargement en ligne
 ```
 
@@ -145,7 +146,7 @@ sudo python setup_new_site.py \
 2. **Couleur d'accent** — choix interactif parmi 6 palettes prédéfinies (violet, bleu, vert, rouge, orange, turquoise) ou couleur personnalisée `#rrggbb` ; stockée dans `app_secrets.py` et appliquée au site et aux PDFs
 3. **QR code TOTP** — affiché dans le terminal + sauvegardé en PNG (`otp_setup.png`) + vérification interactive du code
 4. **PDF administrateur** — clé TOTP + démarches légales RGPD à effectuer par le chef de centre, aux couleurs de l'accent choisi
-5. **`.env` Docker** — généré automatiquement avec `DB_ROOT_PASSWORD` aléatoire et credentials cohérents avec `app_secrets.py`
+5. **`.env` Docker** — généré automatiquement avec `DB_ROOT_PASSWORD` aléatoire, credentials cohérents avec `app_secrets.py`, et `SENTRY_DSN` si fourni (ou ligne commentée sinon)
 6. **Config nginx** — écrite dans `nginx-conf/<fqdn>` et installée dans `/etc/nginx/sites-available/` (TLS 1.2+, HTTP→HTTPS, HSTS)
 7. **Certbot** — `certbot --nginx -d <fqdn>` (Let's Encrypt)
 8. **Docker** *(optionnel, demande confirmation)* — `docker compose build`, démarrage MariaDB + Redis, attente de disponibilité, création de la base et de l'utilisateur avec privilèges limités, démarrage de la stack complète
@@ -290,7 +291,7 @@ La page de loge affiche un minuteur par candidat, pré-réglé sur la durée de 
 | Script | Usage | Notes |
 |---|---|---|
 | `run_algo.sh` | `./run_algo.sh` | Lance algo.py dans Docker, gère le stop/start de l'app |
-| `setup_new_site.py` | `sudo python setup_new_site.py` | Configuration complète : secrets, couleur d'accent, QR TOTP, .env, nginx, certbot, Docker, DB |
+| `setup_new_site.py` | `sudo python setup_new_site.py` | Configuration complète : secrets, couleur d'accent, QR TOTP, .env (avec SENTRY_DSN optionnel), nginx, certbot, Docker, DB |
 
 ---
 

@@ -6,7 +6,7 @@
 - Tests unitaires pour `algo.py` : placement, capacité insuffisante, cohérence des horaires, écart minimum candidat, timing (`tests/unit/test_algo.py`)
 - Route `GET /health` dans Flask (vérification DB + Redis) exemptée du rate limiter
 - Healthcheck Docker pour le service `app` (via Python urllib, sans dépendance curl)
-- Sentry : intégration optionnelle via `SENTRY_DSN` (prod uniquement, `traces_sample_rate=0.05`)
+- Sentry : intégration optionnelle via `SENTRY_DSN` (prod uniquement, `traces_sample_rate=0.05`) — configuré dans `.env` via `setup_new_site.py --sentry-dsn` ou question interactive
 - Script de test de charge SSE (`tests/load/test_sse_rate_limit.py`)
 - Documentation de l'algorithme de placement (`docs/algo.md`)
 - Documentation de la stratégie de backup des secrets (`docs/secrets_backup.md`)

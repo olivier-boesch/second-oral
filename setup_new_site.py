@@ -797,7 +797,8 @@ server {{
 def generate_env_file(db_user: str, db_password: str,
                       db_name: str, app_port: int = 8080,
                       app_uid: int = APP_SYSTEM_UID,
-                      app_gid: int = APP_SYSTEM_UID) -> tuple[str, str]:
+                      app_gid: int = APP_SYSTEM_UID,
+                      sentry_dsn: str = "") -> tuple[str, str]:
     """
     Génère le contenu du fichier .env Docker et retourne (contenu, root_password).
 
@@ -806,6 +807,10 @@ def generate_env_file(db_user: str, db_password: str,
     --build-arg manuellement à chaque rebuild.
     """
     db_root_password = secrets.token_urlsafe(24)
+    sentry_line = (
+        f"SENTRY_DSN={sentry_dsn}\n" if sentry_dsn
+        else "# SENTRY_DSN=https://xxx@oyyy.ingest.sentry.io/zzz\n"
+    )
     content = (
         "# Généré par setup_new_site.py — ne pas versionner\n"
         f"DB_ROOT_PASSWORD={db_root_password}\n"
@@ -815,6 +820,7 @@ def generate_env_file(db_user: str, db_password: str,
         f"APP_PORT={app_port}\n"
         f"APP_UID={app_uid}\n"
         f"APP_GID={app_gid}\n"
+        f"{sentry_line}"
     )
     return content, db_root_password
 
@@ -981,6 +987,7 @@ def main() -> None:
     parser.add_argument("--dpd-email",        help="Email du Délégué à la Protection des Données de l'académie")
     parser.add_argument("--app-port",         type=int, default=None,
                         help="Port hôte du conteneur nginx (défaut: premier port libre ≥ 8080)")
+    parser.add_argument("--sentry-dsn",         help="DSN Sentry pour le suivi des erreurs (optionnel)", default="")
     parser.add_argument("--no-update-lycees",  action="store_true",
                         help="Ne pas mettre à jour la liste des lycées depuis data.education.gouv.fr")
     parser.add_argument("--yes",              action="store_true",
@@ -1088,6 +1095,7 @@ def main() -> None:
     print(f"  Port app       : {app_port}")
     print(f"  Signature      : {'✔ activée' if digital_sign else '✘ désactivée'}")
     print(f"  Accent         : {accent_color}")
+    print(f"  Sentry         : {sentry_dsn if sentry_dsn else '(non configuré)'}")
     print(f"  Répertoire     : {PROJECT_ROOT}")
     print()
 
@@ -1166,6 +1174,15 @@ def main() -> None:
 
     # ── 1c. Fichier .env Docker ───────────────────────────────────────────────
     hdr("Génération du fichier .env Docker")
+
+    sentry_dsn = args.sentry_dsn
+    if not sentry_dsn and not args.yes:
+        print("  Sentry permet de recevoir une alerte email en cas d'erreur en production.")
+        print("  Créez un projet gratuit sur https://sentry.io pour obtenir un DSN.")
+        _raw = input("  DSN Sentry (laisser vide pour ignorer) : ").strip()
+        sentry_dsn = _raw if _raw.startswith("https://") else ""
+        if _raw and not sentry_dsn:
+            warn("DSN invalide (doit commencer par https://), ignoré.")
     env_path = PROJECT_ROOT / ".env"
     # Résoudre l'UID/GID du compte système dès ici pour les écrire dans .env,
     # afin que docker compose build puisse toujours utiliser les bons args.
@@ -1178,6 +1195,7 @@ def main() -> None:
     env_content, db_root_password = generate_env_file(
         db_user, db_password, db_name, app_port,
         app_uid=_app_uid, app_gid=_app_gid,
+        sentry_dsn=sentry_dsn,
     )
 
     if env_path.exists():
