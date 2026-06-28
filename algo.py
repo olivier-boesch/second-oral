@@ -58,6 +58,22 @@ NOK_CHAR = "\U00002718"  # ✘
 WARNING_CHAR = "\U0001F534"  # 🔴
 
 
+class AlgoError(RuntimeError):
+    """Erreur algo avec contexte de diagnostic."""
+    pass
+
+
+class PasDeCreneauDisponible(AlgoError):
+    """Aucun créneau disponible pour placer un candidat."""
+    def __init__(self, candidat, n_examinateurs):
+        self.candidat = candidat
+        self.n_examinateurs = n_examinateurs
+        super().__init__(
+            f"Candidat {candidat.numero} ({candidat.nom.strip()}) — "
+            f"aucun créneau disponible ({n_examinateurs} examinateur(s))"
+        )
+
+
 class CustomFormatter(logging.Formatter):
     """Format du log pour la console"""
 
@@ -670,7 +686,7 @@ class AlgoOne:
         # rien trouvé -> Exception
         if creneau_plus_proche == self.max_creneaux_journee + 1:
             log.critical(f"Run {self.numero_run} : Pas de créneau trouvé")
-            raise RuntimeError("Pas de créneau trouvé. Abandon")
+            raise PasDeCreneauDisponible(candidat, len(liste_examinateur))
         return creneau_plus_proche, examinateur_choisi
 
     def verif_ecart_creneaux(self, creneau1, creneau2) -> bool:
@@ -858,8 +874,10 @@ def algo_run(parameters):
     alg.setup_from_files()
     try:
         alg.resoudre()
-    except RuntimeError:
-        return None
+    except AlgoError as e:
+        return None, str(e)
+    except RuntimeError as e:
+        return None, str(e)
     alg.calcul_horaires()
     alg.verif_ecart_horaire()
     stats = alg.statistiques()
@@ -871,6 +889,7 @@ if __name__ == '__main__':
     best_percentage = 0    # meilleur pourcentage de remplissage des créneaux profs
     min_students_time = 0  # meilleur temps mini entre oraux candidats
     best_alg = None        # meilleur algo
+    run_errors = []        # causes d'échec (dédupliquées)
 
     # liste des paramètres pour chaque run (tous identiques ici)
     parameters_list = [
@@ -890,13 +909,16 @@ if __name__ == '__main__':
 
     # Analyse des résultats
     for res in results:
+        alg, info = res
         # erreur dans le run
-        if res is None:
+        if alg is None:
             n_err += 1
+            if info and info not in run_errors:
+                run_errors.append(info)
             continue
         # succès et calcul des stats
         # on garde le meilleur resultat (calculé sur le pourcentage de remplissage des créneaux profs)
-        alg, stats = res
+        stats = info
         if best_percentage < stats['profs']:
                 best_percentage = stats['profs']
                 min_students_time = stats['candidats']
@@ -908,6 +930,8 @@ if __name__ == '__main__':
             "Vérifiez la cohérence des fichiers CSV "
             "(nombre de candidats, d'examinateurs, créneaux disponibles)."
         )
+        for err in run_errors:
+            log.critical(f"  Cause : {err}")
         sys.exit(1)
     log.info("Meilleur Algo:")
     best_alg.statistiques()

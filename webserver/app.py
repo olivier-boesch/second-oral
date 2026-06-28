@@ -712,6 +712,23 @@ class SignatureOtherDeviceForm(FlaskForm):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Routes — Infrastructure
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.route('/health', methods=['GET'])
+@limiter.exempt
+def health() -> ResponseReturnValue:
+    """Health check pour orchestration Docker/K8s — ne pas rate-limiter."""
+    try:
+        app._db.make_sql_select("SELECT 1")  # type: ignore[attr-defined]
+        _redis().ping()
+        return jsonify({"status": "healthy"}), 200
+    except Exception as e:
+        app.logger.error(f"Health check failed: {e}")
+        return jsonify({"status": "unhealthy", "error": str(e)}), 503
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Routes — Consultation publique
 # ──────────────────────────────────────────────────────────────────────────────
 
