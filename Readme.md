@@ -158,6 +158,9 @@ sudo python setup_new_site.py \
 
 > 📖 **Documentation complète** : [docs/workflow_admin.md](docs/workflow_admin.md)
 > — format détaillé des CSV, contraintes de l'algorithme, résolution des problèmes.
+>
+> 📖 **Algorithme de placement** : [docs/algo.md](docs/algo.md)
+> — fonctionnement de l'algo glouton multiprocessing, paramètres réglables, erreurs diagnosticables, tests.
 
 ### Préparer les fichiers
 
