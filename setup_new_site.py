@@ -1084,6 +1084,15 @@ def main() -> None:
 
     app_port = args.app_port if args.app_port is not None else find_free_port(8080)
 
+    sentry_dsn = args.sentry_dsn
+    if not sentry_dsn and not args.yes:
+        print("  Sentry permet de recevoir une alerte email en cas d'erreur en production.")
+        print("  Créez un projet gratuit sur https://sentry.io pour obtenir un DSN.")
+        _raw = input("  DSN Sentry (laisser vide pour ignorer) : ").strip()
+        sentry_dsn = _raw if _raw.startswith("https://") else ""
+        if _raw and not sentry_dsn:
+            warn("DSN invalide (doit commencer par https://), ignoré.")
+
     hdr("Récapitulatif")
     print(f"  Domaine        : {BOLD}{fqdn}{NC}")
     print(f"  Centre         : {centre}")
@@ -1174,15 +1183,6 @@ def main() -> None:
 
     # ── 1c. Fichier .env Docker ───────────────────────────────────────────────
     hdr("Génération du fichier .env Docker")
-
-    sentry_dsn = args.sentry_dsn
-    if not sentry_dsn and not args.yes:
-        print("  Sentry permet de recevoir une alerte email en cas d'erreur en production.")
-        print("  Créez un projet gratuit sur https://sentry.io pour obtenir un DSN.")
-        _raw = input("  DSN Sentry (laisser vide pour ignorer) : ").strip()
-        sentry_dsn = _raw if _raw.startswith("https://") else ""
-        if _raw and not sentry_dsn:
-            warn("DSN invalide (doit commencer par https://), ignoré.")
     env_path = PROJECT_ROOT / ".env"
     # Résoudre l'UID/GID du compte système dès ici pour les écrire dans .env,
     # afin que docker compose build puisse toujours utiliser les bons args.
