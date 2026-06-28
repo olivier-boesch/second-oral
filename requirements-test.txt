@@ -7,3 +7,4 @@ segno
 reportlab
 pytz
 colorama
+pypdf
