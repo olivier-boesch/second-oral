@@ -9,7 +9,7 @@ placement automatique des candidats et examinateurs, consultation en temps réel
 ## En production
 
 Déployé depuis 2023 sur un centre d'examen de l'académie d'Aix-Marseille.
-~180 candidats traités en une journée sur une instance.
+~90 candidats (180 oraux) traités en une journée sur une instance.
 Utilisé chaque année lors des oraux de second groupe du baccalauréat.
 
 ---

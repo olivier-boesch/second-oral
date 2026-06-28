@@ -6,8 +6,14 @@
 - Tests unitaires pour `algo.py` : placement, capacité insuffisante, cohérence des horaires, écart minimum candidat, timing (`tests/unit/test_algo.py`)
 - Route `GET /health` dans Flask (vérification DB + Redis) exemptée du rate limiter
 - Healthcheck Docker pour le service `app` (via Python urllib, sans dépendance curl)
+- Sentry : intégration optionnelle via `SENTRY_DSN` (prod uniquement, `traces_sample_rate=0.05`)
+- Script de test de charge SSE (`tests/load/test_sse_rate_limit.py`)
 - Documentation de l'algorithme de placement (`docs/algo.md`)
 - Documentation de la stratégie de backup des secrets (`docs/secrets_backup.md`)
+- Documentation de la capacité et du rate limiting SSE (`docs/capacity.md`)
+
+### Changed
+- Rate limiting SSE : `30/min` → `300/min` (validé empiriquement — supporte ~120 connexions simultanées : 90 candidats + examinateurs + loges)
 
 ### Changed
 - `algo.py` : credentials temporaires écrits dans `/dev/shm` (RAM, jamais sur disque) avec fallback sur `data/` si indisponible
