@@ -92,7 +92,7 @@
   <div class="admin-sidebar__sep"></div>
 
   <form method="post" action="{{ url_for('reload_pages') }}" style="margin:0;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else csrf_token }}">
     <input type="hidden" name="link_back" value="{{ request.url }}">
     <button type="submit" class="admin-sidebar__item" data-tip="Recharger les pages"
             style="background:none; border:none; cursor:pointer; padding:0; width:36px; height:36px;">
