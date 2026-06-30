@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Édition candidat : {{ donnees_candidat['nom'] }}</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+<h1>Édition candidat : {{ donnees_candidat['nom'] }}</h1>
+<div style="max-width:480px; margin:0 auto;">
+<form class="form-salle" action="{{ url_for('edit_candidat') }}" method="post"
+      style="width:100%; max-width:100%;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="id"        value="{{ donnees_candidat['id'] }}">
+    <input type="hidden" name="link_back" value="{{ link_back }}">
+
+    <p>
+        <label for="nom">Nom complet :</label><br>
+        <input type="text" id="nom" name="nom" value="{{ donnees_candidat['nom'] }}"
+               required style="width:100%; box-sizing:border-box;">
+    </p>
+    <p>
+        <label for="numero">Numéro de candidat :</label><br>
+        <input type="text" id="numero" name="numero" value="{{ donnees_candidat['numero'] }}"
+               required style="width:100%; box-sizing:border-box;">
+        <small>⚠ Modifier le numéro change aussi l'identifiant de connexion du candidat.</small>
+    </p>
+    <p>
+        <label>
+            <input type="checkbox" name="tiers_temps"
+                   {% if donnees_candidat['tiers_temps'] %}checked{% endif %}>
+            Tiers temps (aménagement d'épreuves)
+        </label>
+    </p>
+    <p class="centered" style="margin-top:1.5em;">
+        <button type="submit" class="button">Valider</button>
+        <button type="button" class="button"
+                onclick="document.location='{{ url_for('edit_candidat', id=donnees_candidat['id'], link_back=link_back) }}';">
+            Reset
+        </button>
+        <button type="button" class="button"
+                onclick="document.location='{% if link_back %}{{ link_back }}{% else %}{{ url_for('liste_candidats') }}{% endif %}';">
+            Annuler
+        </button>
+    </p>
+</form>
+</div>
+{% include 'footer.html' %}
+</body>
+</html>

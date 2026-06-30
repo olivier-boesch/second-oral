@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Liste des candidats</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+    <h1>Liste des candidats</h1>
+    <table class="table_oraux">
+        <tr>
+            <th>Nom</th>
+            <th>Numéro</th>
+            <th>Tiers temps</th>
+            <th>Éditer</th>
+        </tr>
+        {% for c in candidats %}
+        <tr class="{{ loop.cycle("tr_light", "tr_dark") }}">
+            <td>{{ c['nom'] }}</td>
+            <td>{{ c['numero'] }}</td>
+            <td>{% if c['tiers_temps'] %}
+                <div class="tooltip">🔴 <span class="tooltiptext">aménagement d'épreuves</span></div>
+                {% endif %}
+            </td>
+            <td>
+                <a href="{{ url_for('edit_candidat', id=c['id'], link_back=url_of_page) }}">
+                    <div class="tooltip">
+                        <img alt="Éditer candidat" src="{{ url_for('static', filename='edit.png') }}">
+                        <span class="tooltiptext">éditer</span>
+                    </div>
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% include 'footer.html' %}
+</body>
+</html>

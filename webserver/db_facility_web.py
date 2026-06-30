@@ -12,6 +12,15 @@ INIT_DB = "SET @salt = %(salt)s"
 
 # ---------- Candidat
 
+SELECT_ALL_CANDIDATS = """
+SELECT id, nom, numero, tiers_temps FROM Candidat ORDER BY nom
+"""
+
+UPDATE_CANDIDAT_INFOS = """
+UPDATE Candidat SET nom = %(nom)s, numero = %(numero)s, tiers_temps = %(tiers_temps)s
+WHERE id = %(id)s
+"""
+
 SELECT_INFOS_CANDIDAT = """
 SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Candidat.login_key AS login_key

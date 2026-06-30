@@ -1598,6 +1598,59 @@ def liste_examinateurs() -> ResponseReturnValue:
     )
 
 
+@app.route('/gestion/liste-candidats')
+@admin_required
+@nocache
+def liste_candidats() -> ResponseReturnValue:
+    """Liste des candidats avec accès à l'édition de leurs informations."""
+    candidats = db_get(db_facility_web.SELECT_ALL_CANDIDATS, no_list_auto=False)
+    return render_template(
+        'liste_candidats.html',
+        centre=CENTRE_EXAMEN,
+        candidats=candidats,
+        url_of_page=request.url,
+        username=get_username(),
+        authenticated=is_authenticated(),
+    )
+
+
+@app.route('/gestion/edit-candidat', methods=['GET', 'POST'])
+@admin_required
+@nocache
+def edit_candidat() -> ResponseReturnValue:
+    """Édition des informations d'un candidat (nom, numéro, tiers temps)."""
+    if request.method == 'POST':
+        d = {
+            'id': request.form.get('id'),
+            'nom': (request.form.get('nom') or '').strip(),
+            'numero': (request.form.get('numero') or '').strip(),
+            'tiers_temps': 1 if request.form.get('tiers_temps') == 'on' else 0,
+        }
+        if not d['nom'] or not d['numero']:
+            abort(400, "Nom et numéro sont obligatoires")
+        db_update(db_facility_web.UPDATE_CANDIDAT_INFOS, **d)
+        url = _safe_redirect_url(request.form.get('link_back'))
+        return redirect(url or url_for('liste_candidats'))
+
+    # GET
+    id_candidat = request.args.get('id', None)
+    if id_candidat is None:
+        abort(404, "Pas de candidat avec cet identifiant")
+    donnees_candidat = db_get(db_facility_web.SELECT_INFOS_CANDIDAT_BY_ID, id_candidat)
+    if donnees_candidat is None:
+        abort(404, "Candidat introuvable")
+    url = _safe_redirect_url(request.args.get('link_back'))
+    return render_template(
+        'edit_candidat.html',
+        centre=CENTRE_EXAMEN,
+        donnees_candidat=donnees_candidat,
+        url_of_page=request.url,
+        link_back=url,
+        username=get_username(),
+        authenticated=is_authenticated(),
+    )
+
+
 @app.route("/gestion/edit-examinateur", methods=['GET', 'POST'])
 @admin_required
 @nocache
