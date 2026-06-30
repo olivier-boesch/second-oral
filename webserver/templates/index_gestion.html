@@ -5,10 +5,11 @@
     <title>Mes Oraux - {{ centre }} - Gestion des oraux</title>
     {% include 'style.html' %}
 </head>
-<body class="body-for-sticky">
+<body class="body-for-sticky body-admin">
 {% include 'auth_icon.html' %}
+{% include 'admin_nav.html' %}
     <h1>Edition des Oraux de second groupe</h1>
-    <div style="margin-bottom:.75rem; display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+    <div style="margin-bottom:.75rem;">
         <form method="post" action="{{ url_for('reload_pages') }}" style="display:inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="link_back" value="{{ url_of_page }}">
@@ -16,9 +17,6 @@
                 ↺ Recharger toutes les pages ouvertes
             </button>
         </form>
-        <a href="{{ url_for('liste_candidats') }}" style="font-size:.85rem;">
-            Modifier les candidats
-        </a>
     </div>
     <table class="table_oraux">
         <tr>
