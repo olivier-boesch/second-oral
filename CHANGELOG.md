@@ -1,26 +1,75 @@
 # CHANGELOG
 
-## [Unreleased] — 2026.2
+## [2026.2] — 2026-06-30
 
 ### Added
-- Tests unitaires pour `algo.py` : placement, capacité insuffisante, cohérence des horaires, écart minimum candidat, timing (`tests/unit/test_algo.py`)
-- Route `GET /health` dans Flask (vérification DB + Redis) exemptée du rate limiter
+
+**Interface d'administration**
+- Sidebar de navigation admin fixe (`admin_nav.html`) sur toutes les pages `/gestion/*` : 7 icônes SVG (oraux, candidats, examinateurs, documents, algo, identifiants, monitoring), tooltip au survol, état actif par page, theming automatique
+- Icône "Recharger les pages" dans la sidebar (action POST, remplace le lien textuel sur `index_gestion`)
+- Page liste des candidats (`/gestion/liste-candidats`) : tableau trié par nom, indicateur tiers-temps, accès direct à l'édition
+- Page édition candidat (`/gestion/edit-candidat`) : modification du nom complet, du numéro et du statut tiers-temps sans recalcul des oraux
+- Sélecteur multiple (multi-select) pour les établissements des examinateurs dans `/gestion/edit-examinateur`
+
+**Infrastructure**
+- Route `GET /health` (vérification DB + Redis) exemptée du rate limiter — compatible orchestrateurs
 - Healthcheck Docker pour le service `app` (via Python urllib, sans dépendance curl)
-- Sentry : intégration optionnelle via `SENTRY_DSN` (prod uniquement, `traces_sample_rate=0.05`) — configuré dans `.env` via `setup_new_site.py --sentry-dsn` ou question interactive
+- Sentry : intégration optionnelle (`SENTRY_DSN` dans `.env`, `traces_sample_rate=0.05`, prod uniquement) — configuré via `setup_new_site.py --sentry-dsn` ou question interactive
+
+**Tests**
+- Tests unitaires pour `algo.py` : placement, capacité insuffisante, cohérence des horaires, écart minimum candidat, timing (`tests/unit/test_algo.py`)
 - Script de test de charge SSE (`tests/load/test_sse_rate_limit.py`)
-- Documentation de l'algorithme de placement (`docs/algo.md`)
-- Documentation de la stratégie de backup des secrets (`docs/secrets_backup.md`)
-- Documentation de la capacité et du rate limiting SSE (`docs/capacity.md`)
+
+**Système de thème**
+- Palette CSS dérivée algorithmiquement depuis une couleur d'accent unique (`ACCENT_COLOR`) — route Flask `/theme.css` surchargeant les variables de `main.css`
+- 12 tokens de palette (web + PDFs ReportLab) partagés via `theme.py`
+
+**Documentation**
+- `docs/algo.md` — fonctionnement de l'algorithme de placement
+- `docs/architecture.md` — philosophie générale et décisions techniques (Flask, SSE, gevent, Redis, algo séparé)
+- `docs/securite.md` — niveaux d'accès, mesures de sécurité, RGPD
+- `docs/setup.md` — configuration complète d'un nouveau site
+- `docs/structure.md` — arborescence et dépendances
+- `docs/secrets_backup.md` — procédure de sauvegarde des secrets
+- `docs/capacity.md` — capacité et rate limiting SSE
 
 ### Changed
-- Rate limiting SSE : `30/min` → `300/min` (validé empiriquement — supporte ~120 connexions simultanées : 90 candidats + examinateurs + loges)
 
-### Changed
+**Sécurité**
 - `algo.py` : credentials temporaires écrits dans `/dev/shm` (RAM, jamais sur disque) avec fallback sur `data/` si indisponible
-- `app.py` : `_CREDENTIALS_TMP_FILE` pointe vers `/dev/shm/second_oral_creds_new.json` (cohérent avec algo.py)
+- `app.py` : `_CREDENTIALS_TMP_FILE` pointe vers `/dev/shm/second_oral_creds_new.json` (cohérent avec `algo.py`)
+
+**Génération PDF**
+- Remplacement de `pypdftk` par `pypdf` pour la concaténation PDF — supprime la dépendance Java du Dockerfile
+- Mise en page des papillons de connexion refactorisée : marges, positionnement des blocs identifiant/mot de passe
+
+**Vérification des conflits**
+- `_check_conflits_oral` : utilise `heure_oral` (et non `heure_sujet`) pour la plage examinateur — conflits détectés plus précisément sur la durée réelle de l'oral
+
+**Timers de loge**
+- Polling partagé pour les vues en lecture seule (examinateurs, candidats) : une seule boucle de polling par page, quel que soit le nombre de candidats affichés
+- Route `/loge/timer-state` exemptée du rate limiter (appels automatiques fréquents)
+- Accès étendu aux timers en lecture pour tous les utilisateurs authentifiés (admin, examinateur, candidat)
+
+**UX**
+- Rate limiting SSE : `30/min` → `300/min` (validé empiriquement — supporte ~120 connexions simultanées)
+- Tables larges : défilement horizontal sur mobile (wrapper `.table-scroll`)
+- Signature numérique : données préservées lors du redimensionnement du canvas
+- Tableau des oraux (`index_gestion`) : couleurs alternées de fond pour une meilleure lisibilité
+- Pages archive et verify-logs : liens de navigation textuels supprimés (remplacés par la sidebar)
+
+**README**
+- Réécrit comme page d'entrée courte avec liens vers les docs — contenu détaillé extrait dans `docs/`
 
 ### Fixed
-- `algo.py` : erreur "Pas de créneau trouvé" remplacée par `PasDeCreneauDisponible` avec contexte (numéro candidat, nombre d'examinateurs) — les causes d'échec sont maintenant loggées en `CRITICAL` quand tous les runs échouent
+- Token CSRF dans la sidebar : conflit entre la variable `csrf_token` (string) passée au contexte de `gestion_algo` et la fonction Flask-WTF — résolu par test `is callable`
+- `algo.py` : erreur "Pas de créneau trouvé" remplacée par `PasDeCreneauDisponible` avec contexte (numéro candidat, nombre d'examinateurs) — causes loggées en `CRITICAL` quand tous les runs échouent
+- `reports.py` : ajout du répertoire `webserver/` au `sys.path` (erreur d'import à froid)
+- `db_facility_web.py` : requête `SELECT_INFOS_CANDIDAT_BY_ID` correctement nommée et utilisée
+
+### Removed
+- Dépendance Java (suppression de `pypdftk`, remplacé par `pypdf`)
+- Fichiers et scripts dépréciés : ancien script 2FA, générateur de clés de login, CSV de données de test, assets statiques obsolètes
 
 ---
 
@@ -49,5 +98,5 @@
 
 ---
 
-[Unreleased]: https://github.com/olivier-boesch/second-oral/compare/v2026.1...HEAD
+[2026.2]: https://github.com/olivier-boesch/second-oral/compare/v2026.1...v2026.2
 [2026.1]: https://github.com/olivier-boesch/second-oral/releases/tag/v2026.1
