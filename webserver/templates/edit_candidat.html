@@ -34,8 +34,8 @@
             Tiers temps (aménagement d'épreuves)
         </label>
     </p>
-    <div style="display:flex; gap:.6em; justify-content:center; margin-top:1.5em;">
-        <button type="submit">Valider</button>
+    <div style="display:flex; gap:.6em; justify-content:center; align-items:center; margin-top:1.5em;">
+        <button type="submit" style="width:auto; margin-top:0;">Valider</button>
         <button type="button" class="outline"
                 onclick="document.location='{{ url_for('edit_candidat', id=donnees_candidat['id'], link_back=link_back) }}';">
             Reset
