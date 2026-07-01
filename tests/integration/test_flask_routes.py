@@ -902,6 +902,55 @@ class TestAddExaminateur:
         assert "new_papillon" in r.headers["Location"]
 
 
+# ── Édition d'un examinateur ──────────────────────────────────────────────────
+
+class TestEditExaminateur:
+    def test_query_counts_oral_id_not_star(self):
+        """Régression : COUNT(*) avec un LEFT JOIN compte 1 même sans oral
+        (la ligne NULL du LEFT JOIN est comptée). Il faut COUNT(Oral.id)."""
+        import db_facility_web
+        assert "COUNT(*)" not in db_facility_web.SELECT_EXAMINATEUR_INFOS
+        assert "COUNT(Oral.id)" in db_facility_web.SELECT_EXAMINATEUR_INFOS
+
+    def test_nb_oraux_zero_displayed_correctly(self, admin_client, db_mock):
+        """La page d'édition affiche bien 0 quand la DB renvoie nb_oraux=0."""
+        examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "loge": "L1", "matiere": "Maths", "etablissements": "",
+                       "nb_oraux": 0}
+        db_mock.make_sql_select.return_value = [examinateur]
+        r = admin_client.get("/gestion/edit-examinateur?id_examinateur=10")
+        assert r.status_code == 200
+        assert "Nombre d'oraux:</span><span>0</span>" in r.data.decode()
+
+
+# ── Liste des examinateurs — suppression ──────────────────────────────────────
+
+class TestListeExaminateursDelete:
+    def test_delete_button_asks_confirmation(self, admin_client, db_mock):
+        """Le bouton de suppression doit demander confirmation en JS."""
+        examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "loge": "L1", "matiere": "Maths", "etablissements": "",
+                       "nb_oraux": 0}
+        db_mock.make_sql_select.return_value = [examinateur]
+        r = admin_client.get("/gestion/liste-examinateurs")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "confirm(" in body
+        assert "SANS CONFIRMATION" not in body
+
+    def test_delete_not_offered_and_no_tooltip_when_oraux(self, admin_client, db_mock):
+        """Pas de bouton (ni de tooltip vide) quand l'examinateur a des oraux."""
+        examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "loge": "L1", "matiere": "Maths", "etablissements": "",
+                       "nb_oraux": 3}
+        db_mock.make_sql_select.return_value = [examinateur]
+        r = admin_client.get("/gestion/liste-examinateurs")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "delete_examinateur" not in body
+        assert "Supprimer cet examinateur" not in body
+
+
 # ── Monitoring ────────────────────────────────────────────────────────────────
 
 class TestMonitoring:

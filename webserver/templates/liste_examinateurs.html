@@ -84,18 +84,19 @@
                     {{ ex['nb_oraux'] }}
                 </td>
                 <td>
+                    {% if ex['nb_oraux'] == 0 %}
                     <div class="tooltip">
-                        {% if ex['nb_oraux'] == 0 %}
-                            <form method="post" action="{{ url_for('delete_examinateur') }}" style="display:inline">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="id_examinateur" value="{{ ex['id'] }}">
-                                <button type="submit" class="link-button" style="padding:0;">
-                                    <img src="{{ url_for('static', filename='delete.png') }}">
-                                </button>
-                            </form>
-                        {% endif %}
-                    <span class="tooltiptext">Supprimer maintenant <b>SANS CONFIRMATION !</b></span>
+                        <form method="post" action="{{ url_for('delete_examinateur') }}" style="display:inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="id_examinateur" value="{{ ex['id'] }}">
+                            <button type="submit" class="link-button" style="padding:0;"
+                                    onclick="return confirm('Supprimer l\'examinateur {{ ex['nom'] }} ?')">
+                                <img src="{{ url_for('static', filename='delete.png') }}">
+                            </button>
+                        </form>
+                        <span class="tooltiptext">Supprimer cet examinateur</span>
                     </div>
+                    {% endif %}
                 </td>
                 <td>
                     <form method="post" action="{{ url_for('renew_examinateur', id=ex['id']) }}" style="margin:0">
