@@ -40,7 +40,7 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
     :param publish_fn: callable(data_str) publiant une ligne sur le canal SSE.
                        data_str est un JSON : {"line": "...", "done": false}.
     :param db_host:    Hôte MariaDB (surcharge la valeur de app_secrets.py).
-    :param params:     Paramètres algo (n_run, ecart_mini, heure_debut, creneaux).
+    :param params:     Paramètres algo (n_run, ecart_mini, heure_debut, creneaux, debug).
     :param on_done:    Callback appelé à la fin du processus avec le code de retour.
                        Utile pour traiter les fichiers produits par algo.py (ex. chiffrement
                        des credentials). Appelé dans le thread de streaming, pas dans celui
@@ -61,6 +61,7 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
             if "ecart_mini"  in params: env["ALGO_ECART_MINI"]  = str(params["ecart_mini"])
             if "heure_debut" in params: env["ALGO_HEURE_DEBUT"] = str(params["heure_debut"])
             if "creneaux"    in params: env["ALGO_CRENEAUX"]    = str(params["creneaux"])
+            if "debug"       in params: env["ALGO_DEBUG"]       = "1" if params["debug"] else "0"
         # Force le mode non-bufférisé : chaque ligne est envoyée immédiatement
         # sans attendre le remplissage du buffer stdout Python (crucial pour le
         # streaming temps-réel vers le log console).

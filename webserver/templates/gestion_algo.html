@@ -27,10 +27,11 @@
             min-height: 120px; max-height: 500px;
             overflow-y: auto; white-space: pre-wrap; word-break: break-all;
         }
-        .log-ok   { color: #89d185; }
-        .log-warn { color: #dcdcaa; }
-        .log-err  { color: #f14c4c; }
-        .log-sep  { color: #569cd6; }
+        .log-ok    { color: #89d185; }
+        .log-warn  { color: #dcdcaa; }
+        .log-err   { color: #f14c4c; }
+        .log-sep   { color: #569cd6; }
+        .log-debug { color: #808080; }
 
         /* Templates CSV */
         .templates-list { list-style: none; padding: 0; }
@@ -249,6 +250,14 @@
                        min="10" max="240" value="{{ algo_params.ecart_mini }}">
                 <span class="param-hint">En minutes — par défaut 80 min (1 h 20)</span>
             </div>
+            <div class="param-row">
+                <label class="param-label" for="p-debug">
+                    Affichage détaillé (debug)
+                    <span class="info-icon" title="Affiche dans la sortie en temps réel le détail de chaque run (chargement des données, appairage, calcul des horaires...) en plus du lancement et de la fin de chaque run. Utile pour diagnostiquer un problème, mais très verbeux.">?</span>
+                </label>
+                <input type="checkbox" id="p-debug" name="debug" {% if algo_params.debug %}checked{% endif %}>
+                <span class="param-hint">Verbeux — à activer uniquement pour du diagnostic</span>
+            </div>
         </div>
     </details>
 
@@ -342,6 +351,7 @@ function classForLine(line) {
     if (/\[(CRITICAL|ERROR)\]/.test(line))  return 'log-err';
     if (/\[WARNING\]/.test(line))           return 'log-warn';
     if (/\[INFO\]/.test(line))              return 'log-ok';
+    if (/\[DEBUG\]/.test(line))              return 'log-debug';
     return '';
 }
 
@@ -533,6 +543,7 @@ function sauvegarderParams() {
         creneaux:    parseInt(document.getElementById('p-creneaux').value,    10),
         n_run:       parseInt(document.getElementById('p-n-run').value,       10),
         ecart_mini:  parseInt(document.getElementById('p-ecart-mini').value,  10),
+        debug:       document.getElementById('p-debug').checked,
     };
     fb.textContent = 'Sauvegarde…';
     fb.style.color = '#555';

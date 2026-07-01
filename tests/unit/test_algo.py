@@ -336,3 +336,57 @@ class TestAlgoTiming:
         # Seuil souple : 10 secondes par run pour n_cand ≤ 100
         assert elapsed < 10.0, f"Trop lent pour {n_cand} candidats : {elapsed:.2f}s"
         print(f"\n  [{n_cand} candidats] resoudre+calcul_horaires : {elapsed*1000:.0f} ms")
+
+
+class TestAlgoRunLogging:
+    """algo_run doit logguer le lancement et la fin de chaque run en INFO,
+    même quand l'affichage détaillé (DEBUG) est désactivé."""
+
+    def test_logs_lancement_et_fin_en_info(self, tmp_path, caplog):
+        import logging
+        from algo import algo_run
+
+        parameters = {
+            "filename_candidats": _write_csv(
+                tmp_path / "candidats.csv", _CAND_HDR, [_cand("Cand0", "1000000000")]),
+            "filename_examinateurs": _write_csv(
+                tmp_path / "examinateurs.csv", _EXAM_HDR,
+                [_exam("Prof Maths", "Maths", "A101"), _exam("Prof Philo", "Philo", "B101")]),
+            "filename_matieres": _write_csv(tmp_path / "preps.csv", _PREPS_HDR, _PREPS_BASE),
+            "temps_minimum_entre_oraux": _ECART_MINI,
+            "max_creneaux_journee": _MAX_CRENEAUX,
+            "heure_debut": time(hour=8, minute=0),
+            "numero_run": 7,
+        }
+        with caplog.at_level(logging.INFO, logger="algo"):
+            alg, stats = algo_run(parameters)
+
+        assert alg is not None
+        messages = [r.message for r in caplog.records if r.name == "algo"]
+        assert any(m == "Run 7 : lancement" for m in messages), messages
+        assert any(m.startswith("Run 7 : fin") for m in messages), messages
+
+    def test_pas_de_details_internes_en_info(self, tmp_path, caplog):
+        """Les étapes internes (chargement, appairage...) ne doivent plus polluer l'INFO."""
+        import logging
+        from algo import algo_run
+
+        parameters = {
+            "filename_candidats": _write_csv(
+                tmp_path / "candidats.csv", _CAND_HDR, [_cand("Cand0", "1000000001")]),
+            "filename_examinateurs": _write_csv(
+                tmp_path / "examinateurs.csv", _EXAM_HDR,
+                [_exam("Prof Maths", "Maths", "A101"), _exam("Prof Philo", "Philo", "B101")]),
+            "filename_matieres": _write_csv(tmp_path / "preps.csv", _PREPS_HDR, _PREPS_BASE),
+            "temps_minimum_entre_oraux": _ECART_MINI,
+            "max_creneaux_journee": _MAX_CRENEAUX,
+            "heure_debut": time(hour=8, minute=0),
+            "numero_run": 8,
+        }
+        with caplog.at_level(logging.INFO, logger="algo"):
+            algo_run(parameters)
+
+        messages = [r.message for r in caplog.records if r.name == "algo"]
+        assert len(messages) == 2, messages
+        assert "Création matières" not in " ".join(messages)
+        assert "Démarrage de l'appairage" not in " ".join(messages)

@@ -43,10 +43,14 @@ def _env_time(key, default_h, default_m):
     except Exception:
         return time(hour=default_h, minute=default_m)
 
+def _env_bool(key, default=False):
+    return _os.environ.get(key, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
 N_run               = _env_int("ALGO_N_RUN",    1_000)
 ECART_MINI_CANDIDAT = timedelta(minutes=_env_int("ALGO_ECART_MINI", 80))
 HEURE_DEBUT         = _env_time("ALGO_HEURE_DEBUT", 8, 10)
 CRENEAUX            = _env_int("ALGO_CRENEAUX", 13)
+DEBUG_DISPLAY       = _env_bool("ALGO_DEBUG", False)
 
 # données
 DATA_DIR = 'data'
@@ -103,7 +107,7 @@ class CustomFormatter(logging.Formatter):
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
+ch.setLevel(logging.DEBUG if DEBUG_DISPLAY else logging.INFO)
 ch.setFormatter(CustomFormatter())
 fh = logging.FileHandler(join(DATA_DIR, "log.txt"), mode='w')
 fh.setLevel(logging.DEBUG)
@@ -514,16 +518,16 @@ class AlgoOne:
         liste_donnees_candidats: list[dict] = charger_fichier_comme_liste(self.filename_candidats)
         liste_donnees_matieres: list[dict] = charger_fichier_comme_liste(self.filename_matieres)
         liste_donnees_examinateurs: list[dict] = charger_fichier_comme_liste(self.filename_examinateurs)
-        log.info(f"Run {self.numero_run} : Données chargées")
+        log.debug(f"Run {self.numero_run} : Données chargées")
         # liste des matières
-        log.info(f"Run {self.numero_run} : Création matières")
+        log.debug(f"Run {self.numero_run} : Création matières")
         self.liste_matieres = [
             Matiere(nom=c["Matiere"], nom_court=c['Matière court'], temps_preparation=c["Temps preparation (min)"], temps_oral=c["Duree (min)"]) for c
             in liste_donnees_matieres]
         log.debug(f"Run {self.numero_run} : Liste des matières créée ({len(self.liste_matieres)} matières crées)")
         log.debug(f"Run {self.numero_run} : Liste des matières: {self.liste_matieres!s}")
         # liste des examinateurs
-        log.info(f"Run {self.numero_run} : Création Examinateurs")
+        log.debug(f"Run {self.numero_run} : Création Examinateurs")
         for p in liste_donnees_examinateurs:
             matiere = chercher_par_nom(self.liste_matieres, p["Disc.poste"])
             if matiere is None:
@@ -544,13 +548,13 @@ class AlgoOne:
             self.liste_examinateurs.append(t)
             nb_oraux_interdits = max(0, (datetime.combine(datetime.today(), t.heure_debut) - datetime.combine(datetime.today(), self.heure_debut)).total_seconds() // matiere.temps_oral.total_seconds())
             if nb_oraux_interdits > 0:
-                log.info(f"Run {self.numero_run} : {t.nom} -> {nb_oraux_interdits} créneaux interdits (début à {t.heure_debut})")
+                log.debug(f"Run {self.numero_run} : {t.nom} -> {nb_oraux_interdits} créneaux interdits (début à {t.heure_debut})")
                 for i in range(int(nb_oraux_interdits)):
                     t.oraux[i] = CreneauInterdit()
-        log.info(f"Run {self.numero_run} : Liste des examinateurs créée ({len(self.liste_examinateurs)} examinateurs créés)")
+        log.debug(f"Run {self.numero_run} : Liste des examinateurs créée ({len(self.liste_examinateurs)} examinateurs créés)")
         log.debug(f"Run {self.numero_run} : Liste des examinateurs ({self.liste_examinateurs}) examinateurs créés)")
         # liste des candidats
-        log.info(f"Run {self.numero_run} : Création candidats")
+        log.debug(f"Run {self.numero_run} : Création candidats")
         for e in liste_donnees_candidats:
             course1 = chercher_par_nom(self.liste_matieres, e["CHOIX DISCIPLINE 1"])
             course2 = chercher_par_nom(self.liste_matieres, e["CHOIX DISCIPLINE 2"])
@@ -572,10 +576,10 @@ class AlgoOne:
             course1.candidats.append(s)
             course2.candidats.append(s)
             self.liste_candidats.append(s)
-        log.info(f"Run {self.numero_run} : Liste des candidats crée ({len(self.liste_candidats)} candidats créés)")
+        log.debug(f"Run {self.numero_run} : Liste des candidats crée ({len(self.liste_candidats)} candidats créés)")
         log.debug(f"Run {self.numero_run} : Liste des candidats: {self.liste_candidats!s}")
         self.liste_matieres.sort(key=lambda m: len(m.candidats), reverse=self.traiter_matiere_principales_en_premier)
-        log.info(f"Run {self.numero_run} : Liste des matières triée")
+        log.debug(f"Run {self.numero_run} : Liste des matières triée")
         log.debug(f"Run {self.numero_run} : Liste des matères: {self.liste_matieres!s}")
 
     def save(self) -> tuple[list[tuple], list[dict], list[tuple]]:
@@ -710,7 +714,7 @@ class AlgoOne:
         :return: Valeur minimale de l'écart entre les oraux si stats est True, None sinon
         :rtype: float | None
         """
-        log.info("vérification des horaires...")
+        log.debug("vérification des horaires...")
         min_diff = inf
         for candidat in self.liste_candidats:
             heure_oral1 = candidat.oraux[0].heure_sujet
@@ -734,7 +738,7 @@ class AlgoOne:
         Résout l'appairage des oraux
         """
         i_matiere = 0
-        log.info(f"Run {self.numero_run} : Démarrage de l'appairage")
+        log.debug(f"Run {self.numero_run} : Démarrage de l'appairage")
         while i_matiere < len(self.liste_matieres):
             matiere_courante: Matiere = self.liste_matieres[i_matiere]
             log.debug(f"************ Matiere courante: {matiere_courante!s}")
@@ -753,8 +757,8 @@ class AlgoOne:
                     log.debug(f"{candidat}, {creneau_reference}, {creneau_oral}")
             # préparation de la matière suivante
             i_matiere += 1
-        log.info(f"Run {self.numero_run} : {len(self.liste_oraux)} oraux créés.")
-        log.info(f"Run {self.numero_run} : Fin de l'appairage")
+        log.debug(f"Run {self.numero_run} : {len(self.liste_oraux)} oraux créés.")
+        log.debug(f"Run {self.numero_run} : Fin de l'appairage")
         assert len(self.liste_oraux) == 2 * len(self.liste_candidats)
 
     @staticmethod
@@ -775,7 +779,7 @@ class AlgoOne:
         """
         Calcule les horaires des oraux à partir des créneaux.
         """
-        log.info(f"Run {self.numero_run} : Calcul des horaires")
+        log.debug(f"Run {self.numero_run} : Calcul des horaires")
         for matiere_courante in self.liste_matieres:
             for examinateur_courant in matiere_courante.examinateurs:
                 oraux_examinateur = examinateur_courant.oraux
@@ -809,7 +813,7 @@ class AlgoOne:
                         oraux_examinateur[i_oral].heure_fin = self.ajouter_temps(oraux_examinateur[i_oral].heure_oral,
                                                                                  matiere_courante.temps_oral)
                         n_oraux_avant_pause += 1
-        log.info(f"Run {self.numero_run} : fin de calcul des horaires.")
+        log.debug(f"Run {self.numero_run} : fin de calcul des horaires.")
 
     def statistiques(self) -> dict:
         """
@@ -835,7 +839,7 @@ class AlgoOne:
         pourcentage_occupe = nombre_creneaux / (nombre_trous + nombre_creneaux) * 100
         log.debug(f"Run {self.numero_run} : pourcentage d'oocupation des créneaux: {pourcentage_occupe}%")
         res = {"profs": round(pourcentage_occupe, 2), "candidats": ecart_mini_candidat}
-        log.info(f"Run {self.numero_run} : statistiques du run (%, min): {res}")
+        log.debug(f"Run {self.numero_run} : statistiques du run (%, min): {res}")
         return res
 
     def sauvegarder_oraux(self, filename) -> None:
@@ -861,7 +865,7 @@ class AlgoOne:
                     'Heure oral': oral.heure_oral.strftime('%H:%M') if oral.heure_oral else '',
                     'Heure fin': oral.heure_fin.strftime('%H:%M') if oral.heure_fin else ''
                 })
-        log.info(f"Run {self.numero_run} : Données des oraux sauvegardées dans {filename}")
+        log.debug(f"Run {self.numero_run} : Données des oraux sauvegardées dans {filename}")
 
 
 def algo_run(parameters):
@@ -870,21 +874,27 @@ def algo_run(parameters):
 
     :param parameters: Paramètres de configuration pour l'algorithme
     """
+    numero_run = parameters.get('numero_run', 0)
+    log.info(f"Run {numero_run} : lancement")
     alg = AlgoOne(**parameters)
     alg.setup_from_files()
     try:
         alg.resoudre()
     except AlgoError as e:
+        log.info(f"Run {numero_run} : fin (échec — {e})")
         return None, str(e)
     except RuntimeError as e:
+        log.info(f"Run {numero_run} : fin (échec — {e})")
         return None, str(e)
     alg.calcul_horaires()
     alg.verif_ecart_horaire()
     stats = alg.statistiques()
+    log.info(f"Run {numero_run} : fin ({stats})")
     return alg, stats
 
 
 if __name__ == '__main__':
+    log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
     n_err = 0              # nombre d'erreurs
     best_percentage = 0    # meilleur pourcentage de remplissage des créneaux profs
     min_students_time = 0  # meilleur temps mini entre oraux candidats

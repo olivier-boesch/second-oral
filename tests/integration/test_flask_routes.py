@@ -332,6 +332,22 @@ class TestAdminRoutes:
         assert body["ok"] is True
         assert body["params"]["heure_debut"] == "08:30"
         assert body["params"]["creneaux"]    == 12
+        assert body["params"]["debug"] is False
+
+    def test_save_params_debug_flag(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """L'option d'affichage détaillé (debug) doit être persistée."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70, "debug": True}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["debug"] is True
 
     def test_save_params_invalid(self, admin_client):
         r = admin_client.post(

@@ -226,6 +226,8 @@ Avant de lancer l'algorithme, s'assurer que :
 
 **Durée estimée :** 2 à 10 minutes selon le nombre de candidats et les ressources serveur.
 
+**Affichage détaillé (debug) :** dans les paramètres avancés, l'option **Affichage détaillé (debug)** permet d'afficher dans la console le détail interne de chaque run (chargement des données, appairage, calcul des horaires...), en plus du lancement et de la fin de chaque run affichés par défaut. Très verbeux — à activer uniquement pour diagnostiquer un problème.
+
 ### Étape 5 — Vérifier le résultat
 
 Après un lancement réussi :
