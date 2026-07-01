@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## [2026.2] — 2026-06-30
+## [2026.2] — 2026-07-01
 
 ### Added
 
@@ -10,6 +10,9 @@
 - Page liste des candidats (`/gestion/liste-candidats`) : tableau trié par nom, indicateur tiers-temps, accès direct à l'édition
 - Page édition candidat (`/gestion/edit-candidat`) : modification du nom complet, du numéro et du statut tiers-temps sans recalcul des oraux
 - Sélecteur multiple (multi-select) pour les établissements des examinateurs dans `/gestion/edit-examinateur`
+- Liens d'accès admin vers la liste des candidats depuis la page d'accueil (`index.html`)
+- Option **Affichage détaillé (debug)** dans les paramètres avancés de l'algo (`ALGO_DEBUG`) : affiche dans la console le détail interne de chaque run (chargement des données, appairage, calcul des horaires), en plus du lancement/fin de run affichés par défaut
+- Renouvellement des identifiants candidats/examinateurs : bouton "↺ Renouveler" par ligne directement depuis `/gestion/liste-candidats` et `/gestion/liste-examinateurs`, avec message et lien de téléchargement du fichier de lot regénéré, sans quitter la liste (`link_back`)
 
 **Infrastructure**
 - Route `GET /health` (vérification DB + Redis) exemptée du rate limiter — compatible orchestrateurs
@@ -17,8 +20,10 @@
 - Sentry : intégration optionnelle (`SENTRY_DSN` dans `.env`, `traces_sample_rate=0.05`, prod uniquement) — configuré via `setup_new_site.py --sentry-dsn` ou question interactive
 
 **Tests**
-- Tests unitaires pour `algo.py` : placement, capacité insuffisante, cohérence des horaires, écart minimum candidat, timing (`tests/unit/test_algo.py`)
+- Tests unitaires pour `algo.py` : placement, capacité insuffisante, cohérence des horaires, écart minimum candidat, timing (`tests/unit/test_algo.py`), option debug
+- Tests d'intégration : édition/suppression d'examinateurs (validation du nombre de requêtes, confirmation de la suppression), renouvellement des identifiants
 - Script de test de charge SSE (`tests/load/test_sse_rate_limit.py`)
+- Configuration pre-commit (`pytest` avant chaque commit)
 
 **Système de thème**
 - Palette CSS dérivée algorithmiquement depuis une couleur d'accent unique (`ACCENT_COLOR`) — route Flask `/theme.css` surchargeant les variables de `main.css`
@@ -38,6 +43,12 @@
 **Sécurité**
 - `algo.py` : credentials temporaires écrits dans `/dev/shm` (RAM, jamais sur disque) avec fallback sur `data/` si indisponible
 - `app.py` : `_CREDENTIALS_TMP_FILE` pointe vers `/dev/shm/second_oral_creds_new.json` (cohérent avec `algo.py`)
+- `app.py` : validation du nom de fichier `new_papillon` (regex anti path-traversal) harmonisée entre `/gestion/liste-examinateurs` et `/gestion/liste-candidats`
+
+**Algorithme**
+- `algo.py` : logs internes de chaque run passés de `INFO` à `DEBUG` (seuls le lancement, la fin et les échecs de chaque run restent en `INFO` par défaut) — console beaucoup moins verbeuse ; l'option **Affichage détaillé (debug)** réactive le détail complet
+- `algo.py` : verrou inter-processus (`multiprocessing.Lock`) autour des handlers de logging — les runs parallèles (Pool) partagent la même sortie/le même fichier et pouvaient entrelacer leurs écritures au milieu d'un caractère UTF-8 multi-octets, corrompant le flux lu côté serveur web
+- `algo_bg.py` : subprocess lancé avec `encoding="utf-8", errors="replace"` — un octet mal décodé ne fait plus planter le streaming SSE de la sortie de l'algo
 
 **Génération PDF**
 - Remplacement de `pypdftk` par `pypdf` pour la concaténation PDF — supprime la dépendance Java du Dockerfile
@@ -61,11 +72,15 @@
 **README**
 - Réécrit comme page d'entrée courte avec liens vers les docs — contenu détaillé extrait dans `docs/`
 
+**Divers**
+- Suppression du bouton "Recharger les pages" de `index_gestion.html` (déjà présent dans la sidebar admin)
+
 ### Fixed
 - Token CSRF dans la sidebar : conflit entre la variable `csrf_token` (string) passée au contexte de `gestion_algo` et la fonction Flask-WTF — résolu par test `is callable`
 - `algo.py` : erreur "Pas de créneau trouvé" remplacée par `PasDeCreneauDisponible` avec contexte (numéro candidat, nombre d'examinateurs) — causes loggées en `CRITICAL` quand tous les runs échouent
 - `reports.py` : ajout du répertoire `webserver/` au `sys.path` (erreur d'import à froid)
 - `db_facility_web.py` : requête `SELECT_INFOS_CANDIDAT_BY_ID` correctement nommée et utilisée
+- `db_facility_web.py` : `SELECT_EXAMINATEUR_INFOS` comptait `COUNT(*)` sur une jointure `LEFT OUTER JOIN Oral`, ce qui affichait 1 oral (au lieu de 0) pour un examinateur sans oral assigné — remplacé par `COUNT(Oral.id)`
 
 ### Removed
 - Dépendance Java (suppression de `pypdftk`, remplacé par `pypdf`)
