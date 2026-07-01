@@ -53,14 +53,10 @@
         });
     }
 
-    // Pause quand l'onglet est masqué (économise une connexion Redis)
-    document.addEventListener("visibilitychange", function () {
-        if (document.hidden) {
-            if (source) { source.close(); source = null; }
-        } else {
-            connect();
-        }
-    });
+    // Le flux reste ouvert même onglet masqué : le fermer ferait perdre les
+    // events publiés pendant ce temps (Redis pub/sub ne rejoue rien à la
+    // reconnexion), ex. un admin qui édite un oral dans un autre onglet
+    // pendant que la fiche candidat est en arrière-plan.
 
     // Fermeture propre à la navigation
     window.addEventListener("beforeunload", function () {
