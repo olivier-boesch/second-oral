@@ -10,9 +10,13 @@
 {% include 'admin_nav.html' %}
     <h1>Liste des Examinateurs</h1>
     {% if new_papillon %}
-    <p class="success">
-        Examinateur créé.
-        <a href="{{ url_for('download', filename=new_papillon) }}" target="_blank">Imprimer le papillon d'accès</a>
+    <p style="background:#d1fae5; color:#065f46; border-left:4px solid #059669;
+              padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
+        ✔ Identifiants renouvelés.
+        <a href="{{ url_for('download', filename=new_papillon) }}" target="_blank"
+           style="color:#065f46; font-weight:600;">
+            Imprimer le nouveau fichier de lot
+        </a>
     </p>
     {% endif %}
     <div style="margin-bottom:.75rem;">
@@ -43,6 +47,9 @@
             </th>
             <th>
                 Supprimer
+            </th>
+            <th>
+                Identifiants
             </th>
         </tr>
         {% for ex in examinateurs %}
@@ -89,6 +96,16 @@
                         {% endif %}
                     <span class="tooltiptext">Supprimer maintenant <b>SANS CONFIRMATION !</b></span>
                     </div>
+                </td>
+                <td>
+                    <form method="post" action="{{ url_for('renew_examinateur', id=ex['id']) }}" style="margin:0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="link_back" value="{{ url_of_page }}">
+                        <button type="submit" class="outline" style="font-size:.8rem; padding:.2em .6em;"
+                                onclick="return confirm('Renouveler les identifiants de {{ ex['nom'] }} ? Le papillon sera regénéré.')">
+                            ↺ Renouveler
+                        </button>
+                    </form>
                 </td>
             </tr>
         {% endfor %}

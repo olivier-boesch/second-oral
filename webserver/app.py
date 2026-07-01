@@ -18,7 +18,7 @@ import zipfile
 from pathlib import Path
 from datetime import datetime
 from functools import wraps
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlencode, urlparse, urlunparse
 
 import logging
 import pyotp
@@ -478,6 +478,16 @@ def _safe_redirect_url(url):
     if parsed.netloc and parsed.netloc != request.host:
         return None
     return url
+
+
+def _add_query_param(url: str, **params) -> str:
+    """Ajoute des paramètres de requête à une URL relative déjà validée par
+    _safe_redirect_url (utilisé pour transmettre new_papillon via link_back)."""
+    parsed = urlparse(url)
+    query = urlencode(params)
+    if parsed.query:
+        query = f"{parsed.query}&{query}"
+    return urlunparse(parsed._replace(query=query))
 
 
 def is_admin_user():
@@ -1586,7 +1596,8 @@ def liste_examinateurs() -> ResponseReturnValue:
     """Liste des examinateurs avec leurs salles, loges et nombre d'oraux."""
     examinateurs = db_get(db_facility_web.SELECT_LISTE_EXAMINATEURS, no_list_auto=False)
     _raw = request.args.get('new_papillon', '')
-    new_papillon = _raw if re.match(r'^papillons_salle_[\w\-]+\.pdf$', _raw) else ''
+    # Valider le nom de fichier (même règle que la route /download — anti path-traversal)
+    new_papillon = _raw if re.match(r'^[\w\-. ]+\.pdf$', _raw) else ''
     return render_template(
         'liste_examinateurs.html',
         centre=CENTRE_EXAMEN,
@@ -1604,6 +1615,9 @@ def liste_examinateurs() -> ResponseReturnValue:
 def liste_candidats() -> ResponseReturnValue:
     """Liste des candidats avec accès à l'édition de leurs informations."""
     candidats = db_get(db_facility_web.SELECT_ALL_CANDIDATS, no_list_auto=False)
+    _raw = request.args.get('new_papillon', '')
+    # Valider le nom de fichier (même règle que la route /download — anti path-traversal)
+    new_papillon = _raw if re.match(r'^[\w\-. ]+\.pdf$', _raw) else ''
     return render_template(
         'liste_candidats.html',
         centre=CENTRE_EXAMEN,
@@ -1611,6 +1625,7 @@ def liste_candidats() -> ResponseReturnValue:
         url_of_page=request.url,
         username=get_username(),
         authenticated=is_authenticated(),
+        new_papillon=new_papillon,
     )
 
 
@@ -2659,13 +2674,20 @@ def gestion_credentials() -> ResponseReturnValue:
 @admin_required
 @nocache
 def renew_candidat(id: int) -> ResponseReturnValue:
-    """Renouvelle les identifiants d'un candidat (login_key + password_hash).
+    """Renouvelle les identifiants d'un candidat (login_key + password_hash)
+    et regénère le PDF groupé papillons_candidats.pdf.
 
     :param id: Identifiant DB du candidat.
-    :returns: Redirection vers /gestion/credentials.
+    :returns: Redirection vers link_back si fourni, sinon /gestion/credentials.
     """
     _renew_candidat(id)
-    return redirect(url_for('gestion_credentials'))
+    base_url = request.host_url.rstrip('/')
+    papillon_filename = 'papillons_candidats.pdf'
+    _regenerer_papillons_candidats(base_url)
+    url = _safe_redirect_url(request.form.get('link_back'))
+    if url:
+        return redirect(_add_query_param(url, new_papillon=papillon_filename))
+    return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
 
 
 @app.route("/gestion/credentials/candidats", methods=["POST"])
@@ -2699,6 +2721,9 @@ def renew_examinateur(id: int) -> ResponseReturnValue:
     base_url = request.host_url.rstrip('/')
     papillon_filename = 'papillons_examinateurs.pdf'
     _regenerer_papillons_examinateurs(base_url)
+    url = _safe_redirect_url(request.form.get('link_back'))
+    if url:
+        return redirect(_add_query_param(url, new_papillon=papillon_filename))
     return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
 
 

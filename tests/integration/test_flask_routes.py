@@ -1096,10 +1096,13 @@ class TestCredentialRenewal:
 
     # ── Candidat ─────────────────────────────────────────────────────────────
 
-    def test_renew_candidat_updates_db(self, admin_client, db_mock):
+    def test_renew_candidat_updates_db(self, admin_client, db_mock, monkeypatch):
         """Renouveler un candidat appelle db_update avec login_key et password_hash."""
+        import app as app_module
         db_mock.make_sql_update.reset_mock()
         db_mock.make_sql_select.return_value = [self.CANDIDAT]
+        monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
+                            lambda *a, **kw: None)
         r = admin_client.post("/gestion/credentials/candidat/1",
                               follow_redirects=False)
         assert r.status_code == 302
@@ -1108,6 +1111,20 @@ class TestCredentialRenewal:
         assert "login_key" in kwargs
         assert "password_hash" in kwargs
         assert kwargs["login_key"] != ""
+
+    def test_renew_candidat_redirects_to_link_back(self, admin_client, db_mock, monkeypatch):
+        """Renouveler un candidat depuis la liste des candidats revient sur cette page,
+        avec le nom du fichier de lot regénéré en query string."""
+        import app as app_module
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.return_value = [self.CANDIDAT]
+        monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
+                            lambda *a, **kw: None)
+        r = admin_client.post("/gestion/credentials/candidat/1",
+                              data={"link_back": "/gestion/liste-candidats"},
+                              follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["Location"] == "/gestion/liste-candidats?new_papillon=papillons_candidats.pdf"
 
     def test_renew_all_candidats(self, admin_client, db_mock, monkeypatch):
         """Renouveler tous les candidats appelle db_update une fois par candidat
@@ -1154,6 +1171,22 @@ class TestCredentialRenewal:
         db_mock.make_sql_update.assert_called_once()
         _, kwargs = db_mock.make_sql_update.call_args
         assert "password_hash" in kwargs
+
+    def test_renew_examinateur_redirects_to_link_back(self, admin_client, db_mock, tmp_path, monkeypatch):
+        """Renouveler un examinateur depuis la liste des examinateurs revient sur cette page,
+        avec le nom du fichier de lot regénéré en query string."""
+        import app as app_module
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.return_value = [self.EXAMINATEUR]
+        (tmp_path / "static" / "docs").mkdir(parents=True)
+        monkeypatch.setattr(app_module, "root_path", str(tmp_path), raising=False)
+        monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
+                            lambda *a, **kw: None)
+        r = admin_client.post("/gestion/credentials/examinateur/10",
+                              data={"link_back": "/gestion/liste-examinateurs"},
+                              follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["Location"] == "/gestion/liste-examinateurs?new_papillon=papillons_examinateurs.pdf"
 
     def test_renew_all_examinateurs(self, admin_client, db_mock, tmp_path, monkeypatch):
         """Renouveler tous les examinateurs appelle db_update une fois par examinateur."""

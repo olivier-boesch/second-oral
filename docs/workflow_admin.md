@@ -270,7 +270,7 @@ Sur la page `/gestion/documents` (accueil admin → bloc **Préparation** → Do
 
 ### Forcer le rechargement de toutes les pages
 
-Sur `/gestion`, cliquer **Recharger toutes les pages** : tous les navigateurs connectés rechargent instantanément.
+Dans la barre latérale admin (icône ↺, présente sur toutes les pages de gestion), cliquer **Recharger les pages** : tous les navigateurs connectés rechargent instantanément.
 
 ### Ajouter ou modifier un examinateur
 
@@ -282,13 +282,15 @@ Sur `/gestion`, cliquer **Recharger toutes les pages** : tous les navigateurs co
 
 | Catégorie | Granularité | Effet |
 |---|---|---|
-| **Candidats** | Un ou tous | Génère un nouveau `login_key` + hash en DB |
+| **Candidats** | Un ou tous | Génère un nouveau `login_key` + hash en DB + regénère le fichier de lot papillons_candidats.pdf |
 | **Examinateurs** | Un ou tous | Génère un nouveau mot de passe + hash en DB + regénère le papillon PDF |
 | **Loges** | Une ou toutes | Génère un nouveau mot de passe + hash en DB + regénère le papillon PDF |
 
 **Stockage sécurisé :** les mots de passe en clair des examinateurs et des loges sont chiffrés (AES-256-GCM) dans `data/credentials.enc`. Ce store est initialisé automatiquement à la fin de chaque lancement de l'algorithme, et mis à jour à chaque renouvellement.
 
 > **Cas d'usage :** un examinateur perd son papillon → aller sur `/gestion/credentials`, cliquer "Renouveler" sur la ligne de cet examinateur → un nouveau papillon PDF est regénéré et disponible au téléchargement.
+
+**Renouvellement individuel depuis les listes :** `/gestion/liste-candidats` et `/gestion/liste-examinateurs` disposent chacune d'une colonne **Identifiants** avec un bouton "↺ Renouveler" par ligne. C'est un raccourci vers la même action que ci-dessus, sans quitter la liste : l'admin reste sur la page après renouvellement, avec un message en haut de page pointant vers le fichier de lot regénéré (même bandeau que sur `/gestion/credentials`).
 
 ---
 
