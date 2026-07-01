@@ -73,6 +73,12 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            # errors="replace" : filet de sécurité en cas de corruption résiduelle
+            # (les runs parallèles sont désormais sérialisés côté algo.py via un
+            # verrou inter-processus, mais on ne veut jamais faire planter le
+            # streaming pour un octet mal décodé).
+            errors="replace",
             bufsize=1,
             env=env,
         )

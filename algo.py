@@ -12,6 +12,7 @@ from os.path import join
 from random import shuffle
 from typing import Union
 from multiprocessing import Pool
+from multiprocessing import Lock as _mp_Lock
 
 import colorama
 
@@ -106,10 +107,29 @@ class CustomFormatter(logging.Formatter):
 # objets log
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
-ch = logging.StreamHandler()
+
+# Verrou inter-processus : les runs sont exécutés en parallèle via multiprocessing.Pool
+# et héritent (fork) de ces mêmes handlers, donc du même descripteur de sortie standard /
+# fichier. Sans sérialisation, deux processus peuvent entrelacer leurs écritures au milieu
+# d'un caractère multi-octets (✔, ✘...), corrompant le flux UTF-8 lu côté serveur web.
+_LOG_LOCK = _mp_Lock()
+
+class _LockedEmitMixin:
+    """Sérialise emit() entre processus via _LOG_LOCK (cf. commentaire ci-dessus)."""
+    def emit(self, record):
+        with _LOG_LOCK:
+            super().emit(record)
+
+class LockedStreamHandler(_LockedEmitMixin, logging.StreamHandler):
+    pass
+
+class LockedFileHandler(_LockedEmitMixin, logging.FileHandler):
+    pass
+
+ch = LockedStreamHandler()
 ch.setLevel(logging.DEBUG if DEBUG_DISPLAY else logging.INFO)
 ch.setFormatter(CustomFormatter())
-fh = logging.FileHandler(join(DATA_DIR, "log.txt"), mode='w')
+fh = LockedFileHandler(join(DATA_DIR, "log.txt"), mode='w')
 fh.setLevel(logging.DEBUG)
 fh.setFormatter(logging.Formatter("%(relativeCreated)-12.3f [%(levelname)-8s] %(message)s (%(filename)s:%(lineno)d)"))
 log.addHandler(ch)
