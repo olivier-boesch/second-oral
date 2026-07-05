@@ -7,13 +7,12 @@ import logging
 import sys
 from csv import DictReader, DictWriter
 from datetime import timedelta, datetime, time, date
-from logging.handlers import QueueHandler, QueueListener
 from math import ceil, inf
 from os.path import join
 from random import shuffle
 from typing import Union
 from multiprocessing import Pool
-from multiprocessing import Queue as _mp_Queue
+from multiprocessing import Lock as _mp_Lock
 
 import colorama
 
@@ -109,7 +108,40 @@ class CustomFormatter(logging.Formatter):
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-ch = logging.StreamHandler()
+# Verrou inter-processus : les runs sont exécutés en parallèle via
+# multiprocessing.Pool et héritent (fork) des mêmes handlers/descripteurs de
+# sortie standard, donc du même pipe lu côté serveur web (SSE). Sans
+# sérialisation, deux processus peuvent entrelacer leurs écritures au milieu
+# d'un caractère UTF-8 multi-octets (✔, ✘...), corrompant ce flux.
+#
+# Ce verrou ne protège QUE `ch` (la console, seule piped vers le serveur
+# web) — surtout pas `fh` (fichier local `data/log.txt`, jamais lu par le
+# serveur). fh est toujours au niveau DEBUG (indépendamment de ALGO_DEBUG),
+# donc c'est lui qui reçoit l'immense majorité du volume de logs (plusieurs
+# centaines de milliers d'appels log.debug() sur un batch N_run=1000, dans
+# les boucles per-candidat). Un verrou dessus re-sérialiserait une grande
+# partie d'un calcul censé être parallèle pour un bénéfice quasi nul (un
+# fichier de diagnostic local dont l'éventuel entrelacement de lignes n'a
+# aucun impact fonctionnel). `ch`, lui, ne reçoit que l'INFO par défaut
+# (~2 lignes/run), donc le coût du verrou y est négligeable.
+#
+# (Une première tentative avait remplacé ce verrou par un
+# QueueHandler/QueueListener pour éliminer toute contention — mais avec ce
+# volume de logs par candidat, le coût de pickling de chaque LogRecord plus
+# la consommation mono-thread du listener se sont révélés bien pires que le
+# verrou lui-même : préférer ce correctif ciblé, plus simple et plus rapide.)
+_LOG_LOCK = _mp_Lock()
+
+class _LockedEmitMixin:
+    """Sérialise emit() entre processus via _LOG_LOCK (cf. commentaire ci-dessus)."""
+    def emit(self, record):
+        with _LOG_LOCK:
+            super().emit(record)
+
+class LockedStreamHandler(_LockedEmitMixin, logging.StreamHandler):
+    pass
+
+ch = LockedStreamHandler()
 ch.setLevel(logging.DEBUG if DEBUG_DISPLAY else logging.INFO)
 ch.setFormatter(CustomFormatter())
 fh = logging.FileHandler(join(DATA_DIR, "log.txt"), mode='w')
@@ -117,43 +149,6 @@ fh.setLevel(logging.DEBUG)
 fh.setFormatter(logging.Formatter("%(relativeCreated)-12.3f [%(levelname)-8s] %(message)s (%(filename)s:%(lineno)d)"))
 log.addHandler(ch)
 log.addHandler(fh)
-
-# Logging inter-processus : les runs sont exécutés en parallèle via
-# multiprocessing.Pool et héritent (fork) des mêmes handlers/descripteurs de
-# sortie standard / fichier. Un premier correctif avait ajouté un
-# multiprocessing.Lock() autour de chaque emit() pour empêcher deux processus
-# d'entrelacer leurs écritures au milieu d'un caractère UTF-8 multi-octets
-# (✔, ✘...) et corrompre le flux lu côté serveur web (SSE). Ce verrou
-# protégeait aussi le fichier de log local (jamais lu par le serveur web) et
-# était acquis à chaque log.debug() — plusieurs centaines de milliers de fois
-# sur un batch de N_run=1000 — ce qui re-sérialisait une grande partie d'un
-# calcul censé être parallèle.
-#
-# Remplacé par le pattern standard multiprocessing de la doc Python
-# (« Dealing with handlers that block ») : les workers du Pool poussent
-# leurs LogRecord dans une Queue (put() côté producteur, pas de verrou
-# applicatif) et un unique QueueListener, démarré dans le processus
-# principal, est seul à appeler réellement ch.emit()/fh.emit() — écriture
-# mono-thread, donc aucune contention ni risque de corruption, sans coût
-# supplémentaire par ligne de log.
-_log_queue = _mp_Queue(-1)
-
-
-def _start_queue_logging() -> QueueListener:
-    """Redirige `log` vers _log_queue et démarre le listener qui écrit
-    réellement dans ch/fh.
-
-    À appeler avant de créer le Pool : les workers forkés n'auront alors
-    que le QueueHandler (aucun accès direct à ch/fh), et le listener —
-    qui tourne dans un thread du seul processus principal — fait toute
-    l'écriture réelle.
-    """
-    log.removeHandler(ch)
-    log.removeHandler(fh)
-    log.addHandler(QueueHandler(_log_queue))
-    listener = QueueListener(_log_queue, ch, fh, respect_handler_level=True)
-    listener.start()
-    return listener
 
 
 def charger_fichier_comme_liste(filename: str) -> list:
@@ -934,7 +929,6 @@ def algo_run(parameters):
 
 
 if __name__ == '__main__':
-    _log_listener = _start_queue_logging()
     log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
     n_err = 0              # nombre d'erreurs
     best_percentage = 0    # meilleur pourcentage de remplissage des créneaux profs
@@ -983,7 +977,6 @@ if __name__ == '__main__':
         )
         for err in run_errors:
             log.critical(f"  Cause : {err}")
-        _log_listener.stop()
         sys.exit(1)
     log.info("Meilleur Algo:")
     final_stats = best_alg.statistiques()
@@ -1044,4 +1037,3 @@ if __name__ == '__main__':
     )
     log.info(f"Papillons enregistrés dans {DOCS_DIR}")
     log.info("Fin ----")
-    _log_listener.stop()
