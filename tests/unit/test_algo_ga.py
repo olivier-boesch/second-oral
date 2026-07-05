@@ -240,3 +240,24 @@ class TestAlgoGARandomisation:
 
         resultats = {_placement(i) for i in range(5)}
         assert len(resultats) > 1, "les 5 runs ont produit exactement la même affectation"
+
+
+class TestAlgoGAEquiteEntreExaminateurs:
+    """Le fitness doit répartir la charge équitablement entre examinateurs
+    d'une même matière (pénalité de déséquilibre)."""
+
+    def test_charge_equilibree_entre_deux_examinateurs(self, tmp_path):
+        from collections import Counter
+        alg = _build_algo_ga(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"130000000{i}") for i in range(10)],
+            exams=[
+                _exam("ProfA", "Maths", "A101"), _exam("ProfA2", "Maths", "A102"),
+                _exam("ProfB", "Philo", "B101"),
+            ],
+        )
+        alg.resoudre()
+        charges = Counter(
+            o.examinateur.nom for o in alg.liste_oraux if o.matiere.nom == "Maths"
+        )
+        assert max(charges.values()) - min(charges.values()) <= 1

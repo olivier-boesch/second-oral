@@ -16,6 +16,23 @@ preps.csv ──────┘             │                                 
                               └─ genetic : population → générations (algo_ga.py) ─────┘
 ```
 
+### Équité entre examinateurs d'une même matière
+
+Les trois moteurs répartissent la charge le plus équitablement possible entre les
+examinateurs d'une même matière (écart maximum d'1 oral entre le plus chargé et
+le moins chargé, quand la répartition parfaite n'est pas un multiple exact) :
+
+- **`monte_carlo`** : `AlgoOne.recherche_creneau()` choisit, parmi les
+  examinateurs offrant un créneau valide, celui qui a le moins d'oraux déjà
+  attribués (la proximité du créneau au matin n'intervient qu'en cas d'égalité).
+- **`cpsat`** : un terme d'objectif pénalise l'écart entre la charge maximale et
+  minimale par matière, avec un poids délibérément énorme par rapport au terme
+  de tassement des créneaux — le solveur ne sacrifie jamais l'équité pour un
+  meilleur tassement.
+- **`genetic`** : le fitness pénalise ce même écart de charge (`_PENALITE_DESEQUILIBRE`),
+  avec un poids qui domine les variations d'occupation sans toutefois l'emporter
+  sur une vraie violation d'écart minimum candidat.
+
 ---
 
 ## Lancement

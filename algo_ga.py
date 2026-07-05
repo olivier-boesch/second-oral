@@ -48,6 +48,7 @@ class _Evaluation:
     occupation_pct: float
     violations_exclusion: int
     violations_ecart: int
+    desequilibre_charge: int
 
 
 # Un individu est un dict {id(matiere): permutation}, où `permutation` est une
@@ -70,6 +71,7 @@ class AlgoGA(AlgoOne):
     _TOURNAMENT_SIZE = 3
     _PENALITE_EXCLUSION = 1000
     _PENALITE_ECART = 50
+    _PENALITE_DESEQUILIBRE = 20
 
     def _construire_matiere_data(self) -> dict[int, dict]:
         """Précalcule, par matière, les créneaux disponibles et les examinateurs
@@ -196,6 +198,21 @@ class AlgoGA(AlgoOne):
                 if deficit > 0:
                     violations_ecart += deficit
 
+        # Équité de charge entre examinateurs d'une même matière : pénalise
+        # l'écart entre l'examinateur le plus chargé et le moins chargé.
+        # Poids choisi pour dominer nettement les variations d'occupation
+        # (0-100%) sans pour autant l'emporter sur une vraie violation
+        # d'écart minimum (cf. _PENALITE_ECART) — l'équité est une
+        # préférence de qualité forte, pas une règle absolue comme
+        # l'exclusion établissement/prof à éviter.
+        desequilibre_charge = 0
+        for data in matiere_data.values():
+            examinateurs = data['matiere'].examinateurs
+            if len(examinateurs) < 2:
+                continue
+            charges = [len(creneaux_par_examinateur.get(id(e), ())) for e in examinateurs]
+            desequilibre_charge += max(charges) - min(charges)
+
         # Occupation : même logique que AlgoOne.statistiques() (trous parmi
         # les créneaux réellement disponibles avant le dernier utilisé), mais
         # calculée directement sur le chromosome pour rester rapide — cette
@@ -219,8 +236,11 @@ class AlgoGA(AlgoOne):
             occupation_pct
             - self._PENALITE_EXCLUSION * violations_exclusion
             - self._PENALITE_ECART * violations_ecart
+            - self._PENALITE_DESEQUILIBRE * desequilibre_charge
         )
-        return _Evaluation(fitness, occupation_pct, violations_exclusion, violations_ecart)
+        return _Evaluation(
+            fitness, occupation_pct, violations_exclusion, violations_ecart, desequilibre_charge,
+        )
 
     def _tournoi(self, evalues: list[tuple[_Evaluation, _Individu]]) -> _Individu:
         contestants = random.sample(evalues, min(self._TOURNAMENT_SIZE, len(evalues)))

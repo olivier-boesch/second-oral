@@ -623,3 +623,41 @@ class TestPetitesMatieresFinJournee:
         musique = next(m for m in alg.liste_matieres if m.nom == "Musique")
         prof_musique = musique.examinateurs[0]
         assert not any(isinstance(o, CreneauInterdit) for o in prof_musique.oraux)
+
+
+class TestEquiteEntreExaminateurs:
+    """recherche_creneau doit répartir la charge équitablement entre les
+    examinateurs d'une même matière (priorité au moins chargé)."""
+
+    def test_charge_equilibree_entre_deux_examinateurs(self, tmp_path):
+        from collections import Counter
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"930000000{i}") for i in range(10)],
+            exams=[
+                _exam("ProfA", "Maths", "A101"), _exam("ProfA2", "Maths", "A102"),
+                _exam("ProfB", "Philo", "B101"),
+            ],
+        )
+        alg.resoudre()
+        charges = Counter(
+            o.examinateur.nom for o in alg.liste_oraux if o.matiere.nom == "Maths"
+        )
+        assert max(charges.values()) - min(charges.values()) <= 1
+
+    def test_charge_equilibree_trois_examinateurs_nombre_non_divisible(self, tmp_path):
+        from collections import Counter
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"940000000{i}") for i in range(10)],
+            exams=[
+                _exam("ProfA", "Maths", "A101"), _exam("ProfA2", "Maths", "A102"),
+                _exam("ProfA3", "Maths", "A103"), _exam("ProfB", "Philo", "B101"),
+            ],
+        )
+        alg.resoudre()
+        charges = Counter(
+            o.examinateur.nom for o in alg.liste_oraux if o.matiere.nom == "Maths"
+        )
+        assert len(charges) == 3
+        assert max(charges.values()) - min(charges.values()) <= 1

@@ -44,6 +44,15 @@
 - `tests/unit/test_rebalance.py` : placement au même horaire en priorité, repli sur un autre horaire avec écart minimum respecté, exclusions établissement/prof à éviter, rééquilibrage de charge vers un renfort
 - `tests/integration/test_disponibilite_examinateur.py` : câblage de la route (formulaire, prévisualisation, confirmation + notification SSE)
 
+**Algorithme de placement (suite 3) — équité entre examinateurs**
+- Les trois moteurs de placement (Monte-Carlo, CP-SAT, génétique) répartissent désormais la charge le plus équitablement possible entre les examinateurs d'une même matière (écart maximum d'1 oral), et non plus seulement au mieux du tassement
+- Monte-Carlo (`AlgoOne.recherche_creneau`) : priorité à l'examinateur le moins chargé, la proximité du créneau au matin ne servant plus qu'à départager une égalité
+- CP-SAT (`algo_cp.py`) : terme d'objectif pénalisant l'écart de charge par matière, avec un poids dominant très largement le terme de tassement existant
+- Génétique (`algo_ga.py`) : pénalité de déséquilibre de charge dans le fitness (`_PENALITE_DESEQUILIBRE`), dominant les variations d'occupation sans l'emporter sur une vraie violation d'écart minimum
+
+**Tests (suite 4)**
+- Nouveaux tests d'équité de charge dans `test_algo.py`, `test_algo_cp.py`, `test_algo_ga.py` (écart maximum d'1 oral entre examinateurs d'une même matière, y compris avec un nombre de candidats non divisible par le nombre d'examinateurs)
+
 ## [2026.2] — 2026-07-01
 
 ### Added

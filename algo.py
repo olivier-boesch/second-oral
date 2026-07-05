@@ -813,22 +813,35 @@ class AlgoOne:
         :type candidat: Candidat
         :return: Tuple contenant le numéro du créneau disponible et l'examinateur choisi
         :rtype: tuple[int, Examinateur]
+
+        .. note::
+            Priorité à l'équité entre examinateurs d'une même matière : parmi les
+            examinateurs offrant un créneau valide, on choisit d'abord celui qui a
+            le moins d'oraux déjà attribués (charge la plus faible), et seulement
+            en cas d'égalité celui dont le créneau est le plus proche du matin.
+            Sans ce critère de charge, le glouton a tendance à privilégier
+            systématiquement le même examinateur (celui dont le prochain créneau
+            libre est le plus tôt), au détriment d'une répartition équilibrée.
         """
-        creneau_plus_proche = self.max_creneaux_journee + 1
+        meilleur_choix: tuple[int, int] | None = None  # (charge, creneau)
         examinateur_choisi = None
         shuffle(liste_examinateur)
         for examinateur in liste_examinateur:
             creneau = examinateur.recherche_creneau(creneau_reference, self.creneaux_minimum_entre_oraux, candidat)
-            # le plus proche possible du matin et avec un écart suffisant
-            if creneau is not None and creneau < creneau_plus_proche \
-                    and self.verif_ecart_creneaux(creneau, creneau_reference):
-                creneau_plus_proche = creneau
+            if creneau is None or not self.verif_ecart_creneaux(creneau, creneau_reference):
+                continue
+            charge = sum(
+                1 for o in examinateur.oraux if o is not None and not isinstance(o, CreneauInterdit)
+            )
+            candidat_choix = (charge, creneau)
+            if meilleur_choix is None or candidat_choix < meilleur_choix:
+                meilleur_choix = candidat_choix
                 examinateur_choisi = examinateur
         # rien trouvé -> Exception
-        if creneau_plus_proche == self.max_creneaux_journee + 1:
+        if meilleur_choix is None:
             log.critical(f"Run {self.numero_run} : Pas de créneau trouvé")
             raise PasDeCreneauDisponible(candidat, len(liste_examinateur))
-        return creneau_plus_proche, examinateur_choisi
+        return meilleur_choix[1], examinateur_choisi
 
     def verif_ecart_creneaux(self, creneau1, creneau2) -> bool:
         """

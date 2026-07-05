@@ -148,8 +148,10 @@ class AlgoCP(AlgoOne):
 
         # un examinateur ne peut recevoir qu'un seul candidat par créneau
         par_examinateur_creneau: dict[tuple, list] = {}
+        vars_par_examinateur: dict[Examinateur, list] = {}
         for (_candidat, _choix_attr, examinateur, creneau), var in x.items():
             par_examinateur_creneau.setdefault((examinateur, creneau), []).append(var)
+            vars_par_examinateur.setdefault(examinateur, []).append(var)
         for vars_ in par_examinateur_creneau.values():
             model.AddAtMostOne(vars_)
 
@@ -174,6 +176,35 @@ class AlgoCP(AlgoOne):
             model.AddAbsEquality(abs_diff, diff)
             model.Add(abs_diff >= self.creneaux_minimum_entre_oraux)
 
+        # Équité de charge entre examinateurs d'une même matière : pour chaque
+        # matière ayant plusieurs examinateurs, on pénalise l'écart entre
+        # l'examinateur le plus chargé et le moins chargé (nombre d'oraux
+        # reçus). Poids délibérément énorme par rapport à la contribution
+        # maximale possible du terme de tassement ci-dessous (POIDS_EQUITE >>
+        # max_creneau * BRUIT_ECHELLE * nombre de variables) : le solveur
+        # sacrifie toujours un meilleur tassement pour une meilleure
+        # répartition de charge, jamais l'inverse.
+        POIDS_EQUITE = 1_000_000
+        ecarts_charge = []
+        for matiere in self.liste_matieres:
+            examinateurs = examinateurs_par_matiere[id(matiere)]
+            charges = [
+                vars_par_examinateur[e] for e in examinateurs if e in vars_par_examinateur
+            ]
+            if len(charges) < 2:
+                continue
+            n_candidats_matiere = len(matiere.candidats)
+            charge_vars = []
+            for i, vars_examinateur in enumerate(charges):
+                charge = model.NewIntVar(0, n_candidats_matiere, f"charge_{matiere.nom}_{i}")
+                model.Add(charge == sum(vars_examinateur))
+                charge_vars.append(charge)
+            charge_max = model.NewIntVar(0, n_candidats_matiere, f"chargemax_{matiere.nom}")
+            charge_min = model.NewIntVar(0, n_candidats_matiere, f"chargemin_{matiere.nom}")
+            model.AddMaxEquality(charge_max, charge_vars)
+            model.AddMinEquality(charge_min, charge_vars)
+            ecarts_charge.append(charge_max - charge_min)
+
         # Objectif : tasser les oraux tôt dans la journée (réduit les trous
         # avant le dernier créneau utilisé par examinateur -> meilleur taux
         # d'occupation, cf. AlgoOne.statistiques()), MAIS avec un bruit
@@ -182,14 +213,15 @@ class AlgoCP(AlgoOne):
         # lui, le solveur choisirait systématiquement la même solution parmi
         # toutes celles à égalité de score (fréquent ici — de nombreux
         # examinateurs d'une même matière sont interchangeables). Le terme
-        # `creneau * BRUIT_ECHELLE` reste dominant, donc la solution reste
-        # proche de l'optimum du tassement ; seul le choix entre solutions
-        # quasi équivalentes change à chaque run.
+        # `creneau * BRUIT_ECHELLE` reste dominant sur le tassement, donc la
+        # solution reste proche de l'optimum du tassement ; seul le choix
+        # entre solutions quasi équivalentes change à chaque run.
         BRUIT_ECHELLE = 25
-        model.Minimize(sum(
+        objectif_tassement = sum(
             (creneau * BRUIT_ECHELLE + random.randint(0, BRUIT_ECHELLE - 1)) * var
             for (_c, _m, _e, creneau), var in x.items()
-        ))
+        )
+        model.Minimize(POIDS_EQUITE * sum(ecarts_charge) + objectif_tassement)
 
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(ALGO_CP_TIMEOUT)
