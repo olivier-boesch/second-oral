@@ -84,8 +84,18 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
             if "heure_debut" in params: env["ALGO_HEURE_DEBUT"] = str(params["heure_debut"])
             if "creneaux"    in params: env["ALGO_CRENEAUX"]    = str(params["creneaux"])
             if "debug"       in params: env["ALGO_DEBUG"]       = "1" if params["debug"] else "0"
-            if "engine"      in params: env["ALGO_ENGINE"]      = str(params["engine"])
-            if "cp_timeout"  in params: env["ALGO_CP_TIMEOUT"]  = str(params["cp_timeout"])
+            if "engine" in params:
+                env["ALGO_ENGINE"] = str(params["engine"])
+            if "cp_timeout" in params:
+                env["ALGO_CP_TIMEOUT"] = str(params["cp_timeout"])
+            if "ga_population" in params:
+                env["ALGO_GA_POPULATION"] = str(params["ga_population"])
+            if "ga_generations" in params:
+                env["ALGO_GA_GENERATIONS"] = str(params["ga_generations"])
+            if "ga_timeout" in params:
+                env["ALGO_GA_TIMEOUT"] = str(params["ga_timeout"])
+            if "ga_mutation_rate" in params:
+                env["ALGO_GA_MUTATION_RATE"] = str(params["ga_mutation_rate"])
         # Force le mode non-bufférisé : chaque ligne est envoyée immédiatement
         # sans attendre le remplissage du buffer stdout Python (crucial pour le
         # streaming temps-réel vers le log console).

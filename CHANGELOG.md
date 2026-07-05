@@ -14,6 +14,16 @@
 **Tests**
 - `tests/unit/test_algo_cp.py` : placement, écart minimum garanti, exclusions établissement/prof à éviter, créneaux interdits, cas infaisables (`AucuneSolutionCP`), variabilité entre runs
 
+**Algorithme de placement (suite)**
+- Troisième moteur de résolution, sélectionnable depuis `/gestion/algo` (paramètre `engine`) ou via `ALGO_ENGINE` : algorithme génétique (`algo_ga.py`, `AlgoGA`), en complément des moteurs Monte-Carlo et CP-SAT
+- Encodage par permutation (un chromosome par matière), sélection par tournoi, croisement OX, mutation, élitisme et réparation locale des violations d'exclusion établissement/prof à éviter
+- Les exclusions établissement/prof à éviter sont vérifiées strictement en fin d'évolution (règle métier absolue) : l'algorithme échoue explicitement (`AucuneSolutionGA`) plutôt que de publier un planning qui les enfreindrait ; l'écart minimum candidat reste best-effort (pénalité de fitness), comme pour le Monte-Carlo
+- Nouveaux paramètres `ga_population`, `ga_generations`, `ga_timeout`, `ga_mutation_rate` (`ALGO_GA_POPULATION`, `ALGO_GA_GENERATIONS`, `ALGO_GA_TIMEOUT`, `ALGO_GA_MUTATION_RATE`)
+- Aucune nouvelle dépendance (implémentation sans bibliothèque tierce)
+
+**Tests (suite)**
+- `tests/unit/test_algo_ga.py` : placement, exclusions établissement/prof à éviter, cas infaisables (`PasDeCreneauDisponible`, `AucuneSolutionGA`), variabilité entre runs
+
 ## [2026.2] — 2026-07-01
 
 ### Added

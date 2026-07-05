@@ -1023,6 +1023,20 @@ if __name__ == '__main__':
                       'traiter_matiere_principales_en_premier': True,
                       'numero_run': 0}
         results = [algo_cp_run(parameters)]
+    elif ALGO_ENGINE == "genetic":
+        # Moteur génétique : une seule évolution (population -> générations),
+        # pas de tirages Monte-Carlo non plus.
+        log.info("Lancement de l'algorithme (moteur génétique)")
+        from algo_ga import algo_ga_run
+        parameters = {'filename_candidats': ELVS_FILE,
+                      'filename_examinateurs': PROFS_FILE,
+                      'filename_matieres': PREPS_FILE,
+                      'temps_minimum_entre_oraux': ECART_MINI_CANDIDAT,
+                      'max_creneaux_journee': CRENEAUX,
+                      'heure_debut': HEURE_DEBUT,
+                      'traiter_matiere_principales_en_premier': True,
+                      'numero_run': 0}
+        results = [algo_ga_run(parameters)]
     else:
         log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
 
@@ -1049,10 +1063,11 @@ if __name__ == '__main__':
     best_alg, final_stats, n_err, run_errors, aucun_run_conforme = selectionner_meilleur_algo(
         results, ecart_mini_minutes,
     )
-    if ALGO_ENGINE != "cpsat":
-        # Non pertinent en CP-SAT : une seule résolution est tentée (pas de
-        # tirages Monte-Carlo), donc "n_err / N_run" n'a pas de sens ici —
-        # l'échec éventuel est déjà couvert par le message critique ci-dessous.
+    if ALGO_ENGINE == "monte_carlo":
+        # Non pertinent en CP-SAT/génétique : une seule résolution est tentée
+        # (pas de tirages Monte-Carlo), donc "n_err / N_run" n'a pas de sens
+        # ici — l'échec éventuel est déjà couvert par le message critique
+        # ci-dessous.
         log.info(f"erreurs: {n_err} / {N_run} soit {n_err / N_run * 100:.2f}%")
     if best_alg is None:
         log.critical(
@@ -1065,9 +1080,11 @@ if __name__ == '__main__':
         sys.exit(1)
     if aucun_run_conforme:
         # En CP-SAT, l'écart minimum est une contrainte dure : ce cas ne
-        # devrait jamais se produire (sauf solution de repli), donc pas de
-        # mention de "tentatives" (notion propre au Monte-Carlo) ici.
-        tentatives = f" trouvé sur {N_run} tentatives" if ALGO_ENGINE != "cpsat" else ""
+        # devrait jamais se produire (sauf solution de repli). En génétique,
+        # une seule évolution est tentée (pas de tirages Monte-Carlo). Dans
+        # les deux cas, pas de mention de "tentatives" (notion propre au
+        # Monte-Carlo) ici.
+        tentatives = f" trouvé sur {N_run} tentatives" if ALGO_ENGINE == "monte_carlo" else ""
         log.critical(
             f"Aucun run conforme à l'écart minimum candidat "
             f"({ecart_mini_minutes:.0f} min){tentatives} — "

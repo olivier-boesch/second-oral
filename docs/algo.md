@@ -2,17 +2,18 @@
 
 ## Vue d'ensemble
 
-`algo.py` résout le problème d'appairage candidats ↔ examinateurs pour les oraux du second groupe (bac). Deux moteurs sont disponibles, sélectionnables via le paramètre `engine` (`/gestion/algo` ou variable d'environnement `ALGO_ENGINE`) :
+`algo.py` résout le problème d'appairage candidats ↔ examinateurs pour les oraux du second groupe (bac). Trois moteurs sont disponibles, sélectionnables via le paramètre `engine` (`/gestion/algo` ou variable d'environnement `ALGO_ENGINE`) :
 
 - **`monte_carlo`** (historique, défaut) — recherche aléatoire massivement parallèle : on lance 1 000 runs indépendants en multiprocessing, chacun tente un placement différent (ordre des candidats aléatoire à chaque run), et on conserve le meilleur résultat (`algo.py`, `AlgoOne`).
 - **`cpsat`** (`algo_cp.py`, `AlgoCP`) — modélise l'appairage comme un problème de contraintes/optimisation résolu par Google OR-Tools CP-SAT, en une seule résolution. L'écart minimum candidat est une contrainte **garantie** (jamais de run "non conforme"). Le placement exact varie volontairement d'un lancement à l'autre (ordre de parcours mélangé, graine du solveur, bruit de désambiguïsation dans l'objectif) tout en restant proche de l'optimum de tassement des créneaux — voir le commentaire en tête de `AlgoCP.resoudre()`.
+- **`genetic`** (`algo_ga.py`, `AlgoGA`) — algorithme génétique : fait évoluer une population de placements (encodage par permutation, un chromosome par matière) via sélection par tournoi, croisement OX, mutation et réparation locale. L'écart minimum candidat est une pénalité forte dans le fitness (best-effort, comme en Monte-Carlo) ; en revanche, les exclusions établissement/prof à éviter sont vérifiées strictement en fin d'évolution — l'algorithme échoue explicitement (`AucuneSolutionGA`) plutôt que de publier un planning qui les enfreindrait. Intérêt principal : la fonction de fitness peut absorber facilement de futurs critères d'optimisation (préférences, équité de charge...) sans reformuler un modèle de contraintes.
 
 ```
                               ┌─ monte_carlo : 1000 runs parallèles ──► meilleur run ─┐
 candidats.csv ──┐             │                  (Pool de CPUs)                       │
-examinateurs.csv─┤──► ALGO_ENGINE ┤                                                    ├──► BDD + PDFs
+examinateurs.csv─┤──► ALGO_ENGINE ┼─ cpsat : une résolution CP-SAT (OR-Tools) ────────┼──► BDD + PDFs
 preps.csv ──────┘             │                                                        │
-                              └─ cpsat : une résolution CP-SAT (OR-Tools) ─────────────┘
+                              └─ genetic : population → générations (algo_ga.py) ─────┘
 ```
 
 ---
@@ -65,14 +66,20 @@ Un script bash est disponible pour lancer l'algo depuis la ligne de commande sur
 
 Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → section Paramètres) et persistés dans `data/algo_params.json`. Ils sont aussi surchargeable via **variables d'environnement** :
 
-| Variable            | Défaut         | Description                                                        |
-|---------------------|----------------|---------------------------------------------------------------------|
-| `ALGO_ENGINE`       | `monte_carlo`  | Moteur de résolution : `monte_carlo` (historique) ou `cpsat`        |
-| `ALGO_N_RUN`        | `1000`         | Nombre de runs parallèles (ignoré si `ALGO_ENGINE=cpsat`)           |
-| `ALGO_ECART_MINI`   | `80` (min)     | Écart minimum entre les deux oraux d'un candidat                   |
-| `ALGO_HEURE_DEBUT`  | `08:10`        | Heure de début des premiers créneaux                                |
-| `ALGO_CRENEAUX`     | `13`           | Nombre de créneaux disponibles par examinateur                      |
-| `ALGO_CP_TIMEOUT`   | `60` (s)       | Délai max du solveur CP-SAT (ignoré si `ALGO_ENGINE=monte_carlo`)   |
+| Variable                  | Défaut         | Description                                                             |
+|---------------------------|----------------|---------------------------------------------------------------------------|
+| `ALGO_ENGINE`             | `monte_carlo`  | Moteur de résolution : `monte_carlo` (historique), `cpsat` ou `genetic`   |
+| `ALGO_N_RUN`              | `1000`         | Nombre de runs parallèles (Monte-Carlo uniquement)                        |
+| `ALGO_ECART_MINI`         | `80` (min)     | Écart minimum entre les deux oraux d'un candidat                         |
+| `ALGO_HEURE_DEBUT`        | `08:10`        | Heure de début des premiers créneaux                                     |
+| `ALGO_CRENEAUX`           | `13`           | Nombre de créneaux disponibles par examinateur                           |
+| `ALGO_CP_TIMEOUT`         | `60` (s)       | Délai max du solveur CP-SAT (CP-SAT uniquement)                          |
+| `ALGO_GA_POPULATION`      | `150`          | Taille de la population (génétique uniquement)                           |
+| `ALGO_GA_GENERATIONS`     | `300`          | Nombre maximum de générations (génétique uniquement)                     |
+| `ALGO_GA_TIMEOUT`         | `60` (s)       | Délai max de l'évolution (génétique uniquement)                          |
+| `ALGO_GA_MUTATION_RATE`   | `0.15`         | Probabilité de mutation par matière et par individu (génétique uniquement)|
+
+Chaque variable spécifique à un moteur est ignorée quand un autre moteur est sélectionné.
 
 ---
 
