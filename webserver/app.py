@@ -1377,6 +1377,14 @@ def _time_str_to_td(s: str) -> timedelta:
     return timedelta(hours=int(h), minutes=int(m))
 
 
+def _td_to_time_str(td: timedelta) -> str:
+    """Convertit un timedelta en chaîne HH:MM:SS (colonne TIME)."""
+    total_seconds = int(td.total_seconds())
+    h, rem = divmod(total_seconds, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
 def _to_td(val: object) -> timedelta:
     """Normalise une valeur TIME en timedelta.
 
@@ -1487,6 +1495,8 @@ def edit_oral() -> ResponseReturnValue:
         # Durée de l'oral seul (oral → fin) : pour la vérification examinateur
         duree_oral    = _to_td(oral_actuel['heure_fin']) - _to_td(oral_actuel['heure_oral'])
         fin_exam_new  = oral_new + duree_oral
+        # heure_fin réelle de l'oral, recalculée pour préserver la durée d'origine
+        d['heure_fin'] = _td_to_time_str(fin_exam_new)
         id_examinateur_int: int = int(request.form.get('examinateur') or 0)
         error_msg, warning_msg = _check_conflits_oral(
             id_oral_int,

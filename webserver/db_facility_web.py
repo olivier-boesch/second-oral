@@ -190,6 +190,7 @@ UPDATE_INFOS_ORAL = """
 UPDATE Oral SET
     Oral.heure_sujet = %(heure_sujet)s,
     Oral.heure_oral = %(heure_oral)s,
+    Oral.heure_fin = %(heure_fin)s,
     Oral.examinateur = %(examinateur)s,
     Oral.mis_a_jour = %(mis_a_jour)s
 WHERE id = %(id)s
