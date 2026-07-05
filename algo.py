@@ -5,6 +5,7 @@ Olivier Boesch (c) 2023
 """
 import logging
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from csv import DictReader, DictWriter
 from datetime import timedelta, datetime, time, date
 from math import ceil, inf
@@ -681,7 +682,13 @@ class AlgoOne:
                     if loge in existing_loge_pw
                     else generate_password()
                 )
-        loges_hashes = {nom: hash_password(mdp, nom) for nom, mdp in loges_mdp.items()}
+        # hash_password() (scrypt) relâche le GIL — un pool de threads parallélise
+        # ces appels indépendants (cf. commentaire équivalent dans save_all()).
+        with ThreadPoolExecutor() as pool:
+            loges_hashes = dict(pool.map(
+                lambda kv: (kv[0], hash_password(kv[1], kv[0])),
+                loges_mdp.items(),
+            ))
         db.save_loges(loges_hashes)
         liste_loges = sorted(
             [(nom, mdp) for nom, mdp in loges_mdp.items()],

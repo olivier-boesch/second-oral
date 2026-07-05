@@ -7,6 +7,7 @@ Note : les directives DELIMITER ne sont pas utilisées car mysql.connector
        les gère nativement sans elles.
 """
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import mysql.connector
 
@@ -367,9 +368,16 @@ class DbFacility:
         for i, obj in enumerate(algo.liste_oraux):
             obj.idx = i + 1
 
-        dicts_candidats = [c.to_dict() for c in algo.liste_candidats]
+        # Candidat.to_dict()/Examinateur.to_dict() appellent hash_password()
+        # (scrypt, ~150ms/appel par conception — coût de sécurité délibéré).
+        # Cette étape est le principal goulot d'étranglement du remplissage
+        # de la DB (largement dominant devant les INSERT eux-mêmes) : hashlib.scrypt
+        # relâche le GIL pendant le calcul, donc un pool de threads parallélise
+        # réellement ces appels indépendants (aucun état partagé muté).
+        with ThreadPoolExecutor() as pool:
+            dicts_candidats = list(pool.map(lambda c: c.to_dict(), algo.liste_candidats))
+            dicts_examinateurs = list(pool.map(lambda e: e.to_dict(), algo.liste_examinateurs))
         dicts_matieres = [m.to_dict() for m in algo.liste_matieres]
-        dicts_examinateurs = [e.to_dict() for e in algo.liste_examinateurs]
         dicts_oraux = [o.to_dict() for o in algo.liste_oraux]
 
         self.save_matieres(dicts_matieres)
@@ -378,32 +386,40 @@ class DbFacility:
         self.save_oraux(dicts_oraux)
 
     def save_matieres(self, matieres):
+        if not matieres:
+            return
         with self.conn.cursor() as c:
-            for m in matieres:
-                c.execute(SQL_INSERT_MATIERES, m)
+            c.executemany(SQL_INSERT_MATIERES, matieres)
         self.conn.commit()
 
     def save_candidats(self, candidats):
+        if not candidats:
+            return
         with self.conn.cursor() as c:
-            for candidat in candidats:
-                c.execute(SQL_INSERT_CANDIDATS, candidat)
+            c.executemany(SQL_INSERT_CANDIDATS, candidats)
         self.conn.commit()
 
     def save_examinateurs(self, examinateurs):
+        if not examinateurs:
+            return
         with self.conn.cursor() as c:
-            for examinateur in examinateurs:
-                c.execute(SQL_INSERT_EXAMINATEURS, examinateur)
+            c.executemany(SQL_INSERT_EXAMINATEURS, examinateurs)
         self.conn.commit()
 
     def save_oraux(self, oraux):
+        if not oraux:
+            return
         with self.conn.cursor() as c:
-            for oral in oraux:
-                c.execute(SQL_INSERT_ORAUX, oral)
+            c.executemany(SQL_INSERT_ORAUX, oraux)
         self.conn.commit()
 
     def save_loges(self, loges: dict):
         """Enregistre les mots de passe des loges. loges = {nom: password_hash}."""
+        if not loges:
+            return
         with self.conn.cursor() as c:
-            for nom, password_hash in loges.items():
-                c.execute(SQL_INSERT_LOGES, {'nom': nom, 'password_hash': password_hash})
+            c.executemany(
+                SQL_INSERT_LOGES,
+                [{'nom': nom, 'password_hash': password_hash} for nom, password_hash in loges.items()],
+            )
         self.conn.commit()
