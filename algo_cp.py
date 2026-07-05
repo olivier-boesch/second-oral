@@ -1,0 +1,200 @@
+#!/usr/bin/python3
+"""
+Second algorithme de placement des oraux : résolution par contraintes (CP-SAT).
+
+Alternative à AlgoOne.resoudre() (glouton randomisé à redémarrages
+Monte-Carlo) : modélise l'appairage candidat/examinateur/créneau comme un
+problème de satisfaction/optimisation de contraintes résolu par OR-Tools
+CP-SAT, en une seule résolution plutôt qu'un grand nombre de tirages
+aléatoires. L'écart minimum entre les deux oraux d'un candidat devient une
+contrainte garantie (et non un critère de sélection a posteriori).
+"""
+import random
+from os import cpu_count
+
+from ortools.sat.python import cp_model
+
+from algo import (
+    AlgoOne,
+    AlgoError,
+    Candidat,
+    CreneauInterdit,
+    Examinateur,
+    Matiere,
+    PasDeCreneauDisponible,
+    _env_int,
+    log,
+)
+
+ALGO_CP_TIMEOUT = _env_int("ALGO_CP_TIMEOUT", 60)
+
+
+class AucuneSolutionCP(AlgoError):
+    """Le solveur CP-SAT n'a trouvé aucune solution respectant les contraintes."""
+
+    def __init__(self, status_name: str, n_candidats: int, n_examinateurs: int, n_creneaux: int):
+        self.status_name = status_name
+        super().__init__(
+            f"CP-SAT : aucune solution trouvée (statut={status_name}) — "
+            f"{n_candidats} candidat(s), {n_examinateurs} examinateur(s), "
+            f"{n_creneaux} créneau(x) par examinateur"
+        )
+
+
+class AlgoCP(AlgoOne):
+    """Variante de AlgoOne qui résout l'appairage via CP-SAT (Google OR-Tools).
+
+    Réutilise tel quel setup_from_files / calcul_horaires / statistiques /
+    save / sauvegarder_oraux de AlgoOne — seule resoudre() change de logique.
+    """
+
+    def _creneaux_autorises(self, examinateur: Examinateur, candidat: Candidat) -> list[int]:
+        """Créneaux où `examinateur` peut recevoir `candidat`.
+
+        Reprend exactement les règles de Examinateur.recherche_creneau :
+        établissement à éviter, prof à éviter, créneaux interdits (début de
+        journée décalé pour cet examinateur).
+        """
+        if examinateur.etablissements != [''] and candidat.etablissement in examinateur.etablissements:
+            return []
+        if candidat.profs_a_eviter != [''] and examinateur.nom in candidat.profs_a_eviter:
+            return []
+        return [
+            t for t, oral in enumerate(examinateur.oraux)
+            if not isinstance(oral, CreneauInterdit)
+        ]
+
+    def resoudre(self) -> None:
+        """Résout l'appairage des oraux via un modèle CP-SAT.
+
+        Contrairement à un CP-SAT « déterministe » classique, ce modèle est
+        délibérément randomisé à chaque appel (ordre de parcours candidats/
+        examinateurs, graine du solveur, bruit de désambiguïsation dans
+        l'objectif — cf. plus bas) : par choix, on veut un résultat différent
+        à chaque exécution plutôt qu'un unique optimum reproductible, tout en
+        restant proche de l'optimal (comme le faisait déjà l'esprit du
+        glouton Monte-Carlo, mais sans les 1000 tirages).
+        """
+        log.debug(f"Run {self.numero_run} : Démarrage de l'appairage (CP-SAT)")
+        model = cp_model.CpModel()
+
+        # Ordre de parcours mélangé (candidats + examinateurs par matière) :
+        # contribue à la diversité des solutions d'un run à l'autre.
+        candidats_ordre = list(self.liste_candidats)
+        random.shuffle(candidats_ordre)
+        # Matiere définit __eq__ sans __hash__ (donc non hashable) : on
+        # indexe par id() de l'objet plutôt que par la Matiere elle-même.
+        examinateurs_par_matiere: dict[int, list[Examinateur]] = {}
+        for matiere in self.liste_matieres:
+            examinateurs = list(matiere.examinateurs)
+            random.shuffle(examinateurs)
+            examinateurs_par_matiere[id(matiere)] = examinateurs
+
+        # x[(candidat, choix_attr, examinateur, creneau)] -> BoolVar
+        x: dict[tuple, cp_model.IntVar] = {}
+        for candidat in candidats_ordre:
+            for choix_attr in ('choix1', 'choix2'):
+                matiere: Matiere = getattr(candidat, choix_attr)
+                choix_vars = []
+                for examinateur in examinateurs_par_matiere[id(matiere)]:
+                    for creneau in self._creneaux_autorises(examinateur, candidat):
+                        var = model.NewBoolVar(
+                            f"x_{candidat.numero}_{choix_attr}_{examinateur.nom}_{creneau}"
+                        )
+                        x[(candidat, choix_attr, examinateur, creneau)] = var
+                        choix_vars.append(var)
+                if not choix_vars:
+                    raise PasDeCreneauDisponible(candidat, len(matiere.examinateurs))
+                model.AddExactlyOne(choix_vars)
+
+        # un examinateur ne peut recevoir qu'un seul candidat par créneau
+        par_examinateur_creneau: dict[tuple, list] = {}
+        for (_candidat, _choix_attr, examinateur, creneau), var in x.items():
+            par_examinateur_creneau.setdefault((examinateur, creneau), []).append(var)
+        for vars_ in par_examinateur_creneau.values():
+            model.AddAtMostOne(vars_)
+
+        # écart minimum garanti entre les deux oraux d'un même candidat
+        max_creneau = self.max_creneaux_journee - 1
+        for candidat in self.liste_candidats:
+            t1 = model.NewIntVar(0, max_creneau, f"t1_{candidat.numero}")
+            t2 = model.NewIntVar(0, max_creneau, f"t2_{candidat.numero}")
+            model.Add(t1 == sum(
+                creneau * var
+                for (c, choix_attr, _e, creneau), var in x.items()
+                if c is candidat and choix_attr == 'choix1'
+            ))
+            model.Add(t2 == sum(
+                creneau * var
+                for (c, choix_attr, _e, creneau), var in x.items()
+                if c is candidat and choix_attr == 'choix2'
+            ))
+            diff = model.NewIntVar(-max_creneau, max_creneau, f"diff_{candidat.numero}")
+            model.Add(diff == t1 - t2)
+            abs_diff = model.NewIntVar(0, max_creneau, f"absdiff_{candidat.numero}")
+            model.AddAbsEquality(abs_diff, diff)
+            model.Add(abs_diff >= self.creneaux_minimum_entre_oraux)
+
+        # Objectif : tasser les oraux tôt dans la journée (réduit les trous
+        # avant le dernier créneau utilisé par examinateur -> meilleur taux
+        # d'occupation, cf. AlgoOne.statistiques()), MAIS avec un bruit
+        # aléatoire de désambiguïsation par variable (0..BRUIT_ECHELLE-1,
+        # toujours strictement inférieur au poids d'un seul créneau) : sans
+        # lui, le solveur choisirait systématiquement la même solution parmi
+        # toutes celles à égalité de score (fréquent ici — de nombreux
+        # examinateurs d'une même matière sont interchangeables). Le terme
+        # `creneau * BRUIT_ECHELLE` reste dominant, donc la solution reste
+        # proche de l'optimum du tassement ; seul le choix entre solutions
+        # quasi équivalentes change à chaque run.
+        BRUIT_ECHELLE = 25
+        model.Minimize(sum(
+            (creneau * BRUIT_ECHELLE + random.randint(0, BRUIT_ECHELLE - 1)) * var
+            for (_c, _m, _e, creneau), var in x.items()
+        ))
+
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = float(ALGO_CP_TIMEOUT)
+        solver.parameters.num_search_workers = max(1, cpu_count() or 1)
+        solver.parameters.random_seed = random.randint(1, 2 ** 31 - 1)
+        status = solver.Solve(model)
+
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            raise AucuneSolutionCP(
+                solver.StatusName(status),
+                len(self.liste_candidats), len(self.liste_examinateurs),
+                self.max_creneaux_journee,
+            )
+
+        for (candidat, choix_attr, examinateur, creneau), var in x.items():
+            if solver.Value(var):
+                matiere = getattr(candidat, choix_attr)
+                self.creer_oral(candidat, examinateur, matiere, creneau)
+
+        log.debug(f"Run {self.numero_run} : {len(self.liste_oraux)} oraux créés (CP-SAT).")
+        log.debug(f"Run {self.numero_run} : Fin de l'appairage (CP-SAT)")
+        assert len(self.liste_oraux) == 2 * len(self.liste_candidats)
+
+
+def algo_cp_run(parameters):
+    """
+    Exécute l'algorithme CP-SAT d'assignation des oraux.
+
+    Miroir de algo.algo_run() : même signature d'entrée/sortie, pour rester
+    compatible avec algo.selectionner_meilleur_algo().
+
+    :param parameters: Paramètres de configuration pour l'algorithme
+    """
+    numero_run = parameters.get('numero_run', 0)
+    log.info(f"Run {numero_run} : lancement (CP-SAT)")
+    alg = AlgoCP(**parameters)
+    alg.setup_from_files()
+    try:
+        alg.resoudre()
+    except AlgoError as e:
+        log.info(f"Run {numero_run} : fin (échec — {e})")
+        return None, str(e)
+    alg.calcul_horaires()
+    alg.verif_ecart_horaire()
+    stats = alg.statistiques()
+    log.info(f"Run {numero_run} : fin ({stats})")
+    return alg, stats

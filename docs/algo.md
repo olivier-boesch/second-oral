@@ -2,12 +2,17 @@
 
 ## Vue d'ensemble
 
-`algo.py` résout le problème d'appairage candidats ↔ examinateurs pour les oraux du second groupe (bac). C'est une recherche aléatoire massivement parallèle : on lance 1 000 runs indépendants en multiprocessing, chacun tente un placement différent (ordre des candidats aléatoire à chaque run), et on conserve le meilleur résultat.
+`algo.py` résout le problème d'appairage candidats ↔ examinateurs pour les oraux du second groupe (bac). Deux moteurs sont disponibles, sélectionnables via le paramètre `engine` (`/gestion/algo` ou variable d'environnement `ALGO_ENGINE`) :
+
+- **`monte_carlo`** (historique, défaut) — recherche aléatoire massivement parallèle : on lance 1 000 runs indépendants en multiprocessing, chacun tente un placement différent (ordre des candidats aléatoire à chaque run), et on conserve le meilleur résultat (`algo.py`, `AlgoOne`).
+- **`cpsat`** (`algo_cp.py`, `AlgoCP`) — modélise l'appairage comme un problème de contraintes/optimisation résolu par Google OR-Tools CP-SAT, en une seule résolution. L'écart minimum candidat est une contrainte **garantie** (jamais de run "non conforme"). Le placement exact varie volontairement d'un lancement à l'autre (ordre de parcours mélangé, graine du solveur, bruit de désambiguïsation dans l'objectif) tout en restant proche de l'optimum de tassement des créneaux — voir le commentaire en tête de `AlgoCP.resoudre()`.
 
 ```
-candidats.csv ──┐
-examinateurs.csv─┤──► 1000 runs parallèles ──► meilleur run ──► BDD + PDFs
-preps.csv ──────┘        (Pool de CPUs)
+                              ┌─ monte_carlo : 1000 runs parallèles ──► meilleur run ─┐
+candidats.csv ──┐             │                  (Pool de CPUs)                       │
+examinateurs.csv─┤──► ALGO_ENGINE ┤                                                    ├──► BDD + PDFs
+preps.csv ──────┘             │                                                        │
+                              └─ cpsat : une résolution CP-SAT (OR-Tools) ─────────────┘
 ```
 
 ---
@@ -60,12 +65,14 @@ Un script bash est disponible pour lancer l'algo depuis la ligne de commande sur
 
 Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → section Paramètres) et persistés dans `data/algo_params.json`. Ils sont aussi surchargeable via **variables d'environnement** :
 
-| Variable            | Défaut       | Description                                           |
-|---------------------|-------------|-------------------------------------------------------|
-| `ALGO_N_RUN`        | `1000`      | Nombre de runs parallèles                             |
-| `ALGO_ECART_MINI`   | `80` (min)  | Écart minimum entre les deux oraux d'un candidat      |
-| `ALGO_HEURE_DEBUT`  | `08:10`     | Heure de début des premiers créneaux                  |
-| `ALGO_CRENEAUX`     | `13`        | Nombre de créneaux disponibles par examinateur        |
+| Variable            | Défaut         | Description                                                        |
+|---------------------|----------------|---------------------------------------------------------------------|
+| `ALGO_ENGINE`       | `monte_carlo`  | Moteur de résolution : `monte_carlo` (historique) ou `cpsat`        |
+| `ALGO_N_RUN`        | `1000`         | Nombre de runs parallèles (ignoré si `ALGO_ENGINE=cpsat`)           |
+| `ALGO_ECART_MINI`   | `80` (min)     | Écart minimum entre les deux oraux d'un candidat                   |
+| `ALGO_HEURE_DEBUT`  | `08:10`        | Heure de début des premiers créneaux                                |
+| `ALGO_CRENEAUX`     | `13`           | Nombre de créneaux disponibles par examinateur                      |
+| `ALGO_CP_TIMEOUT`   | `60` (s)       | Délai max du solveur CP-SAT (ignoré si `ALGO_ENGINE=monte_carlo`)   |
 
 ---
 

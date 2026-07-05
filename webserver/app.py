@@ -2245,6 +2245,8 @@ _ALGO_PARAMS_DEFAULTS = {
     "n_run":       1000,
     "ecart_mini":  80,
     "debug":       False,
+    "engine":      "monte_carlo",
+    "cp_timeout":  60,
 }
 
 def _load_algo_params() -> dict:
@@ -2459,6 +2461,9 @@ def algo_save_params() -> ResponseReturnValue:
         params["n_run"]       = max(1, min(100_000, int(data.get("n_run", 1000))))
         params["ecart_mini"]  = max(10, min(240, int(data.get("ecart_mini", 80))))
         params["debug"]       = bool(data.get("debug", False))
+        engine = str(data.get("engine", "monte_carlo")).strip().lower()
+        params["engine"]      = engine if engine in ("monte_carlo", "cpsat") else "monte_carlo"
+        params["cp_timeout"]  = max(5, min(600, int(data.get("cp_timeout", 60))))
     except (ValueError, KeyError):
         return jsonify({"ok": False, "reason": "invalid_params"}), 400
     _DATA_DIR.mkdir(parents=True, exist_ok=True)

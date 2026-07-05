@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## [Unreleased]
+
+### Added
+
+**Algorithme de placement**
+- Second moteur de résolution, sélectionnable depuis `/gestion/algo` (paramètre `engine`) ou via `ALGO_ENGINE` : CP-SAT (Google OR-Tools, `algo_cp.py`, `AlgoCP`), en alternative au glouton Monte-Carlo historique (`AlgoOne`)
+- CP-SAT modélise l'appairage candidat/examinateur/créneau comme un problème de contraintes et le résout en une seule fois (au lieu de 1000 tirages aléatoires) ; l'écart minimum entre les deux oraux d'un candidat devient une contrainte garantie plutôt qu'un critère de sélection a posteriori (plus de run "non conforme")
+- Le placement produit reste volontairement différent à chaque lancement (ordre de parcours mélangé, graine de solveur, bruit de désambiguïsation dans l'objectif) tout en restant proche de l'optimal de tassement des créneaux
+- Nouveau paramètre `cp_timeout` (`ALGO_CP_TIMEOUT`, défaut 60s) : délai maximum accordé au solveur CP-SAT
+- Nouvelle dépendance `ortools`
+
+**Tests**
+- `tests/unit/test_algo_cp.py` : placement, écart minimum garanti, exclusions établissement/prof à éviter, créneaux interdits, cas infaisables (`AucuneSolutionCP`), variabilité entre runs
+
 ## [2026.2] — 2026-07-01
 
 ### Added

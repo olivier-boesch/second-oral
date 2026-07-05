@@ -53,6 +53,7 @@ ECART_MINI_CANDIDAT = timedelta(minutes=_env_int("ALGO_ECART_MINI", 80))
 HEURE_DEBUT         = _env_time("ALGO_HEURE_DEBUT", 8, 10)
 CRENEAUX            = _env_int("ALGO_CRENEAUX", 13)
 DEBUG_DISPLAY       = _env_bool("ALGO_DEBUG", False)
+ALGO_ENGINE         = _os.environ.get("ALGO_ENGINE", "monte_carlo").strip().lower()
 
 # données
 DATA_DIR = 'data'
@@ -996,23 +997,38 @@ def selectionner_meilleur_algo(
 
 
 if __name__ == '__main__':
-    log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
+    if ALGO_ENGINE == "cpsat":
+        # Moteur CP-SAT : une seule résolution (pas de tirages Monte-Carlo),
+        # avec écart minimum candidat garanti par construction du modèle.
+        log.info("Lancement de l'algorithme (moteur CP-SAT)")
+        from algo_cp import algo_cp_run
+        parameters = {'filename_candidats': ELVS_FILE,
+                      'filename_examinateurs': PROFS_FILE,
+                      'filename_matieres': PREPS_FILE,
+                      'temps_minimum_entre_oraux': ECART_MINI_CANDIDAT,
+                      'max_creneaux_journee': CRENEAUX,
+                      'heure_debut': HEURE_DEBUT,
+                      'traiter_matiere_principales_en_premier': True,
+                      'numero_run': 0}
+        results = [algo_cp_run(parameters)]
+    else:
+        log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
 
-    # liste des paramètres pour chaque run (tous identiques ici)
-    parameters_list = [
-                          {'filename_candidats': ELVS_FILE,
-                           'filename_examinateurs': PROFS_FILE,
-                           'filename_matieres': PREPS_FILE,
-                           'temps_minimum_entre_oraux': ECART_MINI_CANDIDAT,
-                           'max_creneaux_journee': CRENEAUX,
-                           'heure_debut': HEURE_DEBUT,
-                           'traiter_matiere_principales_en_premier': True,
-                           'numero_run': i}
-                            for i in range(N_run)]
+        # liste des paramètres pour chaque run (tous identiques ici)
+        parameters_list = [
+                              {'filename_candidats': ELVS_FILE,
+                               'filename_examinateurs': PROFS_FILE,
+                               'filename_matieres': PREPS_FILE,
+                               'temps_minimum_entre_oraux': ECART_MINI_CANDIDAT,
+                               'max_creneaux_journee': CRENEAUX,
+                               'heure_debut': HEURE_DEBUT,
+                               'traiter_matiere_principales_en_premier': True,
+                               'numero_run': i}
+                                for i in range(N_run)]
 
-    # Lancement des runs en parallèle avec multiprocessing (1 par CPU)
-    with Pool() as pool:
-        results = pool.map(algo_run, tuple(parameters_list))
+        # Lancement des runs en parallèle avec multiprocessing (1 par CPU)
+        with Pool() as pool:
+            results = pool.map(algo_run, tuple(parameters_list))
 
     # Sélection du meilleur run — ne retient un run que s'il respecte
     # l'écart minimum candidat (cf. selectionner_meilleur_algo), sauf si

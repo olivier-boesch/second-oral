@@ -222,6 +222,17 @@
                    min="1" max="30" value="{{ algo_params.creneaux }}">
             <span class="param-hint">Nombre de passages par salle dans la journée</span>
         </div>
+        <div class="param-row">
+            <label class="param-label" for="p-engine">
+                Algorithme de placement
+                <span class="info-icon" title="Glouton Monte-Carlo : tire un très grand nombre de placements aléatoires et garde le meilleur (comportement historique). CP-SAT : résout le placement en une seule fois via un solveur de contraintes, avec l'écart minimum entre les deux oraux d'un candidat garanti (jamais 'best-effort').">?</span>
+            </label>
+            <select class="param-input" id="p-engine" name="engine" onchange="onEngineChange()">
+                <option value="monte_carlo" {% if algo_params.engine == 'monte_carlo' %}selected{% endif %}>Glouton Monte-Carlo (actuel)</option>
+                <option value="cpsat" {% if algo_params.engine == 'cpsat' %}selected{% endif %}>CP-SAT — contraintes optimisées (nouveau)</option>
+            </select>
+            <span class="param-hint">CP-SAT garantit l'écart minimum candidat ; le nombre d'essais (N_run) est ignoré dans ce mode</span>
+        </div>
     </div>
 
     <details class="params-advanced">
@@ -232,14 +243,23 @@
             Des valeurs extrêmes peuvent produire des résultats incorrects ou bloquer le serveur.
         </p>
         <div class="params-grid">
-            <div class="param-row">
+            <div class="param-row" id="p-n-run-row">
                 <label class="param-label" for="p-n-run">
                     Nombre d'essais (N_run)
-                    <span class="info-icon" title="Nombre de tentatives de placement effectuées. L'algorithme conserve le meilleur résultat. Plus cette valeur est élevée, meilleur est le placement — mais le calcul est plus long. Valeur recommandée : 1000.">?</span>
+                    <span class="info-icon" title="Nombre de tentatives de placement effectuées. L'algorithme conserve le meilleur résultat. Plus cette valeur est élevée, meilleur est le placement — mais le calcul est plus long. Valeur recommandée : 1000. Ignoré si l'algorithme CP-SAT est sélectionné.">?</span>
                 </label>
                 <input class="param-input" type="number" id="p-n-run" name="n_run"
                        min="1" max="100000" value="{{ algo_params.n_run }}">
-                <span class="param-hint">Recommandé : 1000 — au-delà, le gain est faible</span>
+                <span class="param-hint">Recommandé : 1000 — au-delà, le gain est faible (ignoré en mode CP-SAT)</span>
+            </div>
+            <div class="param-row" id="p-cp-timeout-row">
+                <label class="param-label" for="p-cp-timeout">
+                    Délai max solveur CP-SAT (s)
+                    <span class="info-icon" title="Temps maximum accordé au solveur CP-SAT pour trouver le meilleur placement possible. Au-delà, le meilleur résultat trouvé jusque-là est utilisé. Ignoré si l'algorithme Monte-Carlo est sélectionné.">?</span>
+                </label>
+                <input class="param-input" type="number" id="p-cp-timeout" name="cp_timeout"
+                       min="5" max="600" value="{{ algo_params.cp_timeout }}">
+                <span class="param-hint">En secondes — par défaut 60s (ignoré en mode Monte-Carlo)</span>
             </div>
             <div class="param-row">
                 <label class="param-label" for="p-ecart-mini">
@@ -559,6 +579,13 @@ function validerAvantLancement(callback) {
         });
 }
 
+// ── Bascule visuelle N_run / délai CP-SAT selon le moteur sélectionné ────────
+function onEngineChange() {
+    const isCpSat = document.getElementById('p-engine').value === 'cpsat';
+    document.getElementById('p-n-run-row').style.opacity      = isCpSat ? .4 : 1;
+    document.getElementById('p-cp-timeout-row').style.opacity = isCpSat ? 1 : .4;
+}
+
 // ── Sauvegarde des paramètres algo ───────────────────────────────────────────
 function sauvegarderParams() {
     const fb = document.getElementById('params-feedback');
@@ -568,6 +595,8 @@ function sauvegarderParams() {
         n_run:       parseInt(document.getElementById('p-n-run').value,       10),
         ecart_mini:  parseInt(document.getElementById('p-ecart-mini').value,  10),
         debug:       document.getElementById('p-debug').checked,
+        engine:      document.getElementById('p-engine').value,
+        cp_timeout:  parseInt(document.getElementById('p-cp-timeout').value,  10),
     };
     fb.textContent = 'Sauvegarde…';
     fb.style.color = '#555';
@@ -591,6 +620,7 @@ function sauvegarderParams() {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 validerAvantLancement(() => {});
+onEngineChange();
 
 {% if is_running %}
 connectAlgoSSE();
