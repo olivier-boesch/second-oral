@@ -11,7 +11,6 @@ d'optimisation supplémentaires (préférences, équité de charge...) sans
 reformuler tout un modèle de contraintes, au prix d'une garantie plus faible
 que CP-SAT sur le respect strict de l'écart minimum candidat.
 """
-import os as _os
 import random
 import time as _time
 from dataclasses import dataclass
@@ -24,17 +23,10 @@ from algo import (
     Examinateur,
     Matiere,
     PasDeCreneauDisponible,
+    _env_float,
     _env_int,
     log,
 )
-
-
-def _env_float(key: str, default: float) -> float:
-    try:
-        return float(_os.environ.get(key, default))
-    except (ValueError, TypeError):
-        return default
-
 
 ALGO_GA_POPULATION    = _env_int("ALGO_GA_POPULATION", 150)
 ALGO_GA_GENERATIONS   = _env_int("ALGO_GA_GENERATIONS", 300)

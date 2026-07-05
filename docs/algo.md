@@ -78,8 +78,32 @@ Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → sec
 | `ALGO_GA_GENERATIONS`     | `300`          | Nombre maximum de générations (génétique uniquement)                     |
 | `ALGO_GA_TIMEOUT`         | `60` (s)       | Délai max de l'évolution (génétique uniquement)                          |
 | `ALGO_GA_MUTATION_RATE`   | `0.15`         | Probabilité de mutation par matière et par individu (génétique uniquement)|
+| `ALGO_PETITES_MATIERES_FIN_JOURNEE` | `true` | Repousse les matières peu demandées en fin de journée (les 3 moteurs) |
+| `ALGO_SEUIL_PETITE_MATIERE`        | `0.5`  | Ratio candidats/capacité en-dessous duquel une matière est jugée "petite"|
+| `ALGO_MARGE_PETITE_MATIERE`        | `2`    | Créneaux de marge laissés en plus du strict nécessaire pour une petite matière |
 
 Chaque variable spécifique à un moteur est ignorée quand un autre moteur est sélectionné.
+
+### Petites matières repoussées en fin de journée
+
+Les matières peu demandées (peu de candidats par rapport aux créneaux disponibles chez leurs
+examinateurs) voient leurs premiers créneaux marqués `CreneauInterdit` — le même mécanisme déjà
+utilisé pour décaler le début de journée d'un examinateur (`Heure mini` dans `examinateurs.csv`).
+Comme les trois moteurs respectent déjà `CreneauInterdit` de façon identique, ce comportement est
+implémenté une seule fois, dans `AlgoOne._reserver_petites_matieres()` (appelée depuis
+`setup_from_files()`), et profite donc automatiquement à `AlgoOne`, `AlgoCP` et `AlgoGA` sans
+duplication.
+
+Une matière est jugée "petite" quand `candidats / (examinateurs × créneaux disponibles) <
+ALGO_SEUIL_PETITE_MATIERE`. Le nombre de créneaux laissés ouverts par examinateur est calculé à
+partir du nombre réel de candidats de cette matière (`+ ALGO_MARGE_PETITE_MATIERE` de flexibilité,
+pour ne pas sur-contraindre l'écart minimum candidat) — deux petites matières de tailles
+différentes obtiennent donc naturellement des fenêtres de fin de journée différentes.
+
+Ce comportement est **opt-in au niveau de l'API** (`AlgoOne.__init__(optimiser_petites_matieres=False)`
+par défaut) pour ne pas changer le comportement des appelants existants (tests, scripts) qui ne le
+demandent pas explicitement — mais activé par défaut en production via `__main__` (donc par défaut
+dans `/gestion/algo` et `ALGO_ENGINE`), piloté par `ALGO_PETITES_MATIERES_FIN_JOURNEE`.
 
 ---
 

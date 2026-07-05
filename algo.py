@@ -60,12 +60,25 @@ def _env_time(key, default_h, default_m):
 def _env_bool(key, default=False):
     return _os.environ.get(key, str(default)).strip().lower() in ("1", "true", "yes", "on")
 
+def _env_float(key, default):
+    try:
+        return float(_os.environ.get(key, default))
+    except (ValueError, TypeError):
+        return default
+
 N_run               = _env_int("ALGO_N_RUN",    1_000)
 ECART_MINI_CANDIDAT = timedelta(minutes=_env_int("ALGO_ECART_MINI", 80))
 HEURE_DEBUT         = _env_time("ALGO_HEURE_DEBUT", 8, 10)
 CRENEAUX            = _env_int("ALGO_CRENEAUX", 13)
 DEBUG_DISPLAY       = _env_bool("ALGO_DEBUG", False)
 ALGO_ENGINE         = _os.environ.get("ALGO_ENGINE", "monte_carlo").strip().lower()
+# Petites matières repoussées en fin de journée (cf. AlgoOne._reserver_petites_matieres) :
+# comportement appliqué par défaut en production (__main__), mais l'API reste opt-in
+# (AlgoOne.__init__ défaut à False) pour ne pas changer le comportement des appelants
+# existants (tests, scripts) qui ne demandent pas explicitement cette optimisation.
+PETITES_MATIERES_FIN_JOURNEE = _env_bool("ALGO_PETITES_MATIERES_FIN_JOURNEE", True)
+SEUIL_PETITE_MATIERE         = _env_float("ALGO_SEUIL_PETITE_MATIERE", 0.5)
+MARGE_PETITE_MATIERE         = _env_int("ALGO_MARGE_PETITE_MATIERE", 2)
 
 # données
 DATA_DIR = 'data'
@@ -519,7 +532,9 @@ class AlgoOne:
                  heure_debut: time = time(hour=8, minute=00),
                  temps_minimum_entre_oraux: timedelta = timedelta(hours=1), interrompre_oral: bool = False,
                  max_creneaux_journee: int = 15, temps_pause: timedelta = timedelta(minutes=20),
-                 intervalle_pause: int = 4, traiter_matiere_principales_en_premier: bool = True, numero_run: int = 0):
+                 intervalle_pause: int = 4, traiter_matiere_principales_en_premier: bool = True, numero_run: int = 0,
+                 optimiser_petites_matieres: bool = False, seuil_petite_matiere: float = 0.5,
+                 marge_flexibilite_petite_matiere: int = 2):
         """
         :param filename_candidats: nom du fichier des candidats
         :type filename_candidats: str
@@ -543,6 +558,16 @@ class AlgoOne:
         :type traiter_matiere_principales_en_premier: bool
         :param numero_run: numéro du run (pour les logs)
         :type numero_run: int
+        :param optimiser_petites_matieres: repousser les matières peu demandées vers la fin de
+            journée (cf. _reserver_petites_matieres) ; désactivé par défaut (opt-in) pour ne pas
+            changer le comportement des appelants existants — activé explicitement par __main__.
+        :type optimiser_petites_matieres: bool
+        :param seuil_petite_matiere: ratio candidats/capacité en-dessous duquel une matière est
+            considérée "petite" et voit ses premiers créneaux réservés
+        :type seuil_petite_matiere: float
+        :param marge_flexibilite_petite_matiere: nombre de créneaux de marge laissés ouverts
+            en plus du strict nécessaire, pour ne pas sur-contraindre l'écart minimum candidat
+        :type marge_flexibilite_petite_matiere: int
         """
         self.filename_candidats: str = filename_candidats
         self.filename_examinateurs: str = filename_examinateurs
@@ -560,6 +585,9 @@ class AlgoOne:
         self.intervalle_pause = intervalle_pause
         self.traiter_matiere_principales_en_premier = traiter_matiere_principales_en_premier
         self.numero_run = numero_run
+        self.optimiser_petites_matieres = optimiser_petites_matieres
+        self.seuil_petite_matiere = seuil_petite_matiere
+        self.marge_flexibilite_petite_matiere = marge_flexibilite_petite_matiere
 
     def setup_from_files(self) -> None:
         """Charge les données depuis les fichiers et crée les objets"""
@@ -630,6 +658,60 @@ class AlgoOne:
         self.liste_matieres.sort(key=lambda m: len(m.candidats), reverse=self.traiter_matiere_principales_en_premier)
         log.debug(f"Run {self.numero_run} : Liste des matières triée")
         log.debug(f"Run {self.numero_run} : Liste des matères: {self.liste_matieres!s}")
+        if self.optimiser_petites_matieres:
+            self._reserver_petites_matieres()
+
+    def _reserver_petites_matieres(self) -> None:
+        """
+        Repousse les matières peu demandées vers la fin de journée, en réservant
+        (marquant CreneauInterdit) les premiers créneaux de leurs examinateurs.
+
+        Réutilise le mécanisme CreneauInterdit déjà en place pour les décalages
+        d'heure_debut : les trois moteurs de résolution (Monte-Carlo, CP-SAT,
+        génétique) le respectent déjà de façon identique, donc ce seul point
+        d'entrée (partagé via AlgoOne.setup_from_files) leur profite à tous les
+        trois sans aucune duplication de logique.
+
+        Une matière est jugée "petite" quand son ratio candidats/capacité
+        (nombre de candidats divisé par le nombre total de créneaux disponibles
+        chez ses examinateurs) est sous seuil_petite_matiere. Le nombre de
+        créneaux à garder ouverts par examinateur est calculé à partir du
+        nombre réel de candidats de CETTE matière (+ une marge de flexibilité),
+        donc deux petites matières de tailles différentes obtiennent
+        naturellement des fenêtres de fin de journée différentes, sans besoin
+        d'un ordre de traitement particulier (leurs examinateurs sont de toute
+        façon disjoints d'une matière à l'autre).
+        """
+        for matiere in self.liste_matieres:
+            if not matiere.examinateurs:
+                continue
+            capacite_totale = sum(
+                sum(1 for o in e.oraux if not isinstance(o, CreneauInterdit))
+                for e in matiere.examinateurs
+            )
+            if capacite_totale == 0:
+                continue
+            ratio = len(matiere.candidats) / capacite_totale
+            if ratio >= self.seuil_petite_matiere:
+                continue
+            n_a_garder = max(
+                1,
+                ceil(len(matiere.candidats) / len(matiere.examinateurs))
+                + self.marge_flexibilite_petite_matiere,
+            )
+            for examinateur in matiere.examinateurs:
+                creneaux_disponibles = [
+                    i for i, o in enumerate(examinateur.oraux)
+                    if not isinstance(o, CreneauInterdit)
+                ]
+                n_a_reserver = max(0, len(creneaux_disponibles) - n_a_garder)
+                for idx in creneaux_disponibles[:n_a_reserver]:
+                    examinateur.oraux[idx] = CreneauInterdit()
+            log.debug(
+                f"Run {self.numero_run} : matière '{matiere.nom}' jugée petite "
+                f"(ratio={ratio:.2f}) — créneaux réservés en fin de journée "
+                f"({n_a_garder} créneau(x) gardé(s) par examinateur)"
+            )
 
     def save(self) -> tuple[list[tuple], list[dict], list[tuple]]:
         """
@@ -1009,6 +1091,14 @@ def selectionner_meilleur_algo(
 
 
 if __name__ == '__main__':
+    # Repousser les petites matières en fin de journée : opt-in au niveau de
+    # l'API (AlgoOne.__init__ défaut à False) mais activé par défaut ici, en
+    # production, pour les trois moteurs (cf. AlgoOne._reserver_petites_matieres).
+    _petites_matieres_kwargs = {
+        'optimiser_petites_matieres': PETITES_MATIERES_FIN_JOURNEE,
+        'seuil_petite_matiere': SEUIL_PETITE_MATIERE,
+        'marge_flexibilite_petite_matiere': MARGE_PETITE_MATIERE,
+    }
     if ALGO_ENGINE == "cpsat":
         # Moteur CP-SAT : une seule résolution (pas de tirages Monte-Carlo),
         # avec écart minimum candidat garanti par construction du modèle.
@@ -1021,7 +1111,8 @@ if __name__ == '__main__':
                       'max_creneaux_journee': CRENEAUX,
                       'heure_debut': HEURE_DEBUT,
                       'traiter_matiere_principales_en_premier': True,
-                      'numero_run': 0}
+                      'numero_run': 0,
+                      **_petites_matieres_kwargs}
         results = [algo_cp_run(parameters)]
     elif ALGO_ENGINE == "genetic":
         # Moteur génétique : une seule évolution (population -> générations),
@@ -1035,7 +1126,8 @@ if __name__ == '__main__':
                       'max_creneaux_journee': CRENEAUX,
                       'heure_debut': HEURE_DEBUT,
                       'traiter_matiere_principales_en_premier': True,
-                      'numero_run': 0}
+                      'numero_run': 0,
+                      **_petites_matieres_kwargs}
         results = [algo_ga_run(parameters)]
     else:
         log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
@@ -1048,6 +1140,7 @@ if __name__ == '__main__':
                                'temps_minimum_entre_oraux': ECART_MINI_CANDIDAT,
                                'max_creneaux_journee': CRENEAUX,
                                'heure_debut': HEURE_DEBUT,
+                               **_petites_matieres_kwargs,
                                'traiter_matiere_principales_en_premier': True,
                                'numero_run': i}
                                 for i in range(N_run)]

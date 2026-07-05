@@ -24,6 +24,14 @@
 **Tests (suite)**
 - `tests/unit/test_algo_ga.py` : placement, exclusions établissement/prof à éviter, cas infaisables (`PasDeCreneauDisponible`, `AucuneSolutionGA`), variabilité entre runs
 
+**Algorithme de placement (suite 2) — petites matières en fin de journée**
+- Les matières peu demandées (peu de candidats par rapport à la capacité de leurs examinateurs) voient désormais leurs premiers créneaux réservés (`CreneauInterdit`), les repoussant vers la fin de journée
+- Implémenté une seule fois dans `AlgoOne._reserver_petites_matieres()` (appelée depuis `setup_from_files()`, partagée par héritage) : profite automatiquement aux trois moteurs (Monte-Carlo, CP-SAT, génétique) sans duplication
+- Nouveaux paramètres constructeur `optimiser_petites_matieres` (opt-in, `False` par défaut au niveau de l'API pour ne pas affecter les appelants existants), `seuil_petite_matiere`, `marge_flexibilite_petite_matiere` — activés par défaut en production via `__main__` (`ALGO_PETITES_MATIERES_FIN_JOURNEE`, `ALGO_SEUIL_PETITE_MATIERE`, `ALGO_MARGE_PETITE_MATIERE`)
+
+**Tests (suite 2)**
+- `tests/unit/test_algo.py::TestPetitesMatieresFinJournee` : désactivé par défaut, réservation correcte des créneaux d'une petite matière, non-impact sur les grosses matières, placement effectif en fin de journée
+
 ## [2026.2] — 2026-07-01
 
 ### Added

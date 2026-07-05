@@ -40,7 +40,7 @@ if "db_facility_save" not in sys.modules:
     _dfs.DbFacility = MagicMock
     sys.modules["db_facility_save"] = _dfs
 
-from algo import AlgoOne, AlgoError, PasDeCreneauDisponible  # noqa: E402
+from algo import AlgoOne, AlgoError, PasDeCreneauDisponible, CreneauInterdit  # noqa: E402
 
 
 # ── Constantes CSV ────────────────────────────────────────────────────────────
@@ -554,3 +554,72 @@ class TestLoggingLockScope:
         import logging
         import algo
         assert algo.fh.level == logging.DEBUG
+
+
+class TestPetitesMatieresFinJournee:
+    """AlgoOne._reserver_petites_matieres : repousse les matières peu demandées
+    vers la fin de journée, via CreneauInterdit — opt-in (désactivé par défaut,
+    cf. AlgoOne.__init__), donc sans impact sur les autres tests de ce fichier."""
+
+    _PREPS_3_MATIERES = [
+        "Maths;Maths;20;20",
+        "Philo;Philo;20;20",
+        "Musique;Musique;20;20",
+    ]
+
+    def _construire(self, tmp_path, optimiser=True, **kwargs):
+        # Musique : 2 candidats / 1 examinateur -> petite matière (ratio faible).
+        # Maths/Philo : 10 candidats chacune / 1 examinateur -> pas petites.
+        candidats = (
+            [_cand(f"CandM{i}", f"9000000{i}", m1="Maths", m2="Musique") for i in range(2)]
+            + [_cand(f"CandP{i}", f"910000{i:02d}", m1="Maths", m2="Philo") for i in range(10)]
+        )
+        exams = [
+            _exam("ProfA", "Maths", "A101"),
+            _exam("ProfB", "Philo", "B101"),
+            _exam("ProfM", "Musique", "M101"),
+        ]
+        return _build_algo(
+            tmp_path, candidats=candidats, exams=exams, preps=self._PREPS_3_MATIERES,
+            optimiser_petites_matieres=optimiser, **kwargs,
+        )
+
+    def test_desactive_par_defaut(self, tmp_path):
+        """Sans passer optimiser_petites_matieres, aucun changement de comportement."""
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"920000000{i}") for i in range(3)],
+            exams=[_exam("Prof Maths", "Maths", "A101"), _exam("Prof Philo", "Philo", "B101")],
+        )
+        assert alg.optimiser_petites_matieres is False
+
+    def test_petite_matiere_voit_ses_premiers_creneaux_reserves(self, tmp_path):
+        alg = self._construire(tmp_path)
+        musique = next(m for m in alg.liste_matieres if m.nom == "Musique")
+        prof_musique = musique.examinateurs[0]
+        n_interdits = sum(1 for o in prof_musique.oraux if isinstance(o, CreneauInterdit))
+        # 2 candidats + marge par défaut (2) = 4 créneaux gardés sur 15 -> 11 réservés.
+        assert n_interdits == 11
+        # Les créneaux réservés sont bien les premiers (donc les plus tôt dans la journée).
+        indices_interdits = [i for i, o in enumerate(prof_musique.oraux) if isinstance(o, CreneauInterdit)]
+        assert indices_interdits == list(range(11))
+
+    def test_grosse_matiere_non_affectee(self, tmp_path):
+        alg = self._construire(tmp_path)
+        for nom in ("Maths", "Philo"):
+            matiere = next(m for m in alg.liste_matieres if m.nom == nom)
+            for examinateur in matiere.examinateurs:
+                assert not any(isinstance(o, CreneauInterdit) for o in examinateur.oraux)
+
+    def test_oraux_petite_matiere_places_en_fin_de_journee(self, tmp_path):
+        alg = self._construire(tmp_path)
+        alg.resoudre()
+        creneaux_musique = [o.creneau for o in alg.liste_oraux if o.matiere.nom == "Musique"]
+        assert creneaux_musique
+        assert all(c >= 11 for c in creneaux_musique)
+
+    def test_desactivation_explicite_ne_reserve_rien(self, tmp_path):
+        alg = self._construire(tmp_path, optimiser=False)
+        musique = next(m for m in alg.liste_matieres if m.nom == "Musique")
+        prof_musique = musique.examinateurs[0]
+        assert not any(isinstance(o, CreneauInterdit) for o in prof_musique.oraux)
