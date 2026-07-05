@@ -1,8 +1,9 @@
 """Tests unitaires pour algo.py — algorithme de placement des oraux."""
+import random
 import sys
 import time as _time
 import types
-from datetime import timedelta, time
+from datetime import timedelta, time, datetime, date
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -85,8 +86,8 @@ def _build_algo(tmp_path: Path, candidats: list[str], exams: list[str],
     return alg
 
 
-def _cand(nom: str, numero: str, m1: str = "Maths", m2: str = "Philo") -> str:
-    return f"{nom} ({numero});{m1};{m2};0;;"
+def _cand(nom: str, numero: str, m1: str = "Maths", m2: str = "Philo", tt: int = 0) -> str:
+    return f"{nom} ({numero});{m1};{m2};{tt};;"
 
 
 def _exam(nom: str, matiere: str, salle: str, heure: int = 8) -> str:
@@ -402,6 +403,49 @@ class TestSelectionMeilleurAlgo:
         assert best_stats is None
         assert n_err == 2
         assert aucun_run_conforme is False
+
+
+class TestTiersTempsNoOverlap:
+    """Un candidat tiers-temps prolonge sa propre préparation de
+    temps_preparation/3, ce qui retarde d'autant l'oral suivant dans la
+    même salle. calcul_horaires() doit compenser ce délai identiquement
+    pour le candidat tiers-temps lui-même (heure_oral) et pour le
+    positionnement du candidat suivant (heure_courante) — un arrondi
+    différent entre les deux (1 min vs 10 min) sous-compensait le second
+    de quelques minutes, provoquant un chevauchement réel dans la salle
+    (l'oral suivant démarrait avant la fin de l'oral tiers-temps)."""
+
+    def test_pas_de_chevauchement_apres_un_candidat_tiers_temps(self, tmp_path):
+        # temps_preparation=40 → 40/3=13.33 min : arrondi à 13 (1 min) vs 10
+        # (10 min) avant correctif — écart de 3 min, assez pour chevaucher.
+        preps = ["Management;Mana;40;20", "Philo;Philo;20;20"]
+        candidats = [
+            _cand("Cand0", "9400000000", m1="Management", m2="Philo", tt=0),
+            _cand("Cand1", "9400000001", m1="Management", m2="Philo", tt=1),  # tiers-temps
+            _cand("Cand2", "9400000002", m1="Management", m2="Philo", tt=0),
+            _cand("Cand3", "9400000003", m1="Management", m2="Philo", tt=0),
+        ]
+        exams = [
+            _exam("ProfMana", "Management", "B108"),
+            _exam("ProfPhilo", "Philo", "A1"),
+        ]
+
+        for seed in range(30):
+            random.seed(seed)
+            alg = _build_algo(tmp_path, candidats=candidats, exams=exams, preps=preps)
+            alg.resoudre()
+            alg.calcul_horaires()
+
+            exam_mana = next(e for e in alg.liste_examinateurs if e.nom == "ProfMana")
+            oraux = [o for o in exam_mana.oraux if o is not None]
+            for a, b in zip(oraux, oraux[1:]):
+                fin_a = datetime.combine(date(1, 1, 1), a.heure_fin)
+                oral_b = datetime.combine(date(1, 1, 1), b.heure_oral)
+                assert fin_a <= oral_b, (
+                    f"seed={seed} : {a.candidat.nom} (tiers_temps={a.candidat.tiers_temps}) "
+                    f"finit à {a.heure_fin}, {b.candidat.nom} commence son oral à "
+                    f"{b.heure_oral} — chevauchement dans la salle {exam_mana.salle}"
+                )
 
 
 class TestAlgoTiming:

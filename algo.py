@@ -836,8 +836,13 @@ class AlgoOne:
                             n_oraux_avant_pause = 0
                             heure_courante = self.ajouter_temps(heure_courante, self.temps_pause)
                         if oraux_examinateur[i_oral - 1] is not None and not isinstance(oraux_examinateur[i_oral - 1], CreneauInterdit) and oraux_examinateur[i_oral - 1].candidat.tiers_temps:
-                            heure_courante = self.ajouter_temps(heure_courante, matiere_courante.temps_preparation / 3,
-                                                                10)
+                            # Même arrondi (1 min) que celui appliqué à heure_oral du candidat
+                            # tiers-temps précédent (ligne ~847) : un arrondi différent (10 min)
+                            # ici sous-compensait le délai réel, provoquant un chevauchement de
+                            # quelques minutes entre son oral et celui du candidat suivant dans
+                            # la même salle (ex. temps_preparation=40 → 40/3=13.3min réels contre
+                            # 10min seulement compensés ici).
+                            heure_courante = self.ajouter_temps(heure_courante, matiere_courante.temps_preparation / 3)
                     if oraux_examinateur[i_oral] is not None:
                         oraux_examinateur[i_oral].heure_sujet = heure_courante
                         oraux_examinateur[i_oral].heure_oral = self.ajouter_temps(heure_courante,
