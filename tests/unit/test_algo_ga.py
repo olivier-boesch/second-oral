@@ -261,3 +261,97 @@ class TestAlgoGAEquiteEntreExaminateurs:
             o.examinateur.nom for o in alg.liste_oraux if o.matiere.nom == "Maths"
         )
         assert max(charges.values()) - min(charges.values()) <= 1
+
+
+class TestAlgoGAReparationEcart:
+    """_reparer_ecart doit réduire les violations d'écart minimum sans casser
+    les exclusions établissement/prof à éviter."""
+
+    def test_reduit_les_violations_ecart(self, tmp_path):
+        import random
+        random.seed(42)
+        alg = _build_algo_ga(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"14000000{i:02d}") for i in range(8)],
+            exams=[_exam("ProfA", "Maths", "A101"), _exam("ProfB", "Philo", "B101")],
+        )
+        matiere_data = alg._construire_matiere_data()
+        # Permutation identité : chaque candidat i est au créneau i dans les
+        # DEUX matières (même ordre de candidats des deux côtés) -> écart nul
+        # pour tout le monde, violation maximale (creneaux_minimum_entre_oraux
+        # >= 1 forcément > 0).
+        individu = {
+            mid: list(range(len(data['slots']))) for mid, data in matiere_data.items()
+        }
+        avant = alg._evaluer(individu, matiere_data).violations_ecart
+        assert avant > 0
+
+        for _ in range(30):
+            alg._reparer_ecart(individu, matiere_data)
+        apres = alg._evaluer(individu, matiere_data)
+        assert apres.violations_ecart < avant
+        assert apres.violations_exclusion == 0
+
+
+class TestAlgoGAReparationDesequilibre:
+    """_reparer_desequilibre doit réduire l'écart de charge entre examinateurs
+    d'une même matière sans casser les exclusions."""
+
+    def test_reduit_le_desequilibre(self, tmp_path):
+        import random
+        random.seed(42)
+        alg = _build_algo_ga(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"15000000{i:02d}") for i in range(10)],
+            exams=[
+                _exam("ProfA", "Maths", "A101"), _exam("ProfA2", "Maths", "A102"),
+                _exam("ProfB", "Philo", "B101"),
+            ],
+        )
+        matiere_data = alg._construire_matiere_data()
+        # Permutation identité : comme les créneaux de ProfA précèdent ceux de
+        # ProfA2 dans la liste des slots (ordre par examinateur), les 10
+        # premiers indices tombent tous chez ProfA -> déséquilibre maximal.
+        individu = {
+            mid: list(range(len(data['slots']))) for mid, data in matiere_data.items()
+        }
+        avant = alg._evaluer(individu, matiere_data).desequilibre_charge
+        assert avant > 1
+
+        for _ in range(30):
+            alg._reparer_desequilibre(individu, matiere_data)
+        apres = alg._evaluer(individu, matiere_data)
+        assert apres.desequilibre_charge < avant
+        assert apres.violations_exclusion == 0
+
+
+class TestAlgoGAMutationAdaptative:
+    """Le taux de mutation contrôle effectivement si une mutation se produit."""
+
+    def test_taux_zero_ne_change_rien(self, tmp_path):
+        alg = _build_algo_ga(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"16000000{i:02d}") for i in range(6)],
+            exams=[_exam("ProfA", "Maths", "A101"), _exam("ProfB", "Philo", "B101")],
+        )
+        matiere_data = alg._construire_matiere_data()
+        individu = {
+            mid: list(range(len(data['slots']))) for mid, data in matiere_data.items()
+        }
+        avant = {mid: list(perm) for mid, perm in individu.items()}
+        alg._mutation(individu, matiere_data, taux=0.0)
+        assert individu == avant
+
+    def test_taux_un_modifie_toutes_les_matieres(self, tmp_path):
+        alg = _build_algo_ga(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"17000000{i:02d}") for i in range(6)],
+            exams=[_exam("ProfA", "Maths", "A101"), _exam("ProfB", "Philo", "B101")],
+        )
+        matiere_data = alg._construire_matiere_data()
+        individu = {
+            mid: list(range(len(data['slots']))) for mid, data in matiere_data.items()
+        }
+        avant = {mid: list(perm) for mid, perm in individu.items()}
+        alg._mutation(individu, matiere_data, taux=1.0)
+        assert any(individu[mid] != avant[mid] for mid in matiere_data)

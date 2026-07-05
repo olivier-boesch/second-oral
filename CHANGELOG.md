@@ -63,6 +63,15 @@
 - `tests/unit/test_rebalance.py` : `resoudre_oraux_difficiles` (succès là où le glouton bloquerait, infaisabilité correctement détectée, marquage `hors_grille`, exclusions respectées), `construire_grille_etendue`, `duree_creneau_estimee`
 - `tests/integration/test_disponibilite_examinateur.py` : escalade des 3 paliers sur un cas réellement bloqué pour le glouton, résolu uniquement par l'extension d'horaire
 
+**Algorithme de placement (suite 4) — convergence du moteur génétique**
+- Réparation locale étendue à chaque génération (algorithme mémétique) : en plus des violations d'exclusion (déjà présent), `algo_ga.py` corrige désormais aussi localement les écarts minimum insuffisants (`_reparer_ecart`) et le déséquilibre de charge entre examinateurs (`_reparer_desequilibre`) — ces critères ne s'amélioraient auparavant qu'au hasard du croisement/de la mutation, beaucoup plus lent à converger
+- Les trois réparations cherchent leur partenaire d'échange sur toute la permutation (créneaux affectés ET inutilisés), pas seulement parmi les candidats déjà placés : un créneau inutilisé ne nécessite aucune vérification réciproque, et c'est souvent là que se trouve la place manquante
+- Mutation adaptative : le taux décroît linéairement de `ALGO_GA_MUTATION_RATE` (exploration) vers un minimum interne (exploitation), et chaque mutation déclenchée applique plusieurs swaps proportionnels au nombre de candidats plutôt qu'un seul (négligeable sur un grand chromosome)
+- Sur un jeu de test de taille moyenne (60 candidats, 12 examinateurs), l'écart minimum candidat converge à 0 violation dès la génération 10 (contre 45 auparavant), et l'évolution s'arrête après 64 générations au lieu de 98
+
+**Tests (suite 6)**
+- `tests/unit/test_algo_ga.py` : réduction effective des violations d'écart minimum et de déséquilibre de charge par les nouvelles réparations locales, comportement du taux de mutation adaptatif (0 = aucun changement, 1 = déclenchement systématique)
+
 ### Fixed
 
 - `/gestion/examinateur/disponibilite` : les oraux replacés uniquement grâce à la résolution poussée (palier 2 « mêmes horaires » ou palier 3 « extension d'horaire ») n'étaient jamais écrits en base à la confirmation — celle-ci recalculait le plan à partir de zéro (glouton seul), perdant silencieusement le résultat des paliers précédents. Le niveau de résolution atteint est désormais reporté d'une requête à l'autre (champ caché `niveau_resolution`) et rejoué avant application, pour que « Confirmer et notifier » persiste exactement ce qui a été prévisualisé.

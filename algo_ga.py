@@ -72,6 +72,16 @@ class AlgoGA(AlgoOne):
     _PENALITE_EXCLUSION = 1000
     _PENALITE_ECART = 50
     _PENALITE_DESEQUILIBRE = 20
+    # Mutation adaptative : le taux décroît linéairement de ALGO_GA_MUTATION_RATE
+    # (exploration en début d'évolution) vers _MUTATION_TAUX_MIN (exploitation en
+    # fin d'évolution), et chaque mutation déclenchée applique plusieurs swaps
+    # (proportionnels au nombre de candidats de la matière) plutôt qu'un seul —
+    # un swap unique est une perturbation négligeable sur un grand chromosome.
+    _MUTATION_TAUX_MIN = 0.02
+    _MUTATION_INTENSITE = 0.05
+    # Nombre de tentatives bornées pour chaque réparation locale (exclusion,
+    # écart minimum, équilibre de charge) — cf. _reparer_complet.
+    _REPARATION_MAX_ESSAIS = 5
 
     def _construire_matiere_data(self) -> dict[int, dict]:
         """Précalcule, par matière, les créneaux disponibles et les examinateurs
@@ -141,38 +151,198 @@ class AlgoGA(AlgoOne):
     def _croisement(self, parent1: _Individu, parent2: _Individu, matiere_data: dict) -> _Individu:
         return {mid: self._ox(parent1[mid], parent2[mid]) for mid in matiere_data}
 
-    def _mutation(self, individu: _Individu, matiere_data: dict) -> None:
-        for mid in matiere_data:
-            if random.random() < ALGO_GA_MUTATION_RATE:
-                perm = individu[mid]
-                if len(perm) >= 2:
-                    i, j = random.sample(range(len(perm)), 2)
-                    perm[i], perm[j] = perm[j], perm[i]
+    def _mutation(self, individu: _Individu, matiere_data: dict, taux: float) -> None:
+        """Mutation adaptative : `taux` (déjà décroissant au fil des
+        générations, cf. resoudre()) déclenche ou non une mutation pour
+        chaque matière ; quand elle se déclenche, plusieurs swaps sont
+        appliqués (proportionnels au nombre de candidats), pas un seul —
+        un swap unique est une perturbation négligeable sur un grand
+        chromosome et ralentit inutilement l'exploration.
 
-    def _reparer(self, individu: _Individu, matiere_data: dict, max_essais: int = 5) -> None:
+        Au moins une des deux positions échangées est toujours prise parmi
+        les gènes réellement affectés (le préfixe « utile » de la
+        permutation) : muter deux positions inutilisées entre elles n'a
+        aucun effet sur le fitness.
+        """
+        for mid, data in matiere_data.items():
+            if random.random() >= taux:
+                continue
+            perm = individu[mid]
+            n = len(perm)
+            n_candidats = len(data['candidats'])
+            if n < 2 or n_candidats == 0:
+                continue
+            n_swaps = max(1, round(n_candidats * self._MUTATION_INTENSITE))
+            for _ in range(n_swaps):
+                i = random.randrange(n_candidats)
+                j = random.randrange(n)
+                if j == i:
+                    continue
+                perm[i], perm[j] = perm[j], perm[i]
+
+    def _reparer(self, individu: _Individu, matiere_data: dict, max_essais: int | None = None) -> None:
         """Tente de corriger les violations d'exclusion (établissement/prof à
-        éviter) par échange avec un autre candidat compatible dans la même
+        éviter) par échange avec un autre créneau compatible de la même
         matière — conserve la propriété de permutation (donc l'unicité des
-        créneaux) puisqu'il s'agit d'un simple swap."""
+        créneaux) puisqu'il s'agit d'un simple swap.
+
+        Le partenaire d'échange est cherché sur toute la longueur de la
+        permutation (créneaux affectés à un candidat ET créneaux encore
+        inutilisés), pas seulement parmi les candidats déjà placés : un
+        créneau inutilisé n'a personne à y reloger, donc aucune vérification
+        réciproque n'est nécessaire pour lui — c'est souvent là que se trouve
+        la place manquante (ex. un examinateur encore peu chargé).
+        """
+        max_essais = max_essais if max_essais is not None else self._REPARATION_MAX_ESSAIS
         for mid, data in matiere_data.items():
             candidats = data['candidats']
             slots = data['slots']
             valides = data['examinateurs_valides']
             perm = individu[mid]
             n = len(candidats)
+            total = len(perm)
             for i in range(n):
                 examinateur_i, _creneau_i = slots[perm[i]]
                 if examinateur_i in valides[candidats[i]]:
                     continue
                 for _ in range(max_essais):
-                    j = random.randrange(n)
+                    j = random.randrange(total)
                     if j == i:
                         continue
                     examinateur_j, _creneau_j = slots[perm[j]]
-                    if (examinateur_j in valides[candidats[i]]
-                            and examinateur_i in valides[candidats[j]]):
-                        perm[i], perm[j] = perm[j], perm[i]
-                        break
+                    if examinateur_j not in valides[candidats[i]]:
+                        continue
+                    if j < n and examinateur_i not in valides[candidats[j]]:
+                        continue
+                    perm[i], perm[j] = perm[j], perm[i]
+                    break
+
+    def _reparer_ecart(self, individu: _Individu, matiere_data: dict, max_essais: int | None = None) -> None:
+        """Tente de corriger les écarts insuffisants entre les deux oraux
+        d'un même candidat, en échangeant l'un des deux oraux avec celui
+        d'un autre candidat de la même matière — accepté seulement si
+        l'échange augmente effectivement l'écart et ne casse pas les
+        exclusions établissement/prof à éviter d'aucun des deux candidats.
+
+        Sans cette réparation, l'écart minimum (une des pénalités les plus
+        lourdes du fitness, cf. _PENALITE_ECART) ne s'améliore qu'au hasard
+        du croisement/de la mutation — beaucoup plus lent à converger.
+        """
+        max_essais = max_essais if max_essais is not None else self._REPARATION_MAX_ESSAIS
+
+        # Position/créneau courant de chaque candidat dans chacune de ses
+        # deux matières (choix1 et choix2).
+        infos_candidat: dict[Candidat, list[tuple[int, int, int]]] = {}
+        for mid, data in matiere_data.items():
+            slots = data['slots']
+            perm = individu[mid]
+            for i, candidat in enumerate(data['candidats']):
+                creneau = slots[perm[i]][1]
+                infos_candidat.setdefault(candidat, []).append((mid, i, creneau))
+
+        for candidat, infos in infos_candidat.items():
+            if len(infos) != 2:
+                continue
+            (mid_a, i_a, creneau_a), (mid_b, i_b, creneau_b) = infos
+            if abs(creneau_a - creneau_b) >= self.creneaux_minimum_entre_oraux:
+                continue
+            # Essaie de déplacer l'un des deux oraux (ordre aléatoire), en
+            # s'arrêtant au premier qui améliore effectivement l'écart.
+            candidats_essai = [(mid_a, i_a, creneau_b), (mid_b, i_b, creneau_a)]
+            random.shuffle(candidats_essai)
+            for mid, i, creneau_fixe in candidats_essai:
+                data = matiere_data[mid]
+                slots = data['slots']
+                perm = individu[mid]
+                valides = data['examinateurs_valides']
+                candidats_matiere = data['candidats']
+                n = len(candidats_matiere)
+                total = len(perm)
+                ecart_actuel = abs(slots[perm[i]][1] - creneau_fixe)
+                examinateur_i, _ = slots[perm[i]]
+                for _ in range(max_essais):
+                    j = random.randrange(total)
+                    if j == i:
+                        continue
+                    examinateur_j, creneau_j = slots[perm[j]]
+                    if abs(creneau_j - creneau_fixe) <= ecart_actuel:
+                        continue
+                    if examinateur_j not in valides[candidat]:
+                        continue
+                    if j < n and examinateur_i not in valides[candidats_matiere[j]]:
+                        continue
+                    perm[i], perm[j] = perm[j], perm[i]
+                    break
+                else:
+                    continue
+                break
+
+    def _reparer_desequilibre(self, individu: _Individu, matiere_data: dict, max_essais: int | None = None) -> None:
+        """Tente de réduire l'écart de charge entre l'examinateur le plus
+        chargé et le moins chargé d'une matière, en échangeant un candidat de
+        l'examinateur le plus chargé avec un candidat d'un autre examinateur —
+        accepté seulement si les exclusions établissement/prof à éviter des
+        deux candidats restent respectées après l'échange.
+
+        Une seule amélioration par matière et par appel : cette réparation
+        est exécutée à chaque génération, un rééquilibrage progressif suffit.
+        """
+        max_essais = max_essais if max_essais is not None else self._REPARATION_MAX_ESSAIS
+        for mid, data in matiere_data.items():
+            examinateurs = data['matiere'].examinateurs
+            if len(examinateurs) < 2:
+                continue
+            slots = data['slots']
+            perm = individu[mid]
+            candidats = data['candidats']
+            valides = data['examinateurs_valides']
+            n = len(candidats)
+            if n == 0:
+                continue
+
+            # Initialisé à 0 pour TOUS les examinateurs de la matière — un
+            # examinateur sans aucun candidat actuellement assigné (donc
+            # absent de la boucle ci-dessous) doit être visible comme
+            # candidat à un rééquilibrage, pas ignoré.
+            charge: dict[int, int] = {id(e): 0 for e in examinateurs}
+            for i in range(n):
+                id_ex = id(slots[perm[i]][0])
+                charge[id_ex] = charge.get(id_ex, 0) + 1
+            id_max = max(charge, key=lambda k: charge[k])
+            id_min = min(charge, key=lambda k: charge[k])
+            if charge[id_max] - charge[id_min] <= 1:
+                continue  # déjà aussi équilibré que possible
+
+            total = len(perm)
+            indices_max = [i for i in range(n) if id(slots[perm[i]][0]) == id_max]
+            random.shuffle(indices_max)
+            for i in indices_max:
+                examinateur_i, _ = slots[perm[i]]
+                candidat_i = candidats[i]
+                for _ in range(max_essais):
+                    j = random.randrange(total)
+                    if j == i:
+                        continue
+                    examinateur_j, _ = slots[perm[j]]
+                    if id(examinateur_j) == id_max:
+                        continue
+                    if examinateur_j not in valides[candidat_i]:
+                        continue
+                    if j < n and examinateur_i not in valides[candidats[j]]:
+                        continue
+                    perm[i], perm[j] = perm[j], perm[i]
+                    break
+                else:
+                    continue
+                break
+
+    def _reparer_complet(self, individu: _Individu, matiere_data: dict) -> None:
+        """Enchaîne les trois réparations locales (mémétique) : exclusion,
+        écart minimum, équilibre de charge — dans cet ordre, du critère le
+        plus impératif (règle métier absolue) au plus « confort »."""
+        self._reparer(individu, matiere_data)
+        self._reparer_ecart(individu, matiere_data)
+        self._reparer_desequilibre(individu, matiere_data)
 
     def _evaluer(self, individu: _Individu, matiere_data: dict) -> _Evaluation:
         violations_exclusion = 0
@@ -259,7 +429,7 @@ class AlgoGA(AlgoOne):
         debut = _time.time()
         population = [self._individu_aleatoire(matiere_data) for _ in range(ALGO_GA_POPULATION)]
         for individu in population:
-            self._reparer(individu, matiere_data)
+            self._reparer_complet(individu, matiere_data)
 
         n_elite = max(1, ALGO_GA_POPULATION // 20)
         meilleur_individu: _Individu | None = None
@@ -300,13 +470,26 @@ class AlgoGA(AlgoOne):
                 )
                 break
 
+            # Mutation adaptative : décroît linéairement de ALGO_GA_MUTATION_RATE
+            # à _MUTATION_TAUX_MIN, selon la progression la plus avancée entre
+            # générations écoulées et temps écoulé (les deux peuvent terminer
+            # l'évolution, cf. condition de la boucle ci-dessus).
+            progression = max(
+                generation / ALGO_GA_GENERATIONS,
+                (_time.time() - debut) / ALGO_GA_TIMEOUT,
+            )
+            progression = min(1.0, progression)
+            taux_mutation = ALGO_GA_MUTATION_RATE - (
+                (ALGO_GA_MUTATION_RATE - self._MUTATION_TAUX_MIN) * progression
+            )
+
             nouvelle_population = [ind for _, ind in evalues[:n_elite]]
             while len(nouvelle_population) < ALGO_GA_POPULATION:
                 parent1 = self._tournoi(evalues)
                 parent2 = self._tournoi(evalues)
                 enfant = self._croisement(parent1, parent2, matiere_data)
-                self._mutation(enfant, matiere_data)
-                self._reparer(enfant, matiere_data)
+                self._mutation(enfant, matiere_data, taux_mutation)
+                self._reparer_complet(enfant, matiere_data)
                 nouvelle_population.append(enfant)
             population = nouvelle_population
             generation += 1

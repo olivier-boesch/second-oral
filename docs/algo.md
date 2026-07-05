@@ -33,6 +33,26 @@ le moins chargé, quand la répartition parfaite n'est pas un multiple exact) :
   avec un poids qui domine les variations d'occupation sans toutefois l'emporter
   sur une vraie violation d'écart minimum candidat.
 
+### Convergence du moteur génétique (`algo_ga.py`)
+
+Deux mécanismes accélèrent significativement la convergence par rapport à un GA "pur" :
+
+- **Réparation locale étendue (algorithme mémétique)** — à chaque génération, en plus de
+  corriger les violations d'exclusion établissement/prof à éviter (`_reparer`), le moteur
+  corrige aussi localement les écarts minimum insuffisants (`_reparer_ecart`) et le
+  déséquilibre de charge entre examinateurs (`_reparer_desequilibre`), par échange ciblé
+  de créneaux. Ces trois réparations cherchent leur partenaire d'échange sur **toute** la
+  permutation (créneaux affectés à un candidat ET créneaux encore inutilisés) — un créneau
+  inutilisé n'a personne à y reloger, donc aucune vérification réciproque n'est nécessaire,
+  et c'est souvent là que se trouve la place manquante (ex. un examinateur encore peu chargé).
+  Sans cette recherche locale à chaque génération, ces critères ne s'amélioraient qu'au
+  hasard du croisement/de la mutation — beaucoup plus lent à converger.
+- **Mutation adaptative** — le taux de mutation décroît linéairement de `ALGO_GA_MUTATION_RATE`
+  (exploration en début d'évolution) vers un minimum interne (`_MUTATION_TAUX_MIN`,
+  exploitation en fin d'évolution), et chaque mutation déclenchée applique plusieurs swaps
+  proportionnels au nombre de candidats de la matière (`_MUTATION_INTENSITE`) plutôt qu'un
+  seul swap fixe — négligeable sur un grand chromosome.
+
 ---
 
 ## Lancement
