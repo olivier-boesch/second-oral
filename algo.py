@@ -964,7 +964,9 @@ if __name__ == '__main__':
             log.critical(f"  Cause : {err}")
         sys.exit(1)
     log.info("Meilleur Algo:")
-    best_alg.statistiques()
+    final_stats = best_alg.statistiques()
+    log.info(f"  Remplissage des créneaux examinateurs : {final_stats['profs']}%")
+    log.info(f"  Écart mini entre oraux candidats : {final_stats['candidats']} min")
     # Dossier de sortie commun (volume Docker, accessible via /download)
     from pathlib import Path as _Path
     DOCS_DIR = _Path('webserver') / 'static' / 'docs'

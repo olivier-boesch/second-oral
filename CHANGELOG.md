@@ -83,6 +83,7 @@
 - Suppression du bouton "Recharger les pages" de `index_gestion.html` (déjà présent dans la sidebar admin)
 
 ### Fixed
+- `algo.py` : les statistiques du meilleur algo (remplissage examinateurs, écart mini candidats) n'apparaissaient plus dans le log console — le passage de `statistiques()` en `log.debug` (option `ALGO_DEBUG`) masquait aussi ce résumé final ; désormais loggé explicitement en `INFO`
 - Token CSRF dans la sidebar : conflit entre la variable `csrf_token` (string) passée au contexte de `gestion_algo` et la fonction Flask-WTF — résolu par test `is callable`
 - `algo.py` : erreur "Pas de créneau trouvé" remplacée par `PasDeCreneauDisponible` avec contexte (numéro candidat, nombre d'examinateurs) — causes loggées en `CRITICAL` quand tous les runs échouent
 - `reports.py` : ajout du répertoire `webserver/` au `sys.path` (erreur d'import à froid)
