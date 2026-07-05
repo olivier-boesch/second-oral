@@ -62,6 +62,7 @@
 
 **Liste générale**
 - `liste.html` hors grand écran (`dont_scroll`) : affiche les trois horaires (sujet, oral, fin) au lieu du seul horaire de sujet
+- `index_gestion.html` (`/gestion`) : affiche également les trois horaires (sujet, oral, fin)
 
 **Timers de loge**
 - Polling partagé pour les vues en lecture seule (examinateurs, candidats) : une seule boucle de polling par page, quel que soit le nombre de candidats affichés
