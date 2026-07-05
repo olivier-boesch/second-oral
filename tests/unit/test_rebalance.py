@@ -10,8 +10,11 @@ from rebalance import (  # noqa: E402
     Changement,
     ExaminateurCible,
     OralActuel,
+    construire_grille_etendue,
+    duree_creneau_estimee,
     planifier_absence,
     planifier_renfort,
+    resoudre_oraux_difficiles,
 )
 
 
@@ -215,3 +218,81 @@ class TestChangementMemeHeure:
             nouvelle_heure_oral=_td(9, 45), nouvelle_heure_fin=_td(10),
         )
         assert c.meme_heure is False
+
+
+class TestDureeCreneauEtGrilleEtendue:
+    def test_duree_deduite_du_plus_petit_ecart(self):
+        assert duree_creneau_estimee([_td(9), _td(9, 30), _td(10, 30)], []) == _td(0, 30)
+
+    def test_duree_repli_sur_duree_oral_si_grille_insuffisante(self):
+        oral = _oral(1, 100, "N100", 1, "ProfA", heure_sujet=_td(9))
+        assert duree_creneau_estimee([_td(9)], [oral]) == oral.heure_fin - oral.heure_sujet
+
+    def test_grille_etendue_prolonge_apres_le_dernier_horaire(self):
+        grille = construire_grille_etendue([_td(9), _td(9, 30)], _td(0, 30), plafond_minutes=60)
+        assert grille == [_td(9), _td(9, 30), _td(10), _td(10, 30)]
+
+    def test_grille_vide_reste_vide(self):
+        assert construire_grille_etendue([], _td(0, 30)) == []
+
+
+class TestResoudreOrauxDifficiles:
+    def test_reussit_la_ou_le_glouton_bloquerait(self):
+        oral = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA", heure_sujet=_td(9))
+        examinateurs = [ExaminateurCible(id=2, nom="ProfB", etablissements=[''])]
+        # ProfB occupé au même horaire -> doit se rabattre sur 9h30 de la grille.
+        occupations = {2: [(_td(9, 15), _td(9, 30))]}
+        plan = resoudre_oraux_difficiles(
+            [oral], examinateurs, occupations, [_td(9), _td(9, 30)],
+            {100: None}, 40, {},
+        )
+        assert not plan.non_replaces
+        changement = plan.changements[0]
+        assert changement.nouvel_examinateur_id == 2
+        assert changement.nouvelle_heure_sujet == _td(9, 30)
+        assert changement.hors_grille is False
+
+    def test_infaisable_meme_grille_reste_non_replace(self):
+        oral = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA", heure_sujet=_td(9))
+        examinateurs = [ExaminateurCible(id=2, nom="ProfB", etablissements=[''])]
+        # ProfB occupé sur tous les horaires de la grille -> aucune solution.
+        occupations = {2: [(_td(9, 15), _td(9, 30)), (_td(9, 45), _td(10))]}
+        plan = resoudre_oraux_difficiles(
+            [oral], examinateurs, occupations, [_td(9), _td(9, 30)],
+            {100: None}, 40, {},
+        )
+        assert plan.changements == []
+        assert [o.id for o in plan.non_replaces] == [1]
+
+    def test_grille_etendue_marque_hors_grille(self):
+        oral = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA", heure_sujet=_td(9))
+        examinateurs = [ExaminateurCible(id=2, nom="ProfB", etablissements=[''])]
+        occupations = {2: [(_td(9, 15), _td(9, 30)), (_td(9, 45), _td(10))]}
+        grille_initiale = [_td(9), _td(9, 30)]
+        grille_etendue = construire_grille_etendue(grille_initiale, _td(0, 30), plafond_minutes=60)
+        plan = resoudre_oraux_difficiles(
+            [oral], examinateurs, occupations, grille_etendue,
+            {100: None}, 40, {}, grille_initiale=grille_initiale,
+        )
+        assert not plan.non_replaces
+        changement = plan.changements[0]
+        assert changement.hors_grille is True
+        assert changement.nouvelle_heure_sujet not in grille_initiale
+
+    def test_respecte_les_exclusions(self):
+        oral = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA",
+                      heure_sujet=_td(9), etablissement="LyceeX")
+        examinateurs = [
+            ExaminateurCible(id=2, nom="ProfB", etablissements=["LyceeX"]),
+            ExaminateurCible(id=3, nom="ProfC", etablissements=['']),
+        ]
+        plan = resoudre_oraux_difficiles(
+            [oral], examinateurs, {2: [], 3: []}, [_td(9)], {100: None}, 40, {},
+        )
+        assert len(plan.changements) == 1
+        assert plan.changements[0].nouvel_examinateur_id == 3
+
+    def test_liste_vide_ne_plante_pas(self):
+        plan = resoudre_oraux_difficiles([], [], {}, [], {}, 40, {})
+        assert plan.changements == []
+        assert plan.non_replaces == []

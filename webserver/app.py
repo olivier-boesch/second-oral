@@ -1781,30 +1781,15 @@ def _oral_actuel_depuis_ligne(ligne: dict) -> rebalance.OralActuel:
     )
 
 
-def _calculer_plan_disponibilite(
-    id_examinateur: int,
-    info_examinateur: dict,
-    indispo_debut: timedelta | None,
-    dispo_retour: timedelta | None,
-) -> rebalance.PlanRebalancement:
+def _construire_contexte_disponibilite(info_examinateur: dict) -> dict:
     """
-    Calcule le plan de rééquilibrage pour un changement de disponibilité.
+    Charge une seule fois les données nécessaires au calcul du plan de
+    rééquilibrage ET, le cas échéant, à la résolution poussée (palier 2/3) —
+    évite de refaire les mêmes requêtes deux fois.
 
-    Un retard (absent jusqu'à une heure puis de retour) combine les deux
-    volets : `planifier_absence` sur la fenêtre [indispo_debut, dispo_retour),
-    puis `planifier_renfort` sur la fenêtre [dispo_retour, fin] en tenant
-    compte des changements déjà décidés par le premier volet.
-
-    Hypothèse (limite volontaire de cette première version) : un seul
-    examinateur change de disponibilité à la fois — pas de gestion
-    d'absences/renforts simultanés sur la même matière.
-
-    :param info_examinateur: résultat de SELECT_EXAMINATEUR_MATIERE, déjà
-        chargé par l'appelant (évite une seconde requête identique)
+    :param info_examinateur: résultat de SELECT_EXAMINATEUR_MATIERE
     """
-    ecart_mini_minutes = _load_algo_params()['ecart_mini']
-    info = info_examinateur
-    id_matiere = info['id_matiere']
+    id_matiere = info_examinateur['id_matiere']
 
     lignes = db_get(db_facility_web.SELECT_ORAUX_MATIERE_DU_JOUR, id_matiere, no_list_auto=False)
     oraux = [_oral_actuel_depuis_ligne(l) for l in lignes]
@@ -1827,8 +1812,46 @@ def _calculer_plan_disponibilite(
     autres_heures_sujet: dict[int, timedelta | None] = {}
     for id_candidat in {o.id_candidat for o in oraux}:
         autres = db_get(db_facility_web.SELECT_LISTE_EDITION_ORAL, id_candidat, no_list_auto=False)
-        autre = next((a for a in autres if a['matiere'] != info['matiere']), None)
+        autre = next((a for a in autres if a['matiere'] != info_examinateur['matiere']), None)
         autres_heures_sujet[id_candidat] = _to_td(autre['heure_sujet']) if autre else None
+
+    return {
+        'oraux': oraux,
+        'grille_horaires': grille_horaires,
+        'examinateurs_par_id': examinateurs_par_id,
+        'profs_a_eviter': profs_a_eviter,
+        'autres_heures_sujet': autres_heures_sujet,
+        'ecart_mini_minutes': _load_algo_params()['ecart_mini'],
+    }
+
+
+def _calculer_plan_disponibilite(
+    id_examinateur: int,
+    ctx: dict,
+    indispo_debut: timedelta | None,
+    dispo_retour: timedelta | None,
+) -> rebalance.PlanRebalancement:
+    """
+    Calcule le plan de rééquilibrage (palier 1, glouton) pour un changement
+    de disponibilité.
+
+    Un retard (absent jusqu'à une heure puis de retour) combine les deux
+    volets : `planifier_absence` sur la fenêtre [indispo_debut, dispo_retour),
+    puis `planifier_renfort` sur la fenêtre [dispo_retour, fin] en tenant
+    compte des changements déjà décidés par le premier volet.
+
+    Hypothèse (limite volontaire de cette première version) : un seul
+    examinateur change de disponibilité à la fois — pas de gestion
+    d'absences/renforts simultanés sur la même matière.
+
+    :param ctx: contexte construit par `_construire_contexte_disponibilite`
+    """
+    oraux = ctx['oraux']
+    grille_horaires = ctx['grille_horaires']
+    examinateurs_par_id = ctx['examinateurs_par_id']
+    profs_a_eviter = ctx['profs_a_eviter']
+    autres_heures_sujet = ctx['autres_heures_sujet']
+    ecart_mini_minutes = ctx['ecart_mini_minutes']
 
     plan = rebalance.PlanRebalancement()
     borne_fin = dispo_retour if dispo_retour is not None else timedelta(hours=23, minutes=59)
@@ -1884,6 +1907,58 @@ def _calculer_plan_disponibilite(
     return plan
 
 
+def _tenter_resolution_poussee(
+    id_examinateur: int,
+    ctx: dict,
+    plan: rebalance.PlanRebalancement,
+    etendre: bool,
+) -> rebalance.PlanRebalancement:
+    """
+    Palier 2 (etendre=False) ou palier 3 (etendre=True) : ré-essaie par
+    CP-SAT les oraux que le glouton (palier 1) n'a pas su replacer
+    (`plan.non_replaces`), en tenant compte des changements déjà décidés.
+
+    Ne concerne que les oraux issus de `planifier_absence` — `planifier_renfort`
+    n'alimente jamais `non_replaces` (ses déplacements sont optionnels).
+    """
+    if not plan.non_replaces:
+        return plan
+
+    oraux = ctx['oraux']
+    examinateurs_disponibles = [
+        e for e in ctx['examinateurs_par_id'].values() if e.id != id_examinateur
+    ]
+    ids_a_resoudre = {o.id for o in plan.non_replaces}
+    deja_deplaces_ids = {c.id_oral for c in plan.changements}
+
+    occupations: dict[int, list[tuple[timedelta, timedelta]]] = {}
+    for o in oraux:
+        if o.id in ids_a_resoudre or o.id in deja_deplaces_ids:
+            continue
+        occupations.setdefault(o.id_examinateur, []).append((o.heure_oral, o.heure_fin))
+    for c in plan.changements:
+        occupations.setdefault(c.nouvel_examinateur_id, []).append(
+            (c.nouvelle_heure_oral, c.nouvelle_heure_fin)
+        )
+
+    grille_initiale = ctx['grille_horaires']
+    grille = grille_initiale
+    if etendre:
+        duree = rebalance.duree_creneau_estimee(grille_initiale, plan.non_replaces)
+        grille = rebalance.construire_grille_etendue(grille_initiale, duree)
+
+    resultat = rebalance.resoudre_oraux_difficiles(
+        plan.non_replaces, examinateurs_disponibles, occupations, grille,
+        ctx['autres_heures_sujet'], ctx['ecart_mini_minutes'], ctx['profs_a_eviter'],
+        grille_initiale=grille_initiale,
+    )
+
+    return rebalance.PlanRebalancement(
+        changements=plan.changements + resultat.changements,
+        non_replaces=resultat.non_replaces,
+    )
+
+
 @app.route("/gestion/examinateur/disponibilite", methods=["GET", "POST"])
 @admin_required
 @nocache
@@ -1929,8 +2004,15 @@ def disponibilite_examinateur() -> ResponseReturnValue:
             error_msg="Renseignez au moins l'une des deux heures.",
         ), 400
 
-    plan = _calculer_plan_disponibilite(id_examinateur, info, indispo_debut, dispo_retour)
+    ctx = _construire_contexte_disponibilite(info)
+    plan = _calculer_plan_disponibilite(id_examinateur, ctx, indispo_debut, dispo_retour)
     etape = request.form.get("etape", "previsualisation")
+
+    if etape in ("resolution_poussee_grille", "resolution_poussee_etendue"):
+        plan = _tenter_resolution_poussee(
+            id_examinateur, ctx, plan, etendre=(etape == "resolution_poussee_etendue"),
+        )
+        etape = "previsualisation"
 
     if etape == "confirmer":
         for changement in plan.changements:

@@ -9,6 +9,7 @@
         .dispo-table th, .dispo-table td { padding:.4em .6em; text-align:left; font-size:.9em; }
         .dispo-meme-heure { background:#d4edda; }
         .dispo-heure-changee { background:#fff3cd; }
+        .dispo-hors-grille { background:#fde2c8; }
         .dispo-hint { font-size:.85rem; color:var(--text-sm); margin:.2em 0 .8em 0; }
     </style>
 </head>
@@ -59,7 +60,7 @@
 <form action="{{ url_for('disponibilite_examinateur') }}" method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="id_examinateur" value="{{ examinateur['id'] }}">
-    <input type="hidden" name="etape" value="confirmer">
+    <input type="hidden" name="etape" id="dispo-etape" value="confirmer">
     <input type="hidden" name="indisponible_a_partir_de" value="{{ indisponible_a_partir_de }}">
     <input type="hidden" name="disponible_a_nouveau_a_partir_de" value="{{ disponible_a_nouveau_a_partir_de }}">
 
@@ -80,17 +81,18 @@
             <th>Nouvelle heure</th>
         </tr>
         {% for c in plan.changements %}
-        <tr class="{{ 'dispo-meme-heure' if c.meme_heure else 'dispo-heure-changee' }}">
+        <tr class="{{ 'dispo-hors-grille' if c.hors_grille else ('dispo-meme-heure' if c.meme_heure else 'dispo-heure-changee') }}">
             <td>{{ c.numero }}</td>
             <td>{{ c.ancien_examinateur_nom }}</td>
             <td>{{ c.nouvel_examinateur_nom }}</td>
             <td>{{ c.ancienne_heure_sujet|heure }}</td>
-            <td>{{ c.nouvelle_heure_sujet|heure }}{% if not c.meme_heure %} ⚠{% endif %}</td>
+            <td>{{ c.nouvelle_heure_sujet|heure }}{% if not c.meme_heure %} ⚠{% endif %}{% if c.hors_grille %} 🕐{% endif %}</td>
         </tr>
         {% endfor %}
     </table>
     <p class="dispo-hint">
-        🟩 même heure (seul l'examinateur change) — 🟨 heure modifiée (à signaler au candidat)
+        🟩 même heure (seul l'examinateur change) — 🟨 heure modifiée (déjà utilisée aujourd'hui)
+        — 🟧 nouvel horaire 🕐 (extension de journée, à signaler aussi à l'examinateur concerné)
     </p>
     {% endif %}
 
@@ -106,8 +108,20 @@
         {% endfor %}
     </table>
     <p class="dispo-hint">
-        Ces oraux devront être réaffectés manuellement (édition d'oral).
+        Non replacés automatiquement (glouton) — une résolution plus poussée peut réussir
+        là où le glouton échoue, quitte à proposer de nouveaux horaires en fin de journée.
+        À défaut, une réaffectation manuelle (édition d'oral) reste nécessaire.
     </p>
+    <div style="display:flex; gap:.5em; flex-wrap:wrap; margin-bottom:1em;">
+        <button type="button" class="outline"
+                onclick="document.getElementById('dispo-etape').value='resolution_poussee_grille';this.closest('form').submit();">
+            🔧 Résolution poussée (mêmes horaires)
+        </button>
+        <button type="button" class="outline"
+                onclick="document.getElementById('dispo-etape').value='resolution_poussee_etendue';this.closest('form').submit();">
+            🔧🕐 Résolution poussée + extension d'horaire
+        </button>
+    </div>
     {% endif %}
 
     <div style="display:flex; gap:.5em; flex-wrap:wrap; margin-top:1em;">

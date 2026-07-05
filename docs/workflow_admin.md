@@ -293,8 +293,17 @@ Le renfort *ponctuel* (personne déjà présente qui redevient disponible, ou un
 
 Le flux se déroule en 3 étapes :
 1. **Saisie** des heures.
-2. **Prévisualisation** : un tableau liste chaque oral à redistribuer (candidat, ancien/nouvel examinateur, heure actuelle/nouvelle) — en vert si seul l'examinateur change (le candidat garde son heure), en jaune si l'heure change aussi. Les oraux qu'il n'a pas été possible de replacer automatiquement (aucun examinateur compatible disponible) sont listés séparément et devront être traités manuellement (édition d'oral).
+2. **Prévisualisation** : un tableau liste chaque oral à redistribuer (candidat, ancien/nouvel examinateur, heure actuelle/nouvelle) — en vert si seul l'examinateur change (le candidat garde son heure), en jaune si l'heure change aussi (dans la grille horaire déjà utilisée ce jour-là). Les oraux qu'il n'a pas été possible de replacer automatiquement (glouton) sont listés séparément, avec deux boutons de secours (voir ci-dessous) avant de recourir à une réaffectation manuelle (édition d'oral).
 3. **Confirmation** : chaque changement est appliqué et déclenche exactement la même notification SSE ciblée qu'une édition manuelle d'oral (candidat, salle, loge concernés) — cf. section précédente.
+
+#### Oraux non replacés automatiquement : résolution poussée (paliers 2 et 3)
+
+Le placement automatique (palier 1) est un algorithme glouton simple, pas exhaustif : il peut échouer à replacer un oral alors qu'une solution existe (limite de l'heuristique), ou parce que le problème est réellement sur-contraint. Deux boutons apparaissent dans l'écran de prévisualisation dès qu'il reste des oraux non replacés :
+
+- **🔧 Résolution poussée (mêmes horaires)** — relance une résolution *exacte* (solveur de contraintes CP-SAT, Google OR-Tools) sur les seuls oraux restants, dans la même grille horaire que le palier 1. Contrairement au glouton, elle explore exhaustivement toutes les combinaisons (examinateur × horaire déjà utilisé aujourd'hui) : elle peut donc réussir là où le glouton échoue, sans rien changer à l'amplitude de la journée.
+- **🔧🕐 Résolution poussée + extension d'horaire** — si le palier 2 échoue aussi (preuve qu'aucune solution n'existe dans la grille actuelle), relance le même solveur en ajoutant de nouveaux créneaux après le dernier horaire utilisé ce jour-là pour la matière (par pas égal à la durée d'un créneau, jusqu'à 2h de plus). Les changements obtenus via ce palier sont signalés par 🟧 et 🕐 dans le tableau : ils impliquent qu'un examinateur travaillera plus tard que prévu — à signaler explicitement à l'examinateur concerné, pas seulement au candidat.
+
+Ces deux résolutions poussées peuvent être relancées successivement depuis le même écran de prévisualisation (sans perdre les changements déjà proposés par les paliers précédents) ; rien n'est appliqué en base tant que **Confirmer et notifier** n'a pas été cliqué.
 
 **Limite actuelle :** un seul examinateur à la fois change de disponibilité (pas de gestion de plusieurs absences/renforts simultanés sur la même matière).
 

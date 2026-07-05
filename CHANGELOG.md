@@ -53,6 +53,16 @@
 **Tests (suite 4)**
 - Nouveaux tests d'équité de charge dans `test_algo.py`, `test_algo_cp.py`, `test_algo_ga.py` (écart maximum d'1 oral entre examinateurs d'une même matière, y compris avec un nombre de candidats non divisible par le nombre d'examinateurs)
 
+**Gestion en cours de journée (suite) — résolution poussée pour les oraux non replaçables**
+- Sur l'écran de prévisualisation de `/gestion/examinateur/disponibilite`, deux nouveaux boutons apparaissent quand des oraux n'ont pas pu être replacés automatiquement (glouton) : **🔧 Résolution poussée (mêmes horaires)** et **🔧🕐 Résolution poussée + extension d'horaire**
+- Le glouton existant (`planifier_absence`) est un premier essai non exhaustif ; `rebalance.resoudre_oraux_difficiles()` relance une résolution *exacte* par CP-SAT (Google OR-Tools) sur les seuls oraux restants — exploration exhaustive de toutes les combinaisons (examinateur × horaire), donc capable de réussir là où le glouton échoue
+- Si la même grille horaire reste infaisable, un second palier (`rebalance.construire_grille_etendue()`) génère de nouveaux créneaux après le dernier horaire utilisé aujourd'hui pour la matière (pas égal à la durée d'un créneau déduite de la grille existante, jusqu'à 2h de plus par défaut), puis relance le solveur — les changements obtenus sur ces nouveaux horaires sont marqués `hors_grille` et signalés distinctement (🟧🕐) dans la prévisualisation
+- Toujours aucune application en base tant que la confirmation n'est pas explicitement donnée ; les changements de tous les paliers se cumulent dans le même plan avant confirmation
+
+**Tests (suite 5)**
+- `tests/unit/test_rebalance.py` : `resoudre_oraux_difficiles` (succès là où le glouton bloquerait, infaisabilité correctement détectée, marquage `hors_grille`, exclusions respectées), `construire_grille_etendue`, `duree_creneau_estimee`
+- `tests/integration/test_disponibilite_examinateur.py` : escalade des 3 paliers sur un cas réellement bloqué pour le glouton, résolu uniquement par l'extension d'horaire
+
 ## [2026.2] — 2026-07-01
 
 ### Added

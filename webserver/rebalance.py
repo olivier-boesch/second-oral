@@ -56,6 +56,10 @@ class Changement:
     nouvelle_heure_sujet: timedelta
     nouvelle_heure_oral: timedelta
     nouvelle_heure_fin: timedelta
+    hors_grille: bool = False
+    """Vrai si l'heure proposée n'a jamais été utilisée aujourd'hui pour cette
+    matière — càd un créneau réellement nouveau (palier « extension d'horaire »
+    de resoudre_oraux_difficiles), pas juste un horaire déjà existant réutilisé."""
 
     @property
     def meme_heure(self) -> bool:
@@ -245,4 +249,171 @@ def planifier_renfort(
             charge[oral.id_examinateur] = charge.get(oral.id_examinateur, 0) - 1
             charge[examinateur_renfort.id] = charge.get(examinateur_renfort.id, 0) + 1
 
+    return plan
+
+
+# ── Résolution exacte (CP-SAT) pour les oraux que le glouton n'a pas su
+#    replacer — cf. discussion produit : le glouton (_placer) est un premier
+#    essai non exhaustif ; un solveur exact peut réussir là où il échoue,
+#    d'abord sur la même grille horaire, puis (si toujours infaisable) sur une
+#    grille étendue au-delà des heures déjà utilisées aujourd'hui. ──────────
+
+def duree_creneau_estimee(grille_horaires: list[timedelta], oraux: list[OralActuel]) -> timedelta:
+    """Estime la durée d'un créneau pour cette matière, à partir de l'écart
+    entre les heures de sujet déjà utilisées (ou, à défaut, de la durée totale
+    du premier oral fourni) — sert à générer de nouveaux créneaux plausibles
+    au-delà de la grille actuelle."""
+    valeurs = sorted(set(grille_horaires))
+    ecarts = [b - a for a, b in zip(valeurs, valeurs[1:]) if b > a]
+    if ecarts:
+        return min(ecarts)
+    if oraux:
+        return oraux[0].heure_fin - oraux[0].heure_sujet
+    return timedelta(minutes=20)
+
+
+def construire_grille_etendue(
+    grille_horaires: list[timedelta], duree_creneau: timedelta, plafond_minutes: int = 120,
+) -> list[timedelta]:
+    """Prolonge la grille horaire au-delà du dernier horaire déjà utilisé
+    aujourd'hui, par pas de `duree_creneau`, jusqu'à `plafond_minutes` de plus
+    — pour proposer de véritables nouveaux créneaux (palier « extension »),
+    plutôt que de se limiter aux horaires déjà utilisés pour cette matière."""
+    if not grille_horaires:
+        return list(grille_horaires)
+    grille = set(grille_horaires)
+    dernier = max(grille_horaires)
+    limite = dernier + timedelta(minutes=plafond_minutes)
+    t = dernier + duree_creneau
+    while t <= limite:
+        grille.add(t)
+        t += duree_creneau
+    return sorted(grille)
+
+
+def resoudre_oraux_difficiles(
+    oraux: list[OralActuel],
+    examinateurs: list[ExaminateurCible],
+    occupations_initiales: dict[int, list[tuple[timedelta, timedelta]]],
+    grille_horaires: list[timedelta],
+    autres_heures_sujet: dict[int, timedelta | None],
+    ecart_mini_minutes: float,
+    profs_a_eviter: dict[str, list[str]],
+    grille_initiale: list[timedelta] | None = None,
+) -> PlanRebalancement:
+    """
+    Résout par CP-SAT (Google OR-Tools) les oraux qu'un placement glouton
+    (`_placer`, via `planifier_absence`) n'a pas réussi à replacer.
+
+    Contrairement au glouton — qui s'arrête au premier échec — cette
+    résolution est exhaustive sur le sous-problème donné : si une solution
+    existe compte tenu de `grille_horaires` et `examinateurs`, elle sera
+    trouvée ; sinon `non_replaces` contient les oraux réellement infaisables
+    dans ce cadre (signal fiable pour décider d'élargir la grille — palier
+    suivant — ou de renoncer à l'automatisation).
+
+    :param grille_horaires: heures candidates pour le repositionnement —
+        peut être la grille du jour telle quelle (palier « même grille ») ou
+        une grille étendue via `construire_grille_etendue` (palier
+        « extension d'horaire »).
+    :param grille_initiale: grille du jour AVANT extension éventuelle, pour
+        marquer `Changement.hors_grille` — si None, `grille_horaires` sert
+        aussi de référence (donc `hors_grille` toujours faux).
+    """
+    from ortools.sat.python import cp_model
+
+    if not oraux:
+        return PlanRebalancement()
+
+    grille_reference = set(grille_initiale if grille_initiale is not None else grille_horaires)
+    oral_par_id = {o.id: o for o in oraux}
+    model = cp_model.CpModel()
+
+    x: dict[tuple[int, int, timedelta], "cp_model.IntVar"] = {}
+    intervalles_par_examinateur: dict[int, list] = {}
+
+    # Intervalles fixes : oraux déjà en place chez les autres examinateurs,
+    # qui ne bougent pas pendant cette résolution.
+    for id_examinateur, occ in occupations_initiales.items():
+        for debut, fin in occ:
+            iv = model.NewIntervalVar(  # type: ignore[attr-defined]
+                int(debut.total_seconds()), int((fin - debut).total_seconds()),
+                int(fin.total_seconds()), f"fixe_{id_examinateur}_{int(debut.total_seconds())}",
+            )
+            intervalles_par_examinateur.setdefault(id_examinateur, []).append(iv)
+
+    for oral in oraux:
+        duree_prep = oral.heure_oral - oral.heure_sujet
+        duree_oral = oral.heure_fin - oral.heure_oral
+        vars_oral = []
+        for examinateur in examinateurs:
+            if not _examinateur_autorise(examinateur, oral, profs_a_eviter):
+                continue
+            for heure_sujet in grille_horaires:
+                if heure_sujet != oral.heure_sujet and not _ecart_suffisant(
+                    heure_sujet, autres_heures_sujet.get(oral.id_candidat), ecart_mini_minutes,
+                ):
+                    continue
+                heure_oral = heure_sujet + duree_prep
+                heure_fin = heure_oral + duree_oral
+                var = model.NewBoolVar(  # type: ignore[attr-defined]
+                    f"x_{oral.id}_{examinateur.id}_{int(heure_sujet.total_seconds())}"
+                )
+                iv = model.NewOptionalIntervalVar(  # type: ignore[attr-defined]
+                    int(heure_oral.total_seconds()), int(duree_oral.total_seconds()),
+                    int(heure_fin.total_seconds()), var,
+                    f"opt_{oral.id}_{examinateur.id}_{int(heure_sujet.total_seconds())}",
+                )
+                intervalles_par_examinateur.setdefault(examinateur.id, []).append(iv)
+                x[(oral.id, examinateur.id, heure_sujet)] = var
+                vars_oral.append(var)
+        if vars_oral:
+            model.AddExactlyOne(vars_oral)  # type: ignore[attr-defined]
+        # sinon : aucune option même en théorie pour cet oral — il restera
+        # dans non_replaces (absent de x, jamais sélectionné).
+
+    for intervalles in intervalles_par_examinateur.values():
+        model.AddNoOverlap(intervalles)  # type: ignore[attr-defined]
+
+    if not x:
+        return PlanRebalancement(non_replaces=list(oraux))
+
+    # Objectif : minimiser la disruption (rester le plus proche possible de
+    # l'heure d'origine), même logique de priorité que le glouton _placer.
+    model.Minimize(sum(  # type: ignore[attr-defined]
+        int(abs((heure_sujet - oral_par_id[id_oral].heure_sujet).total_seconds())) * var
+        for (id_oral, _id_examinateur, heure_sujet), var in x.items()
+    ))
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = 10.0
+    status = solver.Solve(model)
+
+    plan = PlanRebalancement()
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        plan.non_replaces = list(oraux)
+        return plan
+
+    examinateur_par_id = {e.id: e for e in examinateurs}
+    resolus: set[int] = set()
+    for (id_oral, id_examinateur, heure_sujet), var in x.items():
+        if not solver.Value(var):
+            continue
+        oral = oral_par_id[id_oral]
+        examinateur = examinateur_par_id[id_examinateur]
+        duree_prep = oral.heure_oral - oral.heure_sujet
+        duree_oral = oral.heure_fin - oral.heure_oral
+        heure_oral = heure_sujet + duree_prep
+        heure_fin = heure_oral + duree_oral
+        plan.changements.append(Changement(
+            id_oral=oral.id, id_candidat=oral.id_candidat, numero=oral.numero,
+            ancien_examinateur_nom=oral.examinateur_nom,
+            nouvel_examinateur_id=examinateur.id, nouvel_examinateur_nom=examinateur.nom,
+            ancienne_heure_sujet=oral.heure_sujet, nouvelle_heure_sujet=heure_sujet,
+            nouvelle_heure_oral=heure_oral, nouvelle_heure_fin=heure_fin,
+            hors_grille=heure_sujet not in grille_reference,
+        ))
+        resolus.add(id_oral)
+
+    plan.non_replaces = [o for o in oraux if o.id not in resolus]
     return plan
