@@ -159,6 +159,28 @@ class TestDisponibiliteExaminateurResolutionPoussee:
         assert "ProfB" in body
         assert "🕐" in body  # marqueur d'extension d'horaire
 
+    def test_confirmation_apres_extension_persiste_le_changement(self, admin_client, db_mock, monkeypatch):
+        """Régression : confirmer après une résolution poussée par extension
+        d'horaire doit rejouer ce même palier (via `niveau_resolution`) avant
+        d'appliquer — sinon le plan de confirmation ne contient que le palier
+        1 (glouton, vide ici) et l'oral replacé par extension n'est jamais
+        écrit en base."""
+        import app as app_module
+        monkeypatch.setattr(app_module.sse, "publish", MagicMock())
+        db_mock.make_sql_select.side_effect = _side_effect_matiere_difficile
+
+        r = admin_client.post("/gestion/examinateur/disponibilite", data={
+            "id_examinateur": "1", "etape": "confirmer", "niveau_resolution": "etendue",
+            "indisponible_a_partir_de": "09:00", "disponible_a_nouveau_a_partir_de": "",
+        })
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "termine" not in body.lower() or "redistribué" in body
+        assert "1 oral(aux) redistribué" in body
+        db_mock.make_sql_update.assert_called_once()
+        _, kwargs = db_mock.make_sql_update.call_args
+        assert kwargs["examinateur"] == 2  # ProfB
+
 
 class TestDisponibiliteExaminateurConfirmation:
     def test_confirmer_applique_et_notifie(self, admin_client, db_mock, monkeypatch):

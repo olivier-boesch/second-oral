@@ -61,6 +61,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="id_examinateur" value="{{ examinateur['id'] }}">
     <input type="hidden" name="etape" id="dispo-etape" value="confirmer">
+    <input type="hidden" name="niveau_resolution" value="{{ niveau_resolution }}">
     <input type="hidden" name="indisponible_a_partir_de" value="{{ indisponible_a_partir_de }}">
     <input type="hidden" name="disponible_a_nouveau_a_partir_de" value="{{ disponible_a_nouveau_a_partir_de }}">
 

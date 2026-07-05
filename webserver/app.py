@@ -2008,10 +2008,24 @@ def disponibilite_examinateur() -> ResponseReturnValue:
     plan = _calculer_plan_disponibilite(id_examinateur, ctx, indispo_debut, dispo_retour)
     etape = request.form.get("etape", "previsualisation")
 
-    if etape in ("resolution_poussee_grille", "resolution_poussee_etendue"):
+    # Le niveau de résolution atteint (glouton seul / +même grille / +extension)
+    # est reporté d'une requête à l'autre via un champ caché du formulaire, pour
+    # que la confirmation rejoue exactement la même résolution que la dernière
+    # prévisualisation affichée — sans ce rejeu, "Confirmer" ne réappliquerait
+    # que le plan glouton (palier 1) et perdrait silencieusement les oraux
+    # replacés uniquement grâce aux paliers 2/3 (bug corrigé ici).
+    niveau_resolution = request.form.get("niveau_resolution", "glouton")
+    if etape == "resolution_poussee_grille":
+        niveau_resolution = "grille"
+    elif etape == "resolution_poussee_etendue":
+        niveau_resolution = "etendue"
+
+    if niveau_resolution in ("grille", "etendue"):
         plan = _tenter_resolution_poussee(
-            id_examinateur, ctx, plan, etendre=(etape == "resolution_poussee_etendue"),
+            id_examinateur, ctx, plan, etendre=(niveau_resolution == "etendue"),
         )
+
+    if etape in ("resolution_poussee_grille", "resolution_poussee_etendue"):
         etape = "previsualisation"
 
     if etape == "confirmer":
@@ -2042,6 +2056,7 @@ def disponibilite_examinateur() -> ResponseReturnValue:
         examinateur=info,
         etape="previsualisation",
         plan=plan,
+        niveau_resolution=niveau_resolution,
         indisponible_a_partir_de=indispo_str,
         disponible_a_nouveau_a_partir_de=retour_str,
         url_of_page=request.url,

@@ -63,6 +63,10 @@
 - `tests/unit/test_rebalance.py` : `resoudre_oraux_difficiles` (succès là où le glouton bloquerait, infaisabilité correctement détectée, marquage `hors_grille`, exclusions respectées), `construire_grille_etendue`, `duree_creneau_estimee`
 - `tests/integration/test_disponibilite_examinateur.py` : escalade des 3 paliers sur un cas réellement bloqué pour le glouton, résolu uniquement par l'extension d'horaire
 
+### Fixed
+
+- `/gestion/examinateur/disponibilite` : les oraux replacés uniquement grâce à la résolution poussée (palier 2 « mêmes horaires » ou palier 3 « extension d'horaire ») n'étaient jamais écrits en base à la confirmation — celle-ci recalculait le plan à partir de zéro (glouton seul), perdant silencieusement le résultat des paliers précédents. Le niveau de résolution atteint est désormais reporté d'une requête à l'autre (champ caché `niveau_resolution`) et rejoué avant application, pour que « Confirmer et notifier » persiste exactement ce qui a été prévisualisé.
+
 ## [2026.2] — 2026-07-01
 
 ### Added
