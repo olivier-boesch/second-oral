@@ -390,3 +390,45 @@ class TestAlgoRunLogging:
         assert len(messages) == 2, messages
         assert "Création matières" not in " ".join(messages)
         assert "Démarrage de l'appairage" not in " ".join(messages)
+
+
+class TestQueueLogging:
+    """_start_queue_logging doit router `log` vers une Queue via un seul
+    QueueListener écrivain (cf. remplacement du multiprocessing.Lock qui
+    sérialisait chaque log.debug() et ralentissait les runs parallèles)."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_handlers(self):
+        """Isole chaque test : remet ch/fh attachés directement à `log`
+        après coup, quel que soit l'état laissé par _start_queue_logging."""
+        import algo
+        original = list(algo.log.handlers)
+        yield
+        for h in list(algo.log.handlers):
+            algo.log.removeHandler(h)
+        for h in original:
+            algo.log.addHandler(h)
+
+    def test_routes_log_through_queue_handler_only(self):
+        import logging.handlers
+        import algo
+
+        listener = algo._start_queue_logging()
+        try:
+            handlers = algo.log.handlers
+            assert len(handlers) == 1
+            assert isinstance(handlers[0], logging.handlers.QueueHandler)
+            assert algo.ch not in handlers
+            assert algo.fh not in handlers
+        finally:
+            listener.stop()
+
+    def test_listener_writes_through_to_real_handlers(self, monkeypatch):
+        import algo
+
+        buf = []
+        monkeypatch.setattr(algo.ch, "emit", lambda record: buf.append(record.getMessage()))
+        listener = algo._start_queue_logging()
+        algo.log.info("message de test via la queue")
+        listener.stop()  # stop() vidange la queue avant de rendre la main
+        assert any("message de test via la queue" in m for m in buf)

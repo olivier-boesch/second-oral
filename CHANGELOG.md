@@ -49,6 +49,7 @@
 **Algorithme**
 - `algo.py` : logs internes de chaque run passés de `INFO` à `DEBUG` (seuls le lancement, la fin et les échecs de chaque run restent en `INFO` par défaut) — console beaucoup moins verbeuse ; l'option **Affichage détaillé (debug)** réactive le détail complet
 - `algo.py` : verrou inter-processus (`multiprocessing.Lock`) autour des handlers de logging — les runs parallèles (Pool) partagent la même sortie/le même fichier et pouvaient entrelacer leurs écritures au milieu d'un caractère UTF-8 multi-octets, corrompant le flux lu côté serveur web
+- `algo.py` : le verrou ci-dessus protégeait aussi le fichier de log local (jamais lu par le serveur web) et était acquis à chaque `log.debug()` — des centaines de milliers de fois sur un batch `N_run=1000`, re-sérialisant une grande partie du calcul parallèle. Remplacé par le pattern standard `QueueHandler`/`QueueListener` : les workers poussent leurs messages dans une `Queue`, un seul listener (thread du processus principal) écrit réellement — aucune contention, même garantie d'absence de corruption
 - `algo_bg.py` : subprocess lancé avec `encoding="utf-8", errors="replace"` — un octet mal décodé ne fait plus planter le streaming SSE de la sortie de l'algo
 
 **Génération PDF**
