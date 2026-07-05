@@ -25,9 +25,21 @@
             <th>
                 Matiere
             </th>
+            {% if dont_scroll %}
+            <th>
+                Heure sujet
+            </th>
+            <th>
+                Heure oral
+            </th>
+            <th>
+                Heure fin
+            </th>
+            {% else %}
             <th>
                 Heure
             </th>
+            {% endif %}
             <th>
                 Salle
             </th>
@@ -54,6 +66,29 @@
             {% endif %}
                 {{ oral['matiere'] }}
             </td>
+            {% if dont_scroll %}
+            {% if oral['maj'] %}
+            <td class="red">
+            {% else %}
+            <td>
+            {% endif %}
+                {{ oral['heure_sujet'] }}
+            </td>
+            {% if oral['maj'] %}
+            <td class="red">
+            {% else %}
+            <td>
+            {% endif %}
+                {{ oral['heure_oral'] }}
+            </td>
+            {% if oral['maj'] %}
+            <td class="red">
+            {% else %}
+            <td>
+            {% endif %}
+                {{ oral['heure_fin'] }}
+            </td>
+            {% else %}
             {% if oral['maj'] %}
             <td class="red">
             {% else %}
@@ -61,6 +96,7 @@
             {% endif %}
                 {{ oral['heure'] }}
             </td>
+            {% endif %}
             {% if oral['maj'] %}
             <td class="red">
             {% else %}

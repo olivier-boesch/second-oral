@@ -57,6 +57,12 @@
 **Vérification des conflits**
 - `_check_conflits_oral` : utilise `heure_oral` (et non `heure_sujet`) pour la plage examinateur — conflits détectés plus précisément sur la durée réelle de l'oral
 
+**Édition d'un oral**
+- `/gestion/edit-oral` : seul `heure_sujet` est modifiable dans le formulaire ; `heure_oral` et `heure_fin` sont recalculés côté serveur pour préserver les durées d'origine (préparation et oral)
+
+**Liste générale**
+- `liste.html` hors grand écran (`dont_scroll`) : affiche les trois horaires (sujet, oral, fin) au lieu du seul horaire de sujet
+
 **Timers de loge**
 - Polling partagé pour les vues en lecture seule (examinateurs, candidats) : une seule boucle de polling par page, quel que soit le nombre de candidats affichés
 - Route `/loge/timer-state` exemptée du rate limiter (appels automatiques fréquents)

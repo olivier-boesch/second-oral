@@ -1026,6 +1026,8 @@ class TestEditOralValidation:
     def _post(self, admin_client, heure_sujet="13:00", heure_oral="13:15",
               force="0", mis_a_jour=""):
         # mis_a_jour="" par défaut pour éviter les appels Redis SSE dans les tests
+        # heure_oral n'est plus lu par la route (recalculé côté serveur) mais reste
+        # accepté sans effet pour ne pas casser un éventuel appel client obsolète.
         return admin_client.post("/gestion/edit-oral", data={
             "id": "1", "examinateur": "10", "matiere": "2",
             "numero": "0123456789A",
@@ -1064,6 +1066,26 @@ class TestEditOralValidation:
         assert r.status_code == 302
         db_mock.make_sql_update.assert_called_once()
         _, kwargs = db_mock.make_sql_update.call_args
+        assert kwargs["heure_fin"] == "14:15:00"
+
+    def test_heure_oral_recalculated_ignores_posted_value(self, admin_client, db_mock):
+        """Seul heure_sujet pilote le déplacement : un heure_oral posté
+        incohérent avec la durée de préparation d'origine est ignoré, et
+        heure_oral/heure_fin sont recalculés pour préserver les durées
+        d'origine (préparation 15 min, oral 1h).
+        """
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.side_effect = [
+            [self.ORAL_ACTUEL],   # SELECT_INFOS_ORAL
+            [self.AUTRE_ORAL],    # SELECT_LISTE_EDITION_ORAL (candidat)
+            [],                   # SELECT_ORAUX_EXAMINATEUR (aucun conflit)
+        ]
+        # heure_oral posté (99:99 -> invalide/incohérent) ne doit avoir aucun effet
+        r = self._post(admin_client, heure_sujet="13:00", heure_oral="20:00")
+        assert r.status_code == 302
+        db_mock.make_sql_update.assert_called_once()
+        _, kwargs = db_mock.make_sql_update.call_args
+        assert kwargs["heure_oral"] == "13:15:00"
         assert kwargs["heure_fin"] == "14:15:00"
 
     def test_examiner_overlap_blocked(self, admin_client, db_mock):

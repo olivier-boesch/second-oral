@@ -102,6 +102,8 @@ SELECT_LISTE_ORAUX = """
 SELECT Oral.id AS id_oral, Candidat.id AS id_candidat, Candidat.nom AS nom,
        Candidat.numero AS numero, Candidat.tiers_temps AS tiers_temps,
        Matiere.nom AS matiere, Oral.heure_sujet AS heure,
+       Oral.heure_sujet AS heure_sujet, Oral.heure_oral AS heure_oral,
+       Oral.heure_fin AS heure_fin,
        Examinateur.salle AS salle, Oral.mis_a_jour AS maj
 FROM Oral
     JOIN Candidat ON Oral.candidat = Candidat.id

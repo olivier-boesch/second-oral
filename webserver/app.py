@@ -1477,7 +1477,6 @@ def edit_oral() -> ResponseReturnValue:
             'id': request.form.get('id'),
             'examinateur': request.form.get('examinateur'),
             'heure_sujet': request.form.get('heure_sujet'),
-            'heure_oral': request.form.get('heure_oral'),
             'mis_a_jour': 1 if request.form.get('mis_a_jour') == 'on' else 0,
         }
         numero = request.form.get('numero')
@@ -1485,17 +1484,19 @@ def edit_oral() -> ResponseReturnValue:
         # Validation des conflits horaires
         oral_actuel = db_get(db_facility_web.SELECT_INFOS_ORAL, d['id'])
         heure_sujet_str: str = request.form.get('heure_sujet') or ''
-        heure_oral_str:  str = request.form.get('heure_oral')  or ''
         id_oral_int: int = int(request.form.get('id') or 0)
         sujet_new = _time_str_to_td(heure_sujet_str)
-        oral_new  = _time_str_to_td(heure_oral_str)
+        # Durée de préparation (sujet → oral) : préservée pour recalculer heure_oral
+        duree_prep = _to_td(oral_actuel['heure_oral']) - _to_td(oral_actuel['heure_sujet'])
+        oral_new   = sujet_new + duree_prep
         # Durée totale du slot (sujet → fin) : pour la vérification candidat
         duree_slot = _to_td(oral_actuel['heure_fin']) - _to_td(oral_actuel['heure_sujet'])
         fin_new    = sujet_new + duree_slot
         # Durée de l'oral seul (oral → fin) : pour la vérification examinateur
         duree_oral    = _to_td(oral_actuel['heure_fin']) - _to_td(oral_actuel['heure_oral'])
         fin_exam_new  = oral_new + duree_oral
-        # heure_fin réelle de l'oral, recalculée pour préserver la durée d'origine
+        # heure_oral et heure_fin recalculées pour préserver les durées d'origine
+        d['heure_oral'] = _td_to_time_str(oral_new)
         d['heure_fin'] = _td_to_time_str(fin_exam_new)
         id_examinateur_int: int = int(request.form.get('examinateur') or 0)
         error_msg, warning_msg = _check_conflits_oral(
@@ -1512,6 +1513,7 @@ def edit_oral() -> ResponseReturnValue:
             donnees_oral = dict(oral_actuel)
             donnees_oral['heure_sujet'] = d['heure_sujet']
             donnees_oral['heure_oral'] = d['heure_oral']
+            donnees_oral['heure_fin'] = d['heure_fin']
             donnees_oral['id_matiere'] = (
                 request.form.get('matiere') or donnees_oral['id_matiere']
             )

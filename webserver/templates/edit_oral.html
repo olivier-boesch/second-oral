@@ -60,10 +60,10 @@
     <label for="heure_sujet">Heure de sujet (début préparation)</label>
     <input type="time" name="heure_sujet" id="heure_sujet"
            value="{{ donnees_oral['heure_sujet'] }}">
-
-    <label for="heure_oral">Heure d'oral (début oral)</label>
-    <input type="time" name="heure_oral" id="heure_oral"
-           value="{{ donnees_oral['heure_oral'] }}">
+    <p style="margin:0; font-size:.85rem; color:var(--text-sm);">
+        L'heure d'oral et l'heure de fin sont recalculées automatiquement
+        pour conserver les durées d'origine.
+    </p>
 
     <label for="select_matieres">Matière</label>
     <select name="matiere" id="select_matieres" onchange="update_examinateurs();">
