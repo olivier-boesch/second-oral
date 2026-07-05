@@ -928,13 +928,63 @@ def algo_run(parameters):
     return alg, stats
 
 
+def selectionner_meilleur_algo(
+    results: list,
+    ecart_mini_minutes: float,
+) -> tuple:
+    """
+    Sélectionne le meilleur run parmi les résultats de algo_run().
+
+    Un run est « conforme candidats » si son écart minimum réel entre les
+    deux oraux d'un même candidat (stats['candidats'], en minutes) respecte
+    le minimum configuré. Parmi les runs conformes, on choisit celui avec le
+    meilleur taux d'occupation examinateurs (stats['profs']) — sans jamais
+    élire un run non conforme tant qu'un run conforme existe dans le batch.
+
+    Si AUCUN run n'est conforme (cas limite, données très contraintes), on
+    retombe sur le meilleur run tout court (par profs) pour ne pas bloquer
+    la génération, mais on le signale via `aucun_run_conforme=True` — à
+    l'appelant de logger un avertissement explicite avant publication.
+
+    :param results: liste de tuples (alg, info) comme retournés par
+                     algo_run() — alg est None en cas d'échec du run (info
+                     contient alors le message d'erreur), sinon info est le
+                     dict de stats retourné par statistiques().
+    :param ecart_mini_minutes: écart minimum candidat requis, en minutes.
+    :return: (best_alg, best_stats, n_err, run_errors, aucun_run_conforme)
+    """
+    n_err = 0
+    run_errors: list[str] = []
+    best_percentage_compliant = -1.0
+    best_alg_compliant = None
+    best_stats_compliant = None
+    best_percentage_any = -1.0
+    best_alg_any = None
+    best_stats_any = None
+
+    for alg, info in results:
+        if alg is None:
+            n_err += 1
+            if info and info not in run_errors:
+                run_errors.append(info)
+            continue
+        stats = info
+        if best_percentage_any < stats['profs']:
+            best_percentage_any = stats['profs']
+            best_alg_any = alg
+            best_stats_any = stats
+        if stats['candidats'] >= ecart_mini_minutes and best_percentage_compliant < stats['profs']:
+            best_percentage_compliant = stats['profs']
+            best_alg_compliant = alg
+            best_stats_compliant = stats
+
+    if best_alg_compliant is not None:
+        return best_alg_compliant, best_stats_compliant, n_err, run_errors, False
+    return best_alg_any, best_stats_any, n_err, run_errors, best_alg_any is not None
+
+
 if __name__ == '__main__':
     log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
-    n_err = 0              # nombre d'erreurs
-    best_percentage = 0    # meilleur pourcentage de remplissage des créneaux profs
-    min_students_time = 0  # meilleur temps mini entre oraux candidats
-    best_alg = None        # meilleur algo
-    run_errors = []        # causes d'échec (dédupliquées)
 
     # liste des paramètres pour chaque run (tous identiques ici)
     parameters_list = [
@@ -952,22 +1002,13 @@ if __name__ == '__main__':
     with Pool() as pool:
         results = pool.map(algo_run, tuple(parameters_list))
 
-    # Analyse des résultats
-    for res in results:
-        alg, info = res
-        # erreur dans le run
-        if alg is None:
-            n_err += 1
-            if info and info not in run_errors:
-                run_errors.append(info)
-            continue
-        # succès et calcul des stats
-        # on garde le meilleur resultat (calculé sur le pourcentage de remplissage des créneaux profs)
-        stats = info
-        if best_percentage < stats['profs']:
-                best_percentage = stats['profs']
-                min_students_time = stats['candidats']
-                best_alg = alg
+    # Sélection du meilleur run — ne retient un run que s'il respecte
+    # l'écart minimum candidat (cf. selectionner_meilleur_algo), sauf si
+    # aucun run du batch ne le respecte.
+    ecart_mini_minutes = ECART_MINI_CANDIDAT.total_seconds() / 60
+    best_alg, final_stats, n_err, run_errors, aucun_run_conforme = selectionner_meilleur_algo(
+        results, ecart_mini_minutes,
+    )
     log.info(f"erreurs: {n_err} / {N_run} soit {n_err / N_run * 100:.2f}%")
     if best_alg is None:
         log.critical(
@@ -978,8 +1019,14 @@ if __name__ == '__main__':
         for err in run_errors:
             log.critical(f"  Cause : {err}")
         sys.exit(1)
+    if aucun_run_conforme:
+        log.critical(
+            f"Aucun run conforme à l'écart minimum candidat "
+            f"({ecart_mini_minutes:.0f} min) trouvé sur {N_run} tentatives — "
+            f"planning publié avec un écart minimum réel de "
+            f"{final_stats['candidats']} min (< {ecart_mini_minutes:.0f} min requis)."
+        )
     log.info("Meilleur Algo:")
-    final_stats = best_alg.statistiques()
     log.info(f"  Remplissage des créneaux examinateurs : {final_stats['profs']}%")
     log.info(f"  Écart mini entre oraux candidats : {final_stats['candidats']} min")
     # Dossier de sortie commun (volume Docker, accessible via /download)

@@ -310,6 +310,100 @@ class TestCandidatSeparationMinimum:
             )
 
 
+class TestSelectionMeilleurAlgo:
+    """selectionner_meilleur_algo ne doit jamais élire un run qui viole
+    l'écart minimum candidat (stats['candidats']) tant qu'un run conforme
+    existe dans le batch — même si ce run non conforme a le meilleur taux
+    d'occupation examinateurs (stats['profs']).
+
+    Contexte du bug : le contrôle d'écart pendant le placement compare des
+    indices de créneau en supposant 20 min/créneau pour toutes les matières,
+    alors que calcul_horaires() peut avancer d'un pas différent selon la
+    matière (temps_preparation non multiple de temps_oral). Un run peut donc
+    "réussir" tout en violant l'écart réel — la sélection par pourcentage
+    seul (ancien comportement) pouvait publier un tel run."""
+
+    def test_rejette_run_non_conforme_au_profit_du_meilleur_conforme(self):
+        from algo import selectionner_meilleur_algo
+
+        alg_non_conforme = MagicMock(name="alg_non_conforme")
+        alg_conforme_a  = MagicMock(name="alg_conforme_a")
+        alg_conforme_b  = MagicMock(name="alg_conforme_b")
+
+        results = [
+            # Meilleure occupation (95%) mais écart réel < 80 min : doit être écarté.
+            (alg_non_conforme, {"profs": 95.0, "candidats": 42}),
+            # Deux runs conformes (>= 80 min) : le meilleur des deux doit être choisi.
+            (alg_conforme_a, {"profs": 80.0, "candidats": 80}),
+            (alg_conforme_b, {"profs": 88.0, "candidats": 90}),
+        ]
+
+        best_alg, best_stats, n_err, run_errors, aucun_run_conforme = (
+            selectionner_meilleur_algo(results, ecart_mini_minutes=80)
+        )
+
+        assert best_alg is alg_conforme_b
+        assert best_stats == {"profs": 88.0, "candidats": 90}
+        assert n_err == 0
+        assert run_errors == []
+        assert aucun_run_conforme is False
+
+    def test_fallback_si_aucun_run_conforme(self):
+        from algo import selectionner_meilleur_algo
+
+        alg_a = MagicMock(name="alg_a")
+        alg_b = MagicMock(name="alg_b")
+
+        results = [
+            (alg_a, {"profs": 70.0, "candidats": 50}),
+            (alg_b, {"profs": 90.0, "candidats": 60}),  # meilleure occupation, mais non conforme
+        ]
+
+        best_alg, best_stats, n_err, run_errors, aucun_run_conforme = (
+            selectionner_meilleur_algo(results, ecart_mini_minutes=80)
+        )
+
+        # Aucun run conforme : on retombe sur le meilleur par occupation (alg_b),
+        # mais l'appelant doit être averti.
+        assert best_alg is alg_b
+        assert best_stats == {"profs": 90.0, "candidats": 60}
+        assert aucun_run_conforme is True
+
+    def test_erreurs_dedupliquees_et_alg_none_ignores(self):
+        from algo import selectionner_meilleur_algo
+
+        alg_ok = MagicMock(name="alg_ok")
+        results = [
+            (None, "Candidat X — aucun créneau disponible (1 examinateur(s))"),
+            (None, "Candidat X — aucun créneau disponible (1 examinateur(s))"),  # doublon
+            (None, "Candidat Y — aucun créneau disponible (2 examinateur(s))"),
+            (alg_ok, {"profs": 75.0, "candidats": 100}),
+        ]
+
+        best_alg, best_stats, n_err, run_errors, aucun_run_conforme = (
+            selectionner_meilleur_algo(results, ecart_mini_minutes=80)
+        )
+
+        assert best_alg is alg_ok
+        assert n_err == 3
+        assert len(run_errors) == 2  # dédupliquées
+        assert aucun_run_conforme is False
+
+    def test_aucun_run_reussi(self):
+        from algo import selectionner_meilleur_algo
+
+        results = [(None, "erreur 1"), (None, "erreur 2")]
+
+        best_alg, best_stats, n_err, run_errors, aucun_run_conforme = (
+            selectionner_meilleur_algo(results, ecart_mini_minutes=80)
+        )
+
+        assert best_alg is None
+        assert best_stats is None
+        assert n_err == 2
+        assert aucun_run_conforme is False
+
+
 class TestAlgoTiming:
     """Mesure des temps d'exécution d'un run unique (sans multiprocessing)."""
 
