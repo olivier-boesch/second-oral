@@ -1054,7 +1054,7 @@ class TestEditOralValidation:
         d'origine de l'oral (bug : heure_fin restait figée après un déplacement).
 
         ORAL_ACTUEL : heure_oral=09:00, heure_fin=10:00 → durée oral = 1h.
-        Déplacement vers heure_oral=13:15 → heure_fin attendue = 14:15:00.
+        Déplacement vers heure_oral=13:15 → heure_fin attendue = 14:15.
         """
         db_mock.make_sql_update.reset_mock()
         db_mock.make_sql_select.side_effect = [
@@ -1066,7 +1066,7 @@ class TestEditOralValidation:
         assert r.status_code == 302
         db_mock.make_sql_update.assert_called_once()
         _, kwargs = db_mock.make_sql_update.call_args
-        assert kwargs["heure_fin"] == "14:15:00"
+        assert kwargs["heure_fin"] == "14:15"
 
     def test_heure_oral_recalculated_ignores_posted_value(self, admin_client, db_mock):
         """Seul heure_sujet pilote le déplacement : un heure_oral posté
@@ -1085,8 +1085,8 @@ class TestEditOralValidation:
         assert r.status_code == 302
         db_mock.make_sql_update.assert_called_once()
         _, kwargs = db_mock.make_sql_update.call_args
-        assert kwargs["heure_oral"] == "13:15:00"
-        assert kwargs["heure_fin"] == "14:15:00"
+        assert kwargs["heure_oral"] == "13:15"
+        assert kwargs["heure_fin"] == "14:15"
 
     def test_examiner_overlap_blocked(self, admin_client, db_mock):
         """Chevauchement examinateur → 422, mise à jour non appliquée.

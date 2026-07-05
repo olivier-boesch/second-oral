@@ -79,7 +79,8 @@ WHERE Examinateur.salle = %s
 SELECT_ORAUX_SALLE = """
 SELECT Oral.id AS id, Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Oral.heure_sujet AS sujet,
-       Oral.heure_oral AS oral, Oral.mis_a_jour AS maj, Oral.emargement AS emargement,
+       Oral.heure_oral AS oral, Oral.heure_fin AS fin,
+       Oral.mis_a_jour AS maj, Oral.emargement AS emargement,
        Oral.heure_emargement AS heure_emargement
 FROM Oral
     JOIN Candidat ON Oral.candidat = Candidat.id
@@ -130,6 +131,7 @@ SELECT_ORAUX_LOGE = """
 SELECT Examinateur.loge AS loge, Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Examinateur.salle AS salle,
        Oral.heure_sujet AS sujet, Oral.mis_a_jour AS maj, Oral.heure_oral AS oral,
+       Oral.heure_fin AS fin,
        Matiere.nom AS matiere, Matiere.nom_court AS matiere_court,
        Examinateur.nom AS examinateur
 FROM Oral

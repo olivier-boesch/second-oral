@@ -29,6 +29,7 @@
             <th>Examinateur</th>
             <th>Heure Sujet</th>
             <th>Heure Oral</th>
+            <th>Heure Fin</th>
             <th>Minuteur</th>
         </tr>
     {%for oral in data['oraux'] %}
@@ -60,6 +61,9 @@
             </td>
             {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
                 {{ oral['oral'] }}
+            </td>
+            {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
+                {{ oral['fin'] }}
             </td>
             {% if oral['sujet'] and oral['oral'] %}
             <td class="timer-cell"

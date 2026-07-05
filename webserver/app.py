@@ -1378,11 +1378,11 @@ def _time_str_to_td(s: str) -> timedelta:
 
 
 def _td_to_time_str(td: timedelta) -> str:
-    """Convertit un timedelta en chaîne HH:MM:SS (colonne TIME)."""
+    """Convertit un timedelta en chaîne HH:MM (colonne TIME)."""
     total_seconds = int(td.total_seconds())
     h, rem = divmod(total_seconds, 3600)
     m, s = divmod(rem, 60)
-    return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{h:02d}:{m:02d}"
 
 
 def _to_td(val: object) -> timedelta:
