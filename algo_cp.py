@@ -29,6 +29,45 @@ from algo import (
 ALGO_CP_TIMEOUT = _env_int("ALGO_CP_TIMEOUT", 60)
 
 
+class _ProgressLogger(cp_model.CpSolverSolutionCallback):
+    """Journalise les solutions améliorantes trouvées pendant la résolution.
+
+    CP-SAT ne renvoie sa solution qu'à la toute fin de Solve() ; sans ce
+    callback, rien n'apparaît dans les logs pendant tout le temps de
+    résolution (jusqu'à ALGO_CP_TIMEOUT secondes), ce qui donne l'impression
+    d'un blocage.
+
+    Deux niveaux de verbosité :
+    - DEBUG (ALGO_DEBUG=1) : chaque solution améliorante, sans limite —
+      utile pour diagnostiquer la convergence du solveur.
+    - INFO (par défaut) : la première solution, puis au maximum une ligne
+      toutes les _LOG_INTERVAL_S secondes — un problème avec beaucoup de
+      candidats peut trouver des dizaines de solutions par seconde en début
+      de recherche, ce qui noierait le log par défaut sans ce throttling.
+    """
+
+    _LOG_INTERVAL_S = 2.0
+
+    def __init__(self, numero_run: int):
+        super().__init__()
+        self._numero_run = numero_run
+        self._n_solutions = 0
+        self._last_info_log_t = 0.0
+
+    def on_solution_callback(self) -> None:
+        self._n_solutions += 1
+        t = self.WallTime()
+        message = (
+            f"Run {self._numero_run} : CP-SAT — solution n°{self._n_solutions} "
+            f"trouvée (objectif={self.ObjectiveValue():.0f}, "
+            f"borne={self.BestObjectiveBound():.0f}, t={t:.1f}s)"
+        )
+        log.debug(message)
+        if self._n_solutions == 1 or t - self._last_info_log_t >= self._LOG_INTERVAL_S:
+            log.info(message)
+            self._last_info_log_t = t
+
+
 class AucuneSolutionCP(AlgoError):
     """Le solveur CP-SAT n'a trouvé aucune solution respectant les contraintes."""
 
@@ -156,7 +195,12 @@ class AlgoCP(AlgoOne):
         solver.parameters.max_time_in_seconds = float(ALGO_CP_TIMEOUT)
         solver.parameters.num_search_workers = max(1, cpu_count() or 1)
         solver.parameters.random_seed = random.randint(1, 2 ** 31 - 1)
-        status = solver.Solve(model)
+        # Journal détaillé du solveur natif (bornes, recherche...) — uniquement
+        # visible en mode debug (ALGO_DEBUG=1), comme le reste des logs internes
+        # d'un run (cf. AlgoOne.resoudre() / log.debug ci-dessus).
+        solver.parameters.log_search_progress = True
+        solver.log_callback = lambda ligne: log.debug(f"Run {self.numero_run} : [CP-SAT] {ligne}")
+        status = solver.Solve(model, _ProgressLogger(self.numero_run))
 
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             raise AucuneSolutionCP(
