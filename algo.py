@@ -28,6 +28,18 @@ from webserver.reports import (
 
 colorama.init(autoreset=True)
 
+# Lorsque ce fichier est lancé directement (`python algo.py`), il est
+# enregistré dans sys.modules sous la clé "__main__", pas "algo". Si un
+# module tiers (ex. algo_cp.py) fait ensuite `from algo import ...`, Python
+# ne trouve pas de module "algo" déjà chargé et réexécute donc CE FICHIER
+# une seconde fois, dans un espace de noms complètement séparé — avec pour
+# conséquence que son bloc `if __name__ == '__main__':` (qui définit `_Path`,
+# utilisé par AlgoOne.save()) ne s'exécute jamais dans cette seconde copie.
+# On force ici l'alias pour que tout `import algo` ultérieur réutilise ce
+# module déjà chargé, qu'il ait été lancé en tant que script ou importé
+# normalement.
+sys.modules.setdefault("algo", sys.modules[__name__])
+
 # paramètres de run — surchargés par variables d'environnement si présentes
 import os as _os
 
