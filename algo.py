@@ -1049,7 +1049,11 @@ if __name__ == '__main__':
     best_alg, final_stats, n_err, run_errors, aucun_run_conforme = selectionner_meilleur_algo(
         results, ecart_mini_minutes,
     )
-    log.info(f"erreurs: {n_err} / {N_run} soit {n_err / N_run * 100:.2f}%")
+    if ALGO_ENGINE != "cpsat":
+        # Non pertinent en CP-SAT : une seule résolution est tentée (pas de
+        # tirages Monte-Carlo), donc "n_err / N_run" n'a pas de sens ici —
+        # l'échec éventuel est déjà couvert par le message critique ci-dessous.
+        log.info(f"erreurs: {n_err} / {N_run} soit {n_err / N_run * 100:.2f}%")
     if best_alg is None:
         log.critical(
             "Aucun placement valide trouvé sur l'ensemble des runs. "
@@ -1060,9 +1064,13 @@ if __name__ == '__main__':
             log.critical(f"  Cause : {err}")
         sys.exit(1)
     if aucun_run_conforme:
+        # En CP-SAT, l'écart minimum est une contrainte dure : ce cas ne
+        # devrait jamais se produire (sauf solution de repli), donc pas de
+        # mention de "tentatives" (notion propre au Monte-Carlo) ici.
+        tentatives = f" trouvé sur {N_run} tentatives" if ALGO_ENGINE != "cpsat" else ""
         log.critical(
             f"Aucun run conforme à l'écart minimum candidat "
-            f"({ecart_mini_minutes:.0f} min) trouvé sur {N_run} tentatives — "
+            f"({ecart_mini_minutes:.0f} min){tentatives} — "
             f"planning publié avec un écart minimum réel de "
             f"{final_stats['candidats']} min (< {ecart_mini_minutes:.0f} min requis)."
         )

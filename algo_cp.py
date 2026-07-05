@@ -195,11 +195,13 @@ class AlgoCP(AlgoOne):
         solver.parameters.max_time_in_seconds = float(ALGO_CP_TIMEOUT)
         solver.parameters.num_search_workers = max(1, cpu_count() or 1)
         solver.parameters.random_seed = random.randint(1, 2 ** 31 - 1)
-        # Journal détaillé du solveur natif (bornes, recherche...) — uniquement
-        # visible en mode debug (ALGO_DEBUG=1), comme le reste des logs internes
-        # d'un run (cf. AlgoOne.resoudre() / log.debug ci-dessus).
-        solver.parameters.log_search_progress = True
-        solver.log_callback = lambda ligne: log.debug(f"Run {self.numero_run} : [CP-SAT] {ligne}")
+        # NB : on n'active volontairement PAS solver.parameters.log_search_progress
+        # — ce journal natif du solveur (présolve, heuristiques internes...) est
+        # écrit directement sur stdout par la couche C++ d'OR-Tools, sans passer
+        # par le logger Python (donc sans respecter ALGO_DEBUG) : plusieurs
+        # centaines de lignes très techniques et non traduites même sur un
+        # petit jeu de données. _ProgressLogger ci-dessus fournit déjà un suivi
+        # de progression exploitable (solution, objectif, borne, temps).
         status = solver.Solve(model, _ProgressLogger(self.numero_run))
 
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
