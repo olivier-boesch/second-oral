@@ -200,6 +200,29 @@ UPDATE Oral SET
 WHERE id = %(id)s
 """
 
+# ---------- Rééquilibrage (absence / renfort / retard d'un examinateur) ──────
+
+SELECT_EXAMINATEUR_MATIERE = """
+SELECT Examinateur.id AS id, Examinateur.nom AS nom,
+       Examinateur.matiere AS id_matiere, Matiere.nom AS matiere
+FROM Examinateur
+    JOIN Matiere ON Matiere.id = Examinateur.matiere
+WHERE Examinateur.id = %s
+"""
+
+SELECT_ORAUX_MATIERE_DU_JOUR = """
+SELECT Oral.id AS id, Candidat.id AS id_candidat, Candidat.numero AS numero,
+       Candidat.etablissement AS etablissement,
+       Examinateur.id AS id_examinateur, Examinateur.nom AS examinateur,
+       Oral.heure_sujet AS heure_sujet, Oral.heure_oral AS heure_oral,
+       Oral.heure_fin AS heure_fin
+FROM Oral
+    JOIN Candidat ON Oral.candidat = Candidat.id
+    JOIN Examinateur ON Oral.examinateur = Examinateur.id
+WHERE Examinateur.matiere = %s
+ORDER BY Oral.heure_sujet
+"""
+
 # ---------- Tokens signature
 
 INSERT_TOKEN_SIGNATURE = """

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>2ndOral — Disponibilité : {{ examinateur['nom'] }}</title>
+    {% include 'style.html' %}
+    <style>
+        .dispo-table { width:100%; border-collapse:collapse; margin-top:1em; }
+        .dispo-table th, .dispo-table td { padding:.4em .6em; text-align:left; font-size:.9em; }
+        .dispo-meme-heure { background:#d4edda; }
+        .dispo-heure-changee { background:#fff3cd; }
+        .dispo-hint { font-size:.85rem; color:var(--text-sm); margin:.2em 0 .8em 0; }
+    </style>
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+
+<h1>Disponibilité — {{ examinateur['nom'] }} ({{ examinateur['matiere'] }})</h1>
+
+<div style="max-width:640px; margin:0 auto;">
+
+{% if error_msg %}
+<p style="background:#fde8e8; color:#b91c1c; border-left:4px solid #b91c1c;
+          padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
+    🚫 {{ error_msg }}
+</p>
+{% endif %}
+
+{% if etape == 'saisie' %}
+<p style="font-size:.9em; color:var(--text-md);">
+    Un retard se modélise en ne renseignant que « Disponible de nouveau » (l'examinateur est
+    considéré indisponible depuis le début de la journée jusqu'à cette heure). Une absence
+    définitive se modélise en ne renseignant que « Indisponible à partir de ».
+</p>
+<form action="{{ url_for('disponibilite_examinateur') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="id_examinateur" value="{{ examinateur['id'] }}">
+    <input type="hidden" name="etape" value="previsualisation">
+
+    <label for="indisponible_a_partir_de">Indisponible à partir de</label>
+    <input type="time" name="indisponible_a_partir_de" id="indisponible_a_partir_de">
+    <span class="dispo-hint">Laisser vide si l'examinateur n'a pas encore été présent aujourd'hui (retard)</span>
+
+    <label for="disponible_a_nouveau_a_partir_de">Disponible de nouveau à partir de</label>
+    <input type="time" name="disponible_a_nouveau_a_partir_de" id="disponible_a_nouveau_a_partir_de">
+    <span class="dispo-hint">Laisser vide en cas d'absence pour le reste de la journée</span>
+
+    <div style="display:flex; gap:.5em; flex-wrap:wrap; margin-top:1em;">
+        <button type="submit">→ Prévisualiser</button>
+        <button type="button" class="outline"
+                onclick="document.location='{{ url_for('liste_examinateurs') }}';">
+            ← Annuler
+        </button>
+    </div>
+</form>
+{% endif %}
+
+{% if etape == 'previsualisation' %}
+<form action="{{ url_for('disponibilite_examinateur') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="id_examinateur" value="{{ examinateur['id'] }}">
+    <input type="hidden" name="etape" value="confirmer">
+    <input type="hidden" name="indisponible_a_partir_de" value="{{ indisponible_a_partir_de }}">
+    <input type="hidden" name="disponible_a_nouveau_a_partir_de" value="{{ disponible_a_nouveau_a_partir_de }}">
+
+    <p style="font-size:.9em;">
+        <strong>{{ plan.changements|length }}</strong> oral(aux) à redistribuer
+        {% if plan.non_replaces %}
+        — <span style="color:#b91c1c;"><strong>{{ plan.non_replaces|length }}</strong> non replacé(s) automatiquement</span>
+        {% endif %}
+    </p>
+
+    {% if plan.changements %}
+    <table class="dispo-table">
+        <tr>
+            <th>Candidat</th>
+            <th>Ancien examinateur</th>
+            <th>Nouvel examinateur</th>
+            <th>Heure actuelle</th>
+            <th>Nouvelle heure</th>
+        </tr>
+        {% for c in plan.changements %}
+        <tr class="{{ 'dispo-meme-heure' if c.meme_heure else 'dispo-heure-changee' }}">
+            <td>{{ c.numero }}</td>
+            <td>{{ c.ancien_examinateur_nom }}</td>
+            <td>{{ c.nouvel_examinateur_nom }}</td>
+            <td>{{ c.ancienne_heure_sujet|heure }}</td>
+            <td>{{ c.nouvelle_heure_sujet|heure }}{% if not c.meme_heure %} ⚠{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <p class="dispo-hint">
+        🟩 même heure (seul l'examinateur change) — 🟨 heure modifiée (à signaler au candidat)
+    </p>
+    {% endif %}
+
+    {% if plan.non_replaces %}
+    <table class="dispo-table">
+        <tr><th>Candidat non replacé</th><th>Examinateur actuel</th><th>Heure</th></tr>
+        {% for o in plan.non_replaces %}
+        <tr>
+            <td>{{ o.numero }}</td>
+            <td>{{ o.examinateur_nom }}</td>
+            <td>{{ o.heure_sujet|heure }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <p class="dispo-hint">
+        Ces oraux devront être réaffectés manuellement (édition d'oral).
+    </p>
+    {% endif %}
+
+    <div style="display:flex; gap:.5em; flex-wrap:wrap; margin-top:1em;">
+        {% if plan.changements %}
+        <button type="submit">✓ Confirmer et notifier</button>
+        {% endif %}
+        <button type="button" class="outline"
+                onclick="document.location='{{ url_for('disponibilite_examinateur', id_examinateur=examinateur['id']) }}';">
+            ↺ Recommencer
+        </button>
+        <button type="button" class="outline"
+                onclick="document.location='{{ url_for('liste_examinateurs') }}';">
+            ← Annuler
+        </button>
+    </div>
+</form>
+{% endif %}
+
+{% if etape == 'termine' %}
+<p style="background:#d1fae5; color:#065f46; border-left:4px solid #059669;
+          padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
+    ✔ {{ plan.changements|length }} oral(aux) redistribué(s), notifications envoyées.
+    {% if plan.non_replaces %}
+    <br>⚠ {{ plan.non_replaces|length }} oral(aux) n'ont pas pu être replacés automatiquement
+    et nécessitent une édition manuelle.
+    {% endif %}
+</p>
+<button type="button" onclick="document.location='{{ url_for('liste_examinateurs') }}';">
+    ← Retour à la liste des examinateurs
+</button>
+{% endif %}
+
+</div>
+
+{% include 'footer.html' %}
+</body>
+</html>

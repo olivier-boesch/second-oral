@@ -278,6 +278,26 @@ Dans la barre latérale admin (icône ↺, présente sur toutes les pages de ges
 
 `/gestion/liste-examinateurs` → modifier ou ajouter. Après ajout, un papillon PDF est automatiquement généré avec le nouveau mot de passe.
 
+### Absence, retard ou renfort d'un examinateur en cours de journée
+
+`/gestion/liste-examinateurs` → bouton **🕒 Disponibilité** sur la ligne de l'examinateur concerné.
+
+Un seul mécanisme couvre les trois cas, via deux heures optionnelles :
+
+| Champ | Absence (reste de la journée) | Retard (arrivée tardive) | Absence temporaire puis retour |
+|---|---|---|---|
+| Indisponible à partir de | l'heure du départ | *(laisser vide)* | l'heure du départ |
+| Disponible de nouveau à partir de | *(laisser vide)* | l'heure d'arrivée | l'heure de retour |
+
+Le renfort *ponctuel* (personne déjà présente qui redevient disponible, ou un retard) est traité comme les autres examinateurs de la matière : dès qu'une heure de retour est renseignée, la charge des collègues qui ont couvert l'absence est rééquilibrée vers cet examinateur à partir de cette heure. Un **renfort inédit** (personne qui n'était pas du tout dans le planning du jour) s'ajoute d'abord via "+ Ajouter un examinateur" (`/gestion/liste-examinateurs`), puis reçoit lui aussi une disponibilité via ce même bouton.
+
+Le flux se déroule en 3 étapes :
+1. **Saisie** des heures.
+2. **Prévisualisation** : un tableau liste chaque oral à redistribuer (candidat, ancien/nouvel examinateur, heure actuelle/nouvelle) — en vert si seul l'examinateur change (le candidat garde son heure), en jaune si l'heure change aussi. Les oraux qu'il n'a pas été possible de replacer automatiquement (aucun examinateur compatible disponible) sont listés séparément et devront être traités manuellement (édition d'oral).
+3. **Confirmation** : chaque changement est appliqué et déclenche exactement la même notification SSE ciblée qu'une édition manuelle d'oral (candidat, salle, loge concernés) — cf. section précédente.
+
+**Limite actuelle :** un seul examinateur à la fois change de disponibilité (pas de gestion de plusieurs absences/renforts simultanés sur la même matière).
+
 ### Renouvellement des identifiants
 
 `/gestion/credentials` (accessible depuis l'accueil admin → bloc **Préparation** → **Identifiants**) permet de **renouveler les identifiants sans relancer l'algo**, pour chaque catégorie indépendamment :

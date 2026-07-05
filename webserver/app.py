@@ -46,6 +46,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
 import db_facility_web
+import rebalance
 import reports
 from theme import derive_palette as _derive_palette
 from ods_handler import LYCEES_DISPLAY as _LYCEES_DISPLAY
@@ -446,6 +447,16 @@ def page_forbidden(e):
 def qr(path, **kwargs):
     """Filtre Jinja2 : génère un QR code SVG data-URI."""
     return segno.make_qr(path).svg_data_uri(**kwargs)
+
+
+@app.template_filter('heure')
+def heure_filter(td):
+    """Filtre Jinja2 : formate un timedelta en HH:MM (cf. rebalance.py)."""
+    if td is None:
+        return ''
+    total_minutes = int(td.total_seconds()) // 60
+    h, m = divmod(total_minutes, 60)
+    return f"{h:02d}:{m:02d}"
 
 
 def nocache(f):
@@ -1467,6 +1478,41 @@ def _check_conflits_oral(
     return None, None
 
 
+def _appliquer_changement_oral(d: dict, numero: str | None) -> None:
+    """
+    Persiste un changement d'oral (horaires et/ou examinateur) et publie les
+    notifications SSE ciblées — logique partagée entre l'édition manuelle
+    (`edit_oral`) et le rééquilibrage automatique (`disponibilite_examinateur`),
+    pour que les deux voies déclenchent exactement le même comportement côté
+    candidat/salle/loge.
+
+    :param d: dict avec les clés id/examinateur/heure_sujet/heure_oral/heure_fin/mis_a_jour
+    :param numero: numéro du candidat concerné (pour les canaux ciblés)
+    """
+    db_update(db_facility_web.UPDATE_INFOS_ORAL, **d)
+    if d['mis_a_jour'] != 1:
+        return
+    # Récupère salle et loge pour publier sur les canaux ciblés
+    exam = db_get(
+        db_facility_web.SELECT_SALLE_LOGE_FROM_EXAMINATEUR,
+        d['examinateur'],
+        no_list_auto=False,
+    )
+    # #3 — Le canal 'general' est ouvert à tous les utilisateurs
+    # authentifiés (y compris candidats et loges) : ne jamais y
+    # diffuser de donnée personnelle (numéro de candidat). Les destinataires
+    # légitimes sont notifiés via les canaux ciblés ci-dessous, qui
+    # sont désormais soumis à autorisation (cf. _sse_channel_allowed).
+    sse.publish(data='', type="data_updated", channel='general')
+    if exam:
+        sse.publish(data=numero, type="data_updated",
+                    channel=f"salle_{exam[0]['salle']}")
+        sse.publish(data=numero, type="data_updated",
+                    channel=f"loge_{exam[0]['loge']}")
+    sse.publish(data=numero, type="data_updated",
+                channel=f"candidat_{numero}")
+
+
 @app.route("/gestion/edit-oral", methods=["GET", "POST"])
 @admin_required
 @nocache
@@ -1548,27 +1594,7 @@ def edit_oral() -> ResponseReturnValue:
                 warning_msg=warning_msg,
             ), status
 
-        db_update(db_facility_web.UPDATE_INFOS_ORAL, **d)
-        if d['mis_a_jour'] == 1:
-            # Récupère salle et loge pour publier sur les canaux ciblés
-            exam = db_get(
-                db_facility_web.SELECT_SALLE_LOGE_FROM_EXAMINATEUR,
-                d['examinateur'],
-                no_list_auto=False,
-            )
-            # #3 — Le canal 'general' est ouvert à tous les utilisateurs
-            # authentifiés (y compris candidats et loges) : ne jamais y
-            # diffuser de donnée personnelle (numéro de candidat). Les destinataires
-            # légitimes sont notifiés via les canaux ciblés ci-dessous, qui
-            # sont désormais soumis à autorisation (cf. _sse_channel_allowed).
-            sse.publish(data='', type="data_updated", channel='general')
-            if exam:
-                sse.publish(data=numero, type="data_updated",
-                            channel=f"salle_{exam[0]['salle']}")
-                sse.publish(data=numero, type="data_updated",
-                            channel=f"loge_{exam[0]['loge']}")
-            sse.publish(data=numero, type="data_updated",
-                        channel=f"candidat_{numero}")
+        _appliquer_changement_oral(d, numero)
         url = _safe_redirect_url(request.form.get("link_back"))
         return redirect(url or url_for('index_gestion', _anchor=str(d['id'])))
 
@@ -1717,6 +1743,228 @@ def edit_examinateur() -> ResponseReturnValue:
         url_of_page=request.url,
         link_back=url,
         username=get_username(),
+    )
+
+
+def _charger_profs_a_eviter() -> dict[str, list[str]]:
+    """Charge le mapping numero -> profs à éviter depuis data/candidats.csv.
+
+    Cette information n'est pas persistée en base (seulement dans le CSV
+    source consommé par algo.py) : nécessaire pour respecter la même règle
+    d'exclusion lors d'un rééquilibrage en cours de journée.
+    """
+    from csv_validator import normalize_csv_file
+    chemin = _DATA_DIR / "candidats.csv"
+    if not chemin.exists():
+        return {}
+    try:
+        rows, _ = normalize_csv_file(chemin)
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {}
+    resultat: dict[str, list[str]] = {}
+    for row in rows:
+        candidat_str = row.get("CANDIDAT", "")
+        if "(" not in candidat_str:
+            continue
+        numero = candidat_str.split("(")[1][:-1].strip()
+        resultat[numero] = [p.strip() for p in (row.get("Profs") or "").split(",")]
+    return resultat
+
+
+def _oral_actuel_depuis_ligne(ligne: dict) -> rebalance.OralActuel:
+    return rebalance.OralActuel(
+        id=ligne['id'], id_candidat=ligne['id_candidat'], numero=ligne['numero'],
+        etablissement=ligne['etablissement'] or '', id_examinateur=ligne['id_examinateur'],
+        examinateur_nom=ligne['examinateur'],
+        heure_sujet=_to_td(ligne['heure_sujet']), heure_oral=_to_td(ligne['heure_oral']),
+        heure_fin=_to_td(ligne['heure_fin']),
+    )
+
+
+def _calculer_plan_disponibilite(
+    id_examinateur: int,
+    info_examinateur: dict,
+    indispo_debut: timedelta | None,
+    dispo_retour: timedelta | None,
+) -> rebalance.PlanRebalancement:
+    """
+    Calcule le plan de rééquilibrage pour un changement de disponibilité.
+
+    Un retard (absent jusqu'à une heure puis de retour) combine les deux
+    volets : `planifier_absence` sur la fenêtre [indispo_debut, dispo_retour),
+    puis `planifier_renfort` sur la fenêtre [dispo_retour, fin] en tenant
+    compte des changements déjà décidés par le premier volet.
+
+    Hypothèse (limite volontaire de cette première version) : un seul
+    examinateur change de disponibilité à la fois — pas de gestion
+    d'absences/renforts simultanés sur la même matière.
+
+    :param info_examinateur: résultat de SELECT_EXAMINATEUR_MATIERE, déjà
+        chargé par l'appelant (évite une seconde requête identique)
+    """
+    ecart_mini_minutes = _load_algo_params()['ecart_mini']
+    info = info_examinateur
+    id_matiere = info['id_matiere']
+
+    lignes = db_get(db_facility_web.SELECT_ORAUX_MATIERE_DU_JOUR, id_matiere, no_list_auto=False)
+    oraux = [_oral_actuel_depuis_ligne(l) for l in lignes]
+    grille_horaires = [o.heure_sujet for o in oraux]
+
+    examinateurs_lignes = db_get(
+        db_facility_web.SELECT_LISTE_EXAMINATEURS_PAR_MATIERE, id_matiere, no_list_auto=False,
+    )
+    examinateurs_par_id = {
+        e['id']: rebalance.ExaminateurCible(
+            id=e['id'], nom=e['nom'],
+            etablissements=[x.strip() for x in (e['etablissements'] or '').split(',')],
+        )
+        for e in examinateurs_lignes
+    }
+
+    profs_a_eviter = _charger_profs_a_eviter()
+
+    # Heure de l'AUTRE oral (fixe) de chaque candidat concerné, pour l'écart minimum.
+    autres_heures_sujet: dict[int, timedelta | None] = {}
+    for id_candidat in {o.id_candidat for o in oraux}:
+        autres = db_get(db_facility_web.SELECT_LISTE_EDITION_ORAL, id_candidat, no_list_auto=False)
+        autre = next((a for a in autres if a['matiere'] != info['matiere']), None)
+        autres_heures_sujet[id_candidat] = _to_td(autre['heure_sujet']) if autre else None
+
+    plan = rebalance.PlanRebalancement()
+    borne_fin = dispo_retour if dispo_retour is not None else timedelta(hours=23, minutes=59)
+
+    if indispo_debut is not None:
+        oraux_a_reaffecter = [
+            o for o in oraux
+            if o.id_examinateur == id_examinateur and indispo_debut <= o.heure_sujet < borne_fin
+        ]
+        ids_a_reaffecter = {o.id for o in oraux_a_reaffecter}
+        occupations: dict[int, list[tuple[timedelta, timedelta]]] = {}
+        for o in oraux:
+            if o.id in ids_a_reaffecter:
+                continue
+            occupations.setdefault(o.id_examinateur, []).append((o.heure_oral, o.heure_fin))
+        examinateurs_disponibles = [
+            e for e in examinateurs_par_id.values() if e.id != id_examinateur
+        ]
+        plan.etendre(rebalance.planifier_absence(
+            oraux_a_reaffecter, examinateurs_disponibles, occupations, grille_horaires,
+            autres_heures_sujet, ecart_mini_minutes, profs_a_eviter,
+        ))
+
+    if dispo_retour is not None:
+        deja_deplaces_ids = {c.id_oral for c in plan.changements}
+        occupations2: dict[int, list[tuple[timedelta, timedelta]]] = {}
+        for o in oraux:
+            if o.id in deja_deplaces_ids:
+                continue
+            occupations2.setdefault(o.id_examinateur, []).append((o.heure_oral, o.heure_fin))
+        for c in plan.changements:
+            occupations2.setdefault(c.nouvel_examinateur_id, []).append(
+                (c.nouvelle_heure_oral, c.nouvelle_heure_fin)
+            )
+
+        oraux_deplacables = [
+            o for o in oraux
+            if o.id_examinateur != id_examinateur
+            and o.id not in deja_deplaces_ids
+            and o.heure_sujet >= dispo_retour
+        ]
+        charge_par_examinateur: dict[int, int] = {id_examinateur: 0}
+        for o in oraux_deplacables:
+            charge_par_examinateur[o.id_examinateur] = (
+                charge_par_examinateur.get(o.id_examinateur, 0) + 1
+            )
+
+        plan.etendre(rebalance.planifier_renfort(
+            oraux_deplacables, examinateurs_par_id[id_examinateur], occupations2, grille_horaires,
+            autres_heures_sujet, ecart_mini_minutes, profs_a_eviter, charge_par_examinateur,
+        ))
+
+    return plan
+
+
+@app.route("/gestion/examinateur/disponibilite", methods=["GET", "POST"])
+@admin_required
+@nocache
+def disponibilite_examinateur() -> ResponseReturnValue:
+    """
+    Rééquilibrage des oraux d'une matière suite à un changement de
+    disponibilité d'un examinateur (absence, retard, renfort), à partir
+    d'heures réglables — cf. docs/workflow_admin.md.
+    """
+    id_examinateur = request.values.get("id_examinateur", type=int)
+    if id_examinateur is None:
+        abort(404, "Pas d'examinateur avec ce numéro")
+    info = db_get(db_facility_web.SELECT_EXAMINATEUR_MATIERE, id_examinateur)
+    if not info:
+        abort(404, "Examinateur introuvable")
+
+    if request.method == "GET":
+        return render_template(
+            "disponibilite_examinateur.html",
+            centre=CENTRE_EXAMEN,
+            examinateur=info,
+            etape="saisie",
+            url_of_page=request.url,
+            username=get_username(),
+            authenticated=is_authenticated(),
+        )
+
+    # POST
+    indispo_str = (request.form.get("indisponible_a_partir_de") or "").strip()
+    retour_str = (request.form.get("disponible_a_nouveau_a_partir_de") or "").strip()
+    indispo_debut = _time_str_to_td(indispo_str) if indispo_str else None
+    dispo_retour = _time_str_to_td(retour_str) if retour_str else None
+
+    if indispo_debut is None and dispo_retour is None:
+        return render_template(
+            "disponibilite_examinateur.html",
+            centre=CENTRE_EXAMEN,
+            examinateur=info,
+            etape="saisie",
+            url_of_page=request.url,
+            username=get_username(),
+            authenticated=is_authenticated(),
+            error_msg="Renseignez au moins l'une des deux heures.",
+        ), 400
+
+    plan = _calculer_plan_disponibilite(id_examinateur, info, indispo_debut, dispo_retour)
+    etape = request.form.get("etape", "previsualisation")
+
+    if etape == "confirmer":
+        for changement in plan.changements:
+            d = {
+                'id': changement.id_oral,
+                'examinateur': changement.nouvel_examinateur_id,
+                'heure_sujet': _td_to_time_str(changement.nouvelle_heure_sujet),
+                'heure_oral': _td_to_time_str(changement.nouvelle_heure_oral),
+                'heure_fin': _td_to_time_str(changement.nouvelle_heure_fin),
+                'mis_a_jour': 1,
+            }
+            _appliquer_changement_oral(d, changement.numero)
+        return render_template(
+            "disponibilite_examinateur.html",
+            centre=CENTRE_EXAMEN,
+            examinateur=info,
+            etape="termine",
+            plan=plan,
+            url_of_page=request.url,
+            username=get_username(),
+            authenticated=is_authenticated(),
+        )
+
+    return render_template(
+        "disponibilite_examinateur.html",
+        centre=CENTRE_EXAMEN,
+        examinateur=info,
+        etape="previsualisation",
+        plan=plan,
+        indisponible_a_partir_de=indispo_str,
+        disponible_a_nouveau_a_partir_de=retour_str,
+        url_of_page=request.url,
+        username=get_username(),
+        authenticated=is_authenticated(),
     )
 
 

@@ -32,6 +32,18 @@
 **Tests (suite 2)**
 - `tests/unit/test_algo.py::TestPetitesMatieresFinJournee` : désactivé par défaut, réservation correcte des créneaux d'une petite matière, non-impact sur les grosses matières, placement effectif en fin de journée
 
+**Gestion en cours de journée — absence / retard / renfort d'un examinateur**
+- Nouveau bouton **🕒 Disponibilité** sur `/gestion/liste-examinateurs` : rééquilibre les oraux restants d'une matière suite à un changement de disponibilité d'un examinateur (absence, retard, renfort), à partir de deux heures réglables ("indisponible à partir de" / "disponible de nouveau à partir de")
+- Un retard se modélise comme une absence sur la fenêtre avant l'arrivée suivie d'un renfort sur la fenêtre après l'arrivée — même mécanisme, pas de troisième cas particulier (`webserver/rebalance.py`)
+- Priorité systématique au même horaire (seul l'examinateur change, aucune disruption pour le candidat) avant tout recalcul d'heure ; écran de prévisualisation (vert = même heure, jaune = heure modifiée) avant application
+- Les exclusions établissement/prof à éviter et l'écart minimum candidat (contre l'heure fixe de son autre oral) sont respectés lors du recalcul ; les oraux non replaçables automatiquement sont signalés pour une édition manuelle
+- Réutilise l'infrastructure SSE existante (`edit_oral`) : chaque changement appliqué déclenche exactement la même notification ciblée candidat/salle/loge qu'une édition manuelle — extraction d'une fonction partagée `_appliquer_changement_oral()`
+- Nouvelle requête `SELECT_ORAUX_MATIERE_DU_JOUR` / `SELECT_EXAMINATEUR_MATIERE` dans `db_facility_web.py` ; aucune nouvelle dépendance
+
+**Tests (suite 3)**
+- `tests/unit/test_rebalance.py` : placement au même horaire en priorité, repli sur un autre horaire avec écart minimum respecté, exclusions établissement/prof à éviter, rééquilibrage de charge vers un renfort
+- `tests/integration/test_disponibilite_examinateur.py` : câblage de la route (formulaire, prévisualisation, confirmation + notification SSE)
+
 ## [2026.2] — 2026-07-01
 
 ### Added

@@ -46,6 +46,9 @@
                 Nombre d'oraux
             </th>
             <th>
+                Disponibilité
+            </th>
+            <th>
                 Supprimer
             </th>
             <th>
@@ -82,6 +85,14 @@
                 </td>
                 <td>
                     {{ ex['nb_oraux'] }}
+                </td>
+                <td>
+                    {% if ex['nb_oraux'] > 0 %}
+                    <button type="button" class="outline" style="font-size:.8rem; padding:.2em .6em;"
+                            onclick="document.location='{{ url_for('disponibilite_examinateur', id_examinateur=ex['id']) }}';">
+                        🕒 Disponibilité
+                    </button>
+                    {% endif %}
                 </td>
                 <td>
                     {% if ex['nb_oraux'] == 0 %}
