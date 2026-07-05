@@ -211,6 +211,15 @@ class AlgoCP(AlgoOne):
                 self.max_creneaux_journee,
             )
 
+        statut_libelle = {
+            cp_model.OPTIMAL: "OPTIMAL — solution prouvée optimale",
+            cp_model.FEASIBLE: (
+                f"FEASIBLE — délai de {ALGO_CP_TIMEOUT}s (ALGO_CP_TIMEOUT) atteint "
+                f"avant preuve d'optimalité ; meilleure solution trouvée conservée"
+            ),
+        }.get(status, solver.StatusName(status))
+        log.info(f"Run {self.numero_run} : CP-SAT — statut final : {statut_libelle}")
+
         for (candidat, choix_attr, examinateur, creneau), var in x.items():
             if solver.Value(var):
                 matiere = getattr(candidat, choix_attr)
