@@ -12,6 +12,7 @@
 - Sélecteur multiple (multi-select) pour les établissements des examinateurs dans `/gestion/edit-examinateur`
 - Liens d'accès admin vers la liste des candidats depuis la page d'accueil (`index.html`)
 - Option **Affichage détaillé (debug)** dans les paramètres avancés de l'algo (`ALGO_DEBUG`) : affiche dans la console le détail interne de chaque run (chargement des données, appairage, calcul des horaires), en plus du lancement/fin de run affichés par défaut
+- Page `/gestion/algo` : avertissement et confirmation avant de quitter la page pendant un run, et arrêt effectif du run (route `POST /gestion/algo/stop`, `algo_bg.stop_algo()`) si l'utilisateur quitte quand même — envoie SIGTERM au groupe de processus (algo.py + workers `multiprocessing.Pool`) pour ne pas laisser de processus orphelins
 - Renouvellement des identifiants candidats/examinateurs : bouton "↺ Renouveler" par ligne directement depuis `/gestion/liste-candidats` et `/gestion/liste-examinateurs`, avec message et lien de téléchargement du fichier de lot regénéré, sans quitter la liste (`link_back`)
 
 **Infrastructure**

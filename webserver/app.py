@@ -2536,6 +2536,16 @@ def algo_status() -> ResponseReturnValue:
     return jsonify({"running": _is_running()})
 
 
+@app.route("/gestion/algo/stop", methods=["POST"])
+@admin_required
+def algo_stop() -> ResponseReturnValue:
+    """Arrête algo.py s'il est en cours d'exécution (ex. l'utilisateur quitte la page)."""
+    from algo_bg import stop_algo as _stop
+    stopped = _stop()
+    app.logger.info(f"algo.py: {'arrêté' if stopped else 'aucun run en cours'}")
+    return jsonify({"ok": stopped})
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Renouvellement des identifiants (découplé de l'algo)
 # ──────────────────────────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ Utilisation depuis app.py :
 """
 import json
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -29,6 +30,27 @@ def is_running() -> bool:
     """Vrai si algo.py est en cours d'exécution."""
     with _lock:
         return _process is not None and _process.poll() is None
+
+
+def stop_algo() -> bool:
+    """Arrête algo.py s'il est en cours d'exécution.
+
+    Envoie SIGTERM à tout le groupe de processus (algo.py + ses workers
+    multiprocessing.Pool) plutôt qu'au seul processus parent, pour ne pas
+    laisser de workers orphelins. Le thread `_stream` (déjà lancé) détecte
+    la fin du processus et publie normalement le message `done`.
+
+    :returns: True si un arrêt a été déclenché, False si rien ne tournait.
+    """
+    with _lock:
+        proc = _process
+        if proc is None or proc.poll() is not None:
+            return False
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except ProcessLookupError:
+            return False
+        return True
 
 
 def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
@@ -81,6 +103,11 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
             errors="replace",
             bufsize=1,
             env=env,
+            # Nouveau groupe de processus : permet de tuer algo.py ET les
+            # processus worker qu'il lance via multiprocessing.Pool en un
+            # seul signal (cf. stop_algo), plutôt que de ne tuer que le
+            # processus parent et laisser les workers orphelins.
+            start_new_session=True,
         )
         _process = proc
 

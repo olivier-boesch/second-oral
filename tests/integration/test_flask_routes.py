@@ -299,6 +299,31 @@ class TestAdminRoutes:
         r = admin_client.get("/gestion")
         assert r.status_code == 200
 
+    def test_algo_status_reflects_is_running(self, admin_client, monkeypatch):
+        import algo_bg
+        monkeypatch.setattr(algo_bg, "is_running", lambda: True)
+        r = admin_client.get("/gestion/algo/status")
+        assert r.status_code == 200
+        assert json.loads(r.data) == {"running": True}
+
+    def test_algo_stop_when_running(self, admin_client, monkeypatch):
+        import algo_bg
+        monkeypatch.setattr(algo_bg, "stop_algo", lambda: True)
+        r = admin_client.post("/gestion/algo/stop")
+        assert r.status_code == 200
+        assert json.loads(r.data) == {"ok": True}
+
+    def test_algo_stop_when_nothing_running(self, admin_client, monkeypatch):
+        import algo_bg
+        monkeypatch.setattr(algo_bg, "stop_algo", lambda: False)
+        r = admin_client.post("/gestion/algo/stop")
+        assert r.status_code == 200
+        assert json.loads(r.data) == {"ok": False}
+
+    def test_algo_stop_requires_admin(self, client):
+        r = client.post("/gestion/algo/stop")
+        assert r.status_code in (302, 401, 403)
+
     def test_validate_csv_returns_json(self, admin_client):
         r = admin_client.get("/gestion/algo/validate")
         assert r.status_code == 200

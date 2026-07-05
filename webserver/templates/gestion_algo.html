@@ -276,6 +276,10 @@
         </span>
     </p>
     <div id="prelaunch-report" class="validation-report" style="margin-bottom:.8em"></div>
+    <p id="leave-warning" {% if not is_running %}hidden{% endif %}
+       style="color:#856404; background:#fff3cd; border-radius:4px; padding:.5em .8em; font-size:.9em;">
+        ⚠ Ne fermez pas cette page pendant le calcul : quitter la page arrête le run en cours.
+    </p>
     <p>
         <button id="run-btn" {% if is_running %}disabled{% endif %} onclick="lancerAlgo()">
             ▶ Lancer algo.py
@@ -305,6 +309,7 @@
 
 const SSE_BASE      = "{{ url_for('sse.stream') }}";
 const RUN_URL       = "{{ url_for('algo_run') }}";
+const STOP_URL      = "{{ url_for('algo_stop') }}";
 const UPLOAD_URL    = "{{ url_for('algo_upload_csv') }}";
 const PARAMS_URL    = "{{ url_for('algo_save_params') }}";
 const VALIDATE_URL  = "{{ url_for('algo_validate_csv') }}";
@@ -315,6 +320,7 @@ const logEl       = document.getElementById('log-console');
 const runBtn      = document.getElementById('run-btn');
 const statusBadge = document.getElementById('status-badge');
 let algoSource    = null;
+let isRunning     = {{ 'true' if is_running else 'false' }};
 
 // ── Helpers log ──────────────────────────────────────────────────────────────
 // Nombre maximal de lignes conservées dans le DOM.
@@ -376,10 +382,28 @@ function connectAlgoSSE() {
 }
 
 function setRunning(running) {
+    isRunning = running;
     runBtn.disabled = running;
     statusBadge.textContent = running ? 'En cours…' : 'Inactif';
     statusBadge.className   = 'badge ' + (running ? 'badge-running' : 'badge-idle');
+    document.getElementById('leave-warning').hidden = !running;
 }
+
+// ── Avertir avant de quitter / arrêter le run si la page est fermée ─────────
+// Le navigateur affiche une confirmation native ; si l'utilisateur quitte
+// quand même, 'pagehide' ne se déclenche qu'à ce moment-là (jamais si la
+// navigation est annulée), donc l'arrêt du run n'est envoyé que si l'on
+// quitte vraiment la page.
+window.addEventListener('beforeunload', (e) => {
+    if (!isRunning) return;
+    e.preventDefault();
+    e.returnValue = '';
+});
+
+window.addEventListener('pagehide', () => {
+    if (!isRunning) return;
+    fetch(STOP_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, keepalive: true });
+});
 
 // ── Lancement de algo.py ─────────────────────────────────────────────────────
 function _doLancerAlgo() {
