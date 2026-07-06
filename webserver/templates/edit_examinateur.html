@@ -65,7 +65,13 @@
                 Établissements
             </th>
             <th>
-                Heure
+                Heure sujet
+            </th>
+            <th>
+                Heure début
+            </th>
+            <th>
+                Heure fin
             </th>
             <th>
                 Editer
@@ -88,7 +94,13 @@
                 {{ oral['etablissement'] }}
             </td>
             <td>
-                {{ oral['heure'] }}
+                {{ oral['heure_sujet']|heure }}
+            </td>
+            <td>
+                {{ oral['heure_oral']|heure }}
+            </td>
+            <td>
+                {{ oral['heure_fin']|heure }}
             </td>
             <td>
                 <a href="{{ url_for('edit_oral', oral=oral['id'], link_back=url_of_page) }}">

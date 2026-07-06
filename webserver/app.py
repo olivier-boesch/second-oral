@@ -1732,7 +1732,7 @@ def edit_examinateur() -> ResponseReturnValue:
     url = _safe_redirect_url(request.args.get('link_back'))
     donnees_examinateur = db_get(db_facility_web.SELECT_EXAMINATEUR_INFOS, id_examinateur)
     liste_oraux = db_get(
-        db_facility_web.SELECT_ORAUX_EXAMINATEUR_CONFLITS, id_examinateur, no_list_auto=False
+        db_facility_web.SELECT_ORAUX_EXAMINATEUR, id_examinateur, no_list_auto=False
     )
     etablissements_actuels = set(
         e.strip() for e in (donnees_examinateur.get('etablissements') or '').split(',') if e.strip()

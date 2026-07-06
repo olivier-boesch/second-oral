@@ -330,7 +330,8 @@ GROUP BY Examinateur.nom
 SELECT_ORAUX_EXAMINATEUR = """
 SELECT Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.etablissement AS etablissement, Candidat.tiers_temps AS tiers_temps,
-       Oral.heure_sujet AS heure, Oral.mis_a_jour AS maj, Oral.id AS id
+       Oral.heure_sujet AS heure_sujet, Oral.heure_oral AS heure_oral,
+       Oral.heure_fin AS heure_fin, Oral.mis_a_jour AS maj, Oral.id AS id
 FROM Oral
     JOIN Candidat ON Oral.candidat = Candidat.id
     JOIN Examinateur ON Oral.examinateur = Examinateur.id

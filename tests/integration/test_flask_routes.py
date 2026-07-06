@@ -958,10 +958,44 @@ class TestEditExaminateur:
         examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
                        "loge": "L1", "matiere": "Maths", "etablissements": "",
                        "nb_oraux": 0}
-        db_mock.make_sql_select.return_value = [examinateur]
+        db_mock.make_sql_select.side_effect = [[examinateur], []]
         r = admin_client.get("/gestion/edit-examinateur?id_examinateur=10")
         assert r.status_code == 200
         assert "Nombre d'oraux:</span><span>0</span>" in r.data.decode()
+
+    def test_utilise_select_oraux_examinateur_pas_conflits(self):
+        """Régression : la page utilisait SELECT_ORAUX_EXAMINATEUR_CONFLITS
+        (prévue pour la détection de conflits, sans numero/etablissement/
+        tiers_temps/heures) au lieu de SELECT_ORAUX_EXAMINATEUR — numero,
+        établissement et heures n'apparaissaient donc jamais sur la page."""
+        import app as app_module
+        import inspect
+        source = inspect.getsource(app_module.edit_examinateur)
+        assert "SELECT_ORAUX_EXAMINATEUR_CONFLITS" not in source
+        assert "SELECT_ORAUX_EXAMINATEUR" in source
+
+    def test_liste_oraux_affiche_numero_etablissement_et_heures(self, admin_client, db_mock):
+        """Régression : numéro, établissement et les 3 heures (sujet, début,
+        fin) doivent apparaître dans le tableau des oraux de l'examinateur."""
+        from datetime import timedelta
+        examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "loge": "L1", "matiere": "Maths", "etablissements": "",
+                       "nb_oraux": 1}
+        oral = {
+            "id": 1, "candidat": "Dupont Jean", "numero": "0123456789A",
+            "etablissement": "Lycée X", "tiers_temps": 0,
+            "heure_sujet": timedelta(hours=9), "heure_oral": timedelta(hours=9, minutes=15),
+            "heure_fin": timedelta(hours=9, minutes=30), "maj": 0,
+        }
+        db_mock.make_sql_select.side_effect = [[examinateur], [oral]]
+        r = admin_client.get("/gestion/edit-examinateur?id_examinateur=10")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "0123456789A" in body
+        assert "Lycée X" in body
+        assert "09:00" in body
+        assert "09:15" in body
+        assert "09:30" in body
 
 
 # ── Liste des examinateurs — suppression ──────────────────────────────────────
