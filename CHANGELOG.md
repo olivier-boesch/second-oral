@@ -8,19 +8,19 @@
 
 ### Added
 
-**Gestion en cours de journée (suite 4) — déclaration de tiers-temps d'un candidat**
-- Nouveau bouton **⏱️ Déclarer** sur `/gestion/liste-candidats` : un candidat déclare un tiers-temps le jour J, après le placement initial
-- Étend la préparation de ses deux oraux d'1/3 (même règle que `AlgoOne.calcul_horaires` pour un tiers-temps connu à la construction du planning — heure de sujet inchangée, heure d'oral/fin décalées) ; nouvelle fonction `rebalance.planifier_tiers_temps()`
-- Cascade automatique : tous les oraux suivants chez les deux mêmes examinateurs ce jour-là sont décalés du même délai, pour ne jamais les chevaucher
-- Écart minimum et pause méridienne revérifiés pour chaque oral cascadé (signalés, jamais bloquants) ; un chevauchement entre les deux oraux du candidat lui-même (écart minimum déjà très faible) bloque la proposition et demande une résolution manuelle
+**Gestion en cours de journée (suite 4) — déclaration et retrait de tiers-temps d'un candidat**
+- Nouveau bouton **⏱️ Déclarer** (ou **⏱️ Retirer** si déjà posé) sur `/gestion/liste-candidats` : un candidat déclare — ou fait retirer, si posé par erreur — un tiers-temps le jour J, après le placement initial ; le sens se déduit automatiquement de son état actuel
+- Déclaration : étend la préparation de ses deux oraux d'1/3 (même règle que `AlgoOne.calcul_horaires` pour un tiers-temps connu à la construction du planning — heure de sujet inchangée, heure d'oral/fin décalées). Retrait : réduit la préparation actuelle (déjà étendue, donc 4/3 de la base) d'1/4 pour retrouver la durée d'origine — symétrique, mêmes fonctions ; nouvelle fonction `rebalance.planifier_tiers_temps(..., activer=True/False)`
+- Cascade automatique dans les deux sens : tous les oraux suivants chez les deux mêmes examinateurs ce jour-là sont décalés du même délai (plus tard à la déclaration, plus tôt au retrait), pour ne jamais les chevaucher — un décalage uniforme préserve tous les écarts déjà en place, quel que soit le sens
+- Écart minimum et pause méridienne revérifiés pour chaque oral cascadé (signalés, jamais bloquants) ; un chevauchement entre les deux oraux du candidat lui-même ne peut se produire qu'à la déclaration (écart minimum déjà très faible) — bloque la proposition et demande une résolution manuelle ; un retrait ne peut jamais créer ce chevauchement (les fenêtres ne font que réduire)
 - Nouvelles requêtes `SELECT_CANDIDAT_TIERS_TEMPS`, `SELECT_ORAUX_CANDIDAT_TIERS_TEMPS`, `UPDATE_CANDIDAT_TIERS_TEMPS` dans `db_facility_web.py` ; `SELECT_ORAUX_EXAMINATEUR` complétée avec `id_candidat` (nécessaire à la cascade)
-- Portée volontairement limitée à un seul candidat à la fois ; ne gère pas le retrait d'un tiers-temps déjà déclaré
-- **Unification avec `/gestion/edit-candidat`** : cette fiche avait déjà une case « Tiers temps », qui se contentait de poser le flag en base sans jamais adapter les horaires — un risque réel de désynchronisation puisque les fiches candidats n'existent qu'après le placement initial (donc toujours en contexte « jour J »). Cocher cette case déclenche désormais la même adaptation (extension + cascade), via les fonctions partagées `_calculer_plan_tiers_temps()`/`_appliquer_oraux_tiers_temps()` ; confirmation JS avant activation, et blocage (aucune mise à jour, ni du flag ni des oraux) en cas de conflit bloquant
+- Portée volontairement limitée à un seul candidat à la fois
+- **Unification avec `/gestion/edit-candidat`** : cette fiche avait déjà une case « Tiers temps », qui se contentait de poser/retirer le flag en base sans jamais adapter les horaires — un risque réel de désynchronisation puisque les fiches candidats n'existent qu'après le placement initial (donc toujours en contexte « jour J »). Cocher/décocher cette case déclenche désormais la même adaptation dans les deux sens, via les fonctions partagées `_calculer_plan_tiers_temps()`/`_appliquer_oraux_tiers_temps()` ; confirmation JS avant application, et blocage (aucune mise à jour, ni du flag ni des oraux) en cas de conflit bloquant
 
 **Tests (suite 15)**
-- `tests/unit/test_rebalance.py::TestPlanifierTiersTemps` : extension de préparation, cascade avec préservation de l'écart existant, oraux avant le candidat ignorés, écart minimum rompu signalé sans bloquer, chevauchement de la pause méridienne signalé, conflit bloquant si les deux oraux du candidat se chevauchent
-- `tests/integration/test_declarer_tiers_temps_candidat.py` : câblage de la route (formulaire, déjà tiers-temps, prévisualisation, confirmation avec mise à jour des 3 oraux affectés et double notification candidat/cascadé)
-- `tests/integration/test_edit_candidat.py` : édition simple sans tiers-temps, activation avec cascade, activation sans oral publié (flag seul), désactivation sans cascade, conflit bloquant sans aucune mise à jour
+- `tests/unit/test_rebalance.py::TestPlanifierTiersTemps` (déclaration) et `TestPlanifierTiersTempsRetrait` (retrait, symétrique — retrouve exactement les horaires d'origine) : extension/réduction de préparation, cascade avec préservation de l'écart existant, oraux avant le candidat ignorés, écart minimum rompu signalé sans bloquer, chevauchement de la pause méridienne signalé, conflit bloquant uniquement à la déclaration
+- `tests/integration/test_declarer_tiers_temps_candidat.py` : câblage de la route dans les deux sens (prévisualisation, confirmation avec mise à jour des 3 oraux affectés et double notification candidat/cascadé)
+- `tests/integration/test_edit_candidat.py` : édition simple sans tiers-temps, activation avec cascade, activation sans oral publié (flag seul), désactivation avec cascade de retrait, conflit bloquant sans aucune mise à jour
 
 **`examinateurs.csv` — minutes dans `Heure mini`**
 - La colonne `Heure mini` accepte désormais une heure:minute (`9:30`), en plus du format heure entière historique (`9`) — nouvelle fonction `algo.parser_heure_mini()`

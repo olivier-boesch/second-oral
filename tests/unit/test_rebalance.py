@@ -500,8 +500,8 @@ class TestPlanifierTiersTemps:
                         heure_sujet=_td(11), heure_oral=_td(11, 15), heure_fin=_td(11, 30))
 
         plan = planifier_tiers_temps(
-            oral_a, timedelta(minutes=20), [],
-            oral_b, timedelta(minutes=15), [],
+            oral_a, [],
+            oral_b, [],
             autres_heures_sujet_cascade={}, ecart_mini_minutes=40,
         )
         assert plan.conflit_bloquant is None
@@ -526,8 +526,8 @@ class TestPlanifierTiersTemps:
                          heure_sujet=_td(9, 40), heure_oral=_td(10), heure_fin=_td(10, 20))
 
         plan = planifier_tiers_temps(
-            oral_a, timedelta(minutes=20), [suivant],
-            oral_b, timedelta(minutes=15), [],
+            oral_a, [suivant],
+            oral_b, [],
             autres_heures_sujet_cascade={101: _td(13)},  # loin, aucun souci d'écart
             ecart_mini_minutes=40,
         )
@@ -548,8 +548,8 @@ class TestPlanifierTiersTemps:
                        heure_sujet=_td(8), heure_oral=_td(8, 20), heure_fin=_td(8, 40))
 
         plan = planifier_tiers_temps(
-            oral_a, timedelta(minutes=20), [avant],
-            oral_b, timedelta(minutes=15), [],
+            oral_a, [avant],
+            oral_b, [],
             autres_heures_sujet_cascade={}, ecart_mini_minutes=40,
         )
         assert not any(c.id_oral == 9 for c in plan.changements)
@@ -563,8 +563,8 @@ class TestPlanifierTiersTemps:
                          heure_sujet=_td(9, 40), heure_oral=_td(10), heure_fin=_td(10, 20))
 
         plan = planifier_tiers_temps(
-            oral_a, timedelta(minutes=20), [suivant],
-            oral_b, timedelta(minutes=15), [],
+            oral_a, [suivant],
+            oral_b, [],
             # Autre oral du candidat 101 très proche de sa nouvelle heure (9h47 + 7min) -> écart rompu
             autres_heures_sujet_cascade={101: _td(10, 10)},
             ecart_mini_minutes=40,
@@ -582,8 +582,8 @@ class TestPlanifierTiersTemps:
                          heure_sujet=_td(9, 40), heure_oral=_td(10), heure_fin=_td(10, 20))
 
         plan = planifier_tiers_temps(
-            oral_a, timedelta(minutes=20), [suivant],
-            oral_b, timedelta(minutes=15), [],
+            oral_a, [suivant],
+            oral_b, [],
             autres_heures_sujet_cascade={101: None}, ecart_mini_minutes=0,
             heure_pause_meridienne=_td(10, 5), duree_pause_meridienne=timedelta(minutes=30),
         )
@@ -599,9 +599,73 @@ class TestPlanifierTiersTemps:
                         heure_sujet=_td(9, 42), heure_oral=_td(9, 57), heure_fin=_td(10, 12))
 
         plan = planifier_tiers_temps(
-            oral_a, timedelta(minutes=20), [],
-            oral_b, timedelta(minutes=15), [],
+            oral_a, [],
+            oral_b, [],
             autres_heures_sujet_cascade={}, ecart_mini_minutes=1,
         )
         assert plan.conflit_bloquant is not None
         assert plan.changements == []
+
+
+class TestPlanifierTiersTempsRetrait:
+    """Retrait d'un tiers-temps posé par erreur (activer=False) : symétrique
+    de la déclaration — la préparation actuelle (déjà étendue) retrouve sa
+    base, et la cascade décale les oraux suivants plus tôt du même délai."""
+
+    def test_retrait_retrouve_les_horaires_dorigine(self):
+        # Repris de test_extension_preparation_candidat, mais déjà étendu :
+        # Maths 9h00 -> oral 9h27 -> fin 9h47 (base 20min + 7min)
+        # Philo 11h00 -> oral 11h20 -> fin 11h35 (base 15min + 5min)
+        oral_a = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA",
+                        heure_sujet=_td(9), heure_oral=_td(9, 27), heure_fin=_td(9, 47))
+        oral_b = _oral(2, 100, "N100", id_examinateur=2, examinateur_nom="ProfB",
+                        heure_sujet=_td(11), heure_oral=_td(11, 20), heure_fin=_td(11, 35))
+
+        plan = planifier_tiers_temps(
+            oral_a, [],
+            oral_b, [],
+            autres_heures_sujet_cascade={}, ecart_mini_minutes=40, activer=False,
+        )
+        assert plan.conflit_bloquant is None
+        ch_a, ch_b = plan.changements
+        assert ch_a.nouvelle_heure_sujet == _td(9)
+        assert ch_a.nouvelle_heure_oral == _td(9, 20)
+        assert ch_a.nouvelle_heure_fin == _td(9, 40)
+        assert ch_b.nouvelle_heure_sujet == _td(11)
+        assert ch_b.nouvelle_heure_oral == _td(11, 15)
+        assert ch_b.nouvelle_heure_fin == _td(11, 30)
+
+    def test_cascade_decale_les_oraux_suivants_plus_tot(self):
+        oral_a = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA",
+                        heure_sujet=_td(9), heure_oral=_td(9, 27), heure_fin=_td(9, 47))
+        oral_b = _oral(2, 100, "N100", id_examinateur=2, examinateur_nom="ProfB",
+                        heure_sujet=_td(11), heure_oral=_td(11, 20), heure_fin=_td(11, 35))
+        suivant = _oral(3, 101, "N101", id_examinateur=1, examinateur_nom="ProfA",
+                         heure_sujet=_td(9, 47), heure_oral=_td(10, 7), heure_fin=_td(10, 27))
+
+        plan = planifier_tiers_temps(
+            oral_a, [suivant],
+            oral_b, [],
+            autres_heures_sujet_cascade={101: _td(13)}, ecart_mini_minutes=40, activer=False,
+        )
+        cascade = next(c for c in plan.changements if not c.est_le_candidat)
+        assert cascade.nouvelle_heure_sujet == _td(9, 40)
+        assert cascade.nouvelle_heure_oral == _td(10)
+        assert cascade.nouvelle_heure_fin == _td(10, 20)
+
+    def test_retrait_ne_bloque_jamais_par_chevauchement_propre(self):
+        # Même configuration serrée que le test de conflit à la déclaration,
+        # mais en retrait : la préparation se réduit, ne peut jamais créer de
+        # chevauchement là où il n'y en avait pas.
+        oral_a = _oral(1, 200, "N200", id_examinateur=1, examinateur_nom="ProfA",
+                        heure_sujet=_td(9), heure_oral=_td(9, 20), heure_fin=_td(9, 40))
+        oral_b = _oral(2, 200, "N200", id_examinateur=2, examinateur_nom="ProfB",
+                        heure_sujet=_td(9, 42), heure_oral=_td(9, 57), heure_fin=_td(10, 12))
+
+        plan = planifier_tiers_temps(
+            oral_a, [],
+            oral_b, [],
+            autres_heures_sujet_cascade={}, ecart_mini_minutes=1, activer=False,
+        )
+        assert plan.conflit_bloquant is None
+        assert len(plan.changements) == 2

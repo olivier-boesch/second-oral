@@ -1734,14 +1734,13 @@ def liste_candidats() -> ResponseReturnValue:
 def edit_candidat() -> ResponseReturnValue:
     """Édition des informations d'un candidat (nom, numéro, tiers temps).
 
-    Cocher « Tiers temps » pour un candidat qui ne l'avait pas déjà déclenche
-    la même adaptation d'horaires que /gestion/candidat/tiers-temps
-    (extension de préparation des deux oraux + cascade sur les oraux
-    suivants des deux examinateurs concernés) — cf. docs/workflow_admin.md.
-    Décocher ne fait que retirer le flag (les horaires déjà étendus ne sont
-    pas recalculés en sens inverse). Si le candidat n'a pas encore d'oral
-    publié (avant tout lancement d'algo), la case ne fait que poser le flag,
-    sans adaptation possible.
+    Cocher/décocher « Tiers temps » pour un candidat dont l'état change
+    déclenche la même adaptation d'horaires que /gestion/candidat/tiers-temps
+    (extension — ou réduction — de préparation des deux oraux + cascade sur
+    les oraux suivants des deux examinateurs concernés) — cf.
+    docs/workflow_admin.md. Si le candidat n'a pas encore d'oral publié
+    (avant tout lancement d'algo), la case ne fait que poser/retirer le
+    flag, sans adaptation possible (rien à adapter).
     """
     if request.method == 'POST':
         id_candidat_str = request.form.get('id')
@@ -1755,10 +1754,10 @@ def edit_candidat() -> ResponseReturnValue:
         candidat_actuel = db_get(db_facility_web.SELECT_CANDIDAT_TIERS_TEMPS, id_candidat)
         if not candidat_actuel:
             abort(404, "Candidat introuvable")
-        active_tiers_temps = nouveau_tiers_temps == 1 and not candidat_actuel['tiers_temps']
+        tiers_temps_change = bool(nouveau_tiers_temps) != bool(candidat_actuel['tiers_temps'])
 
-        if active_tiers_temps:
-            plan = _calculer_plan_tiers_temps(id_candidat)
+        if tiers_temps_change:
+            plan = _calculer_plan_tiers_temps(id_candidat, activer=bool(nouveau_tiers_temps))
             if plan is not None and plan.conflit_bloquant:
                 url = _safe_redirect_url(request.form.get('link_back'))
                 donnees_candidat = dict(candidat_actuel)
@@ -2486,10 +2485,14 @@ def _oraux_examinateur_pour_cascade(
     ]
 
 
-def _calculer_plan_tiers_temps(id_candidat: int) -> rebalance.PlanTiersTemps | None:
-    """Calcule le plan d'extension + cascade pour la déclaration de
+def _calculer_plan_tiers_temps(
+    id_candidat: int, activer: bool = True,
+) -> rebalance.PlanTiersTemps | None:
+    """Calcule le plan d'extension (ou de retrait) + cascade pour le
     tiers-temps d'un candidat (cf. rebalance.planifier_tiers_temps).
 
+    :param activer: True pour déclarer le tiers-temps, False pour retirer un
+        tiers-temps déjà posé (ex. par erreur) — cf. rebalance.planifier_tiers_temps
     :returns: None si le candidat n'a pas exactement deux oraux publiés
         (pas encore de planning à adapter — ex. avant tout lancement d'algo).
     """
@@ -2500,8 +2503,6 @@ def _calculer_plan_tiers_temps(id_candidat: int) -> rebalance.PlanTiersTemps | N
         return None
     oral_a = _oral_actuel_depuis_ligne(lignes_oraux[0])
     oral_b = _oral_actuel_depuis_ligne(lignes_oraux[1])
-    temps_preparation_a = oral_a.heure_oral - oral_a.heure_sujet
-    temps_preparation_b = oral_b.heure_oral - oral_b.heure_sujet
 
     oraux_examinateur_a = _oraux_examinateur_pour_cascade(
         oral_a.id_examinateur, oral_a.examinateur_nom, oral_a.id,
@@ -2527,9 +2528,9 @@ def _calculer_plan_tiers_temps(id_candidat: int) -> rebalance.PlanTiersTemps | N
     ecart_mini_minutes = _load_algo_params()['ecart_mini']
 
     return rebalance.planifier_tiers_temps(
-        oral_a, temps_preparation_a, oraux_examinateur_a,
-        oral_b, temps_preparation_b, oraux_examinateur_b,
-        autres_heures_sujet, ecart_mini_minutes,
+        oral_a, oraux_examinateur_a,
+        oral_b, oraux_examinateur_b,
+        autres_heures_sujet, ecart_mini_minutes, activer,
         heure_pause_meridienne, duree_pause_meridienne,
     )
 
@@ -2553,11 +2554,12 @@ def _appliquer_oraux_tiers_temps(plan: rebalance.PlanTiersTemps) -> None:
 @nocache
 def declarer_tiers_temps_candidat() -> ResponseReturnValue:
     """
-    Déclare le tiers-temps d'un candidat en cours de journée : étend la
-    préparation de ses deux oraux d'1/3 (heure_oral/heure_fin décalées,
-    heure_sujet inchangée) et cascade le même décalage sur tous les oraux
-    suivants des deux examinateurs concernés, pour ne jamais les chevaucher —
-    cf. docs/workflow_admin.md.
+    Déclare — ou retire, si déjà posé par erreur — le tiers-temps d'un
+    candidat en cours de journée : étend (ou réduit) la préparation de ses
+    deux oraux d'1/3 (heure_oral/heure_fin décalées, heure_sujet inchangée)
+    et cascade le même décalage sur tous les oraux suivants des deux
+    examinateurs concernés, pour ne jamais les chevaucher — cf.
+    docs/workflow_admin.md.
     """
     id_candidat = request.values.get("id_candidat", type=int)
     if id_candidat is None:
@@ -2566,17 +2568,14 @@ def declarer_tiers_temps_candidat() -> ResponseReturnValue:
     if not candidat_info:
         abort(404, "Candidat introuvable")
 
-    if candidat_info['tiers_temps']:
-        return render_template(
-            "declarer_tiers_temps_candidat.html",
-            centre=CENTRE_EXAMEN, candidat=candidat_info, etape="deja_tiers_temps",
-            url_of_page=request.url, username=get_username(), authenticated=is_authenticated(),
-        )
+    # Le sens de l'action se déduit de l'état actuel du candidat : s'il a
+    # déjà un tiers-temps, on propose de le retirer ; sinon, de le déclarer.
+    activer = not candidat_info['tiers_temps']
 
-    plan = _calculer_plan_tiers_temps(id_candidat)
+    plan = _calculer_plan_tiers_temps(id_candidat, activer=activer)
     if plan is None:
         abort(400, "Le candidat doit avoir exactement deux oraux publiés pour "
-                   "déclarer un tiers-temps.")
+                   "déclarer ou retirer un tiers-temps.")
 
     etape = "previsualisation"
     if request.method == "POST":
@@ -2586,18 +2585,21 @@ def declarer_tiers_temps_candidat() -> ResponseReturnValue:
         if plan.conflit_bloquant:
             abort(400, plan.conflit_bloquant)
         db_update(
-            db_facility_web.UPDATE_CANDIDAT_TIERS_TEMPS, id_candidat=id_candidat, tiers_temps=1,
+            db_facility_web.UPDATE_CANDIDAT_TIERS_TEMPS,
+            id_candidat=id_candidat, tiers_temps=1 if activer else 0,
         )
         _appliquer_oraux_tiers_temps(plan)
         return render_template(
             "declarer_tiers_temps_candidat.html",
-            centre=CENTRE_EXAMEN, candidat=candidat_info, etape="termine", plan=plan,
+            centre=CENTRE_EXAMEN, candidat=candidat_info, etape="termine",
+            plan=plan, activer=activer,
             url_of_page=request.url, username=get_username(), authenticated=is_authenticated(),
         )
 
     return render_template(
         "declarer_tiers_temps_candidat.html",
-        centre=CENTRE_EXAMEN, candidat=candidat_info, etape="previsualisation", plan=plan,
+        centre=CENTRE_EXAMEN, candidat=candidat_info, etape="previsualisation",
+        plan=plan, activer=activer,
         url_of_page=request.url, username=get_username(), authenticated=is_authenticated(),
     )
 

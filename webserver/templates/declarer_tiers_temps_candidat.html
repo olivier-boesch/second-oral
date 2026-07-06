@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>2ndOral — Tiers-temps : {{ candidat['nom'] }}</title>
+    <title>2ndOral — Tiers-temps : {{ candidat['nom'] }}{% if activer is defined and not activer %} (retrait){% endif %}</title>
     {% include 'style.html' %}
     <style>
         .tt-table { width:100%; border-collapse:collapse; margin-top:1em; }
@@ -16,26 +16,27 @@
 <body class="body-for-sticky">
 {% include 'auth_icon.html' %}
 
-<h1>Déclaration de tiers-temps — {{ candidat['nom'] }} ({{ candidat['numero'] }})</h1>
+<h1>
+    {% if activer %}Déclaration{% else %}Retrait{% endif %} de tiers-temps —
+    {{ candidat['nom'] }} ({{ candidat['numero'] }})
+</h1>
 
 <div style="max-width:760px; margin:0 auto;">
 
-{% if etape == 'deja_tiers_temps' %}
-<p style="background:#fde8e8; color:#b91c1c; border-left:4px solid #b91c1c;
-          padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
-    🚫 Ce candidat a déjà un tiers-temps déclaré.
-</p>
-<button type="button" onclick="document.location='{{ url_for('liste_candidats') }}';">
-    ← Retour à la liste des candidats
-</button>
-{% endif %}
-
 {% if etape == 'previsualisation' %}
+{% if activer %}
 <p style="font-size:.9em; color:var(--text-md);">
     La préparation de ses deux oraux est étendue d'1/3 (l'heure de sujet ne change pas, seule
     l'heure d'oral recule) ; les oraux suivants chez les deux mêmes examinateurs sont décalés
     du même délai pour ne jamais se chevaucher.
 </p>
+{% else %}
+<p style="font-size:.9em; color:var(--text-md);">
+    Ce candidat a déjà un tiers-temps déclaré — retirer un tiers-temps posé par erreur réduit la
+    préparation de ses deux oraux à leur durée d'origine (l'heure de sujet ne change pas) ; les
+    oraux suivants chez les deux mêmes examinateurs sont décalés plus tôt du même délai.
+</p>
+{% endif %}
 
 {% if plan.conflit_bloquant %}
 <p style="background:#fde8e8; color:#b91c1c; border-left:4px solid #b91c1c;
@@ -79,13 +80,13 @@
         {% endfor %}
     </table>
     <p class="tt-hint">
-        🟩 le candidat lui-même (préparation étendue) — 🟨 oral cascadé (décalé du même délai)
-        — 🟧 ⚠ écart minimum rompu avec l'autre oral du candidat cascadé,
-        🕐 chevauche la pause méridienne (à signaler à l'examinateur concerné)
+        🟩 le candidat lui-même (préparation {{ 'étendue' if activer else 'réduite' }}) —
+        🟨 oral cascadé (décalé du même délai) — 🟧 ⚠ écart minimum rompu avec l'autre oral du
+        candidat cascadé, 🕐 chevauche la pause méridienne (à signaler à l'examinateur concerné)
     </p>
 
     <div style="display:flex; gap:.5em; flex-wrap:wrap; margin-top:1em;">
-        <button type="submit">✓ Confirmer et notifier</button>
+        <button type="submit">✓ Confirmer{% if not activer %} le retrait{% endif %} et notifier</button>
         <button type="button" class="outline"
                 onclick="document.location='{{ url_for('liste_candidats') }}';">
             ← Annuler
@@ -98,8 +99,8 @@
 {% if etape == 'termine' %}
 <p style="background:#d1fae5; color:#065f46; border-left:4px solid #059669;
           padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
-    ✔ Tiers-temps déclaré pour {{ candidat['nom'] }} — {{ plan.changements|length }} oral(aux)
-    mis à jour, notifications envoyées.
+    ✔ Tiers-temps {{ 'déclaré' if activer else 'retiré' }} pour {{ candidat['nom'] }} —
+    {{ plan.changements|length }} oral(aux) mis à jour, notifications envoyées.
 </p>
 <button type="button" onclick="document.location='{{ url_for('liste_candidats') }}';">
     ← Retour à la liste des candidats

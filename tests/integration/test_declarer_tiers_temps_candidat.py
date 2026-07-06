@@ -1,13 +1,16 @@
 """Tests d'intégration pour la route /gestion/candidat/tiers-temps
-(un candidat déclare un tiers-temps en cours de journée après le placement
-initial : ses deux oraux voient leur préparation étendue, et les oraux
-suivants chez les deux mêmes examinateurs sont cascadés du même délai).
+(un candidat déclare — ou retire, si posé par erreur — un tiers-temps en
+cours de journée après le placement initial). Le sens de l'action se déduit
+de l'état actuel du candidat : pas de tiers-temps -> déclaration (préparation
+étendue), déjà tiers-temps -> retrait (préparation réduite). Dans les deux
+cas, les oraux suivants chez les deux mêmes examinateurs sont cascadés du
+même délai.
 
 La logique de replanification elle-même (rebalance.py) est testée en détail
-dans tests/unit/test_rebalance.py::TestPlanifierTiersTemps — ces tests-ci
-vérifient uniquement le câblage de la route (requêtes DB, gabarit rendu,
-mise à jour du flag tiers_temps, notifications SSE ciblant le candidat et
-les cascadés).
+dans tests/unit/test_rebalance.py::TestPlanifierTiersTemps et
+TestPlanifierTiersTempsRetrait — ces tests-ci vérifient uniquement le
+câblage de la route (requêtes DB, gabarit rendu, mise à jour du flag
+tiers_temps, notifications SSE ciblant le candidat et les cascadés).
 """
 from datetime import timedelta
 from unittest.mock import MagicMock
@@ -20,9 +23,9 @@ def _td(h, m=0):
 
 
 CANDIDAT_INFO = {"id": 100, "nom": "Cand Test", "numero": "N100", "tiers_temps": 0}
+CANDIDAT_INFO_TT = {"id": 100, "nom": "Cand Test", "numero": "N100", "tiers_temps": 1}
 
-CANDIDAT_INFO_DEJA_TT = {"id": 100, "nom": "Cand Test", "numero": "N100", "tiers_temps": 1}
-
+# ── Déclaration : oraux pas encore étendus ───────────────────────────────────
 ORAUX_CANDIDAT = [
     {"id": 10, "id_candidat": 100, "numero": "N100", "etablissement": "",
      "id_examinateur": 1, "examinateur": "ProfMaths",
@@ -52,6 +55,28 @@ AUTRE_ORAL_101 = [
     {"id": 31, "heure_sujet": _td(14)},
 ]
 
+# ── Retrait : mêmes candidats, mais oraux DÉJÀ étendus (tiers-temps actif) ───
+ORAUX_CANDIDAT_TT = [
+    {"id": 10, "id_candidat": 100, "numero": "N100", "etablissement": "",
+     "id_examinateur": 1, "examinateur": "ProfMaths",
+     "heure_sujet": _td(9), "heure_oral": _td(9, 27), "heure_fin": _td(9, 47)},
+    {"id": 20, "id_candidat": 100, "numero": "N100", "etablissement": "",
+     "id_examinateur": 2, "examinateur": "ProfPhilo",
+     "heure_sujet": _td(11), "heure_oral": _td(11, 20), "heure_fin": _td(11, 35)},
+]
+
+ORAUX_EXAMINATEUR_MATHS_TT = [
+    {"id_candidat": 100, "id": 10, "candidat": "Cand Test", "numero": "N100", "etablissement": "",
+     "tiers_temps": 1, "heure_sujet": _td(9), "heure_oral": _td(9, 27), "heure_fin": _td(9, 47), "maj": 0},
+    {"id_candidat": 101, "id": 30, "candidat": "Cand Suivant", "numero": "N101", "etablissement": "",
+     "tiers_temps": 0, "heure_sujet": _td(9, 47), "heure_oral": _td(10, 7), "heure_fin": _td(10, 27), "maj": 0},
+]
+
+ORAUX_EXAMINATEUR_PHILO_TT = [
+    {"id_candidat": 100, "id": 20, "candidat": "Cand Test", "numero": "N100", "etablissement": "",
+     "tiers_temps": 1, "heure_sujet": _td(11), "heure_oral": _td(11, 20), "heure_fin": _td(11, 35), "maj": 0},
+]
+
 
 def _side_effect_defaut(sql, *args):
     """Dispatch par identité de requête SQL — robuste à l'ordre d'appel."""
@@ -63,6 +88,24 @@ def _side_effect_defaut(sql, *args):
     if sql is dfw.SELECT_ORAUX_EXAMINATEUR:
         id_examinateur = args[0]
         return ORAUX_EXAMINATEUR_MATHS if id_examinateur == 1 else ORAUX_EXAMINATEUR_PHILO
+    if sql is dfw.SELECT_LISTE_EDITION_ORAL:
+        id_candidat = args[0]
+        return AUTRE_ORAL_101 if id_candidat == 101 else []
+    if sql is dfw.SELECT_SALLE_LOGE_FROM_EXAMINATEUR:
+        return [{"salle": "X", "loge": "LogeX"}]
+    return []
+
+
+def _side_effect_retrait(sql, *args):
+    """Même candidat, mais tiers-temps déjà actif (oraux déjà étendus)."""
+    import db_facility_web as dfw
+    if sql is dfw.SELECT_CANDIDAT_TIERS_TEMPS:
+        return [CANDIDAT_INFO_TT]
+    if sql is dfw.SELECT_ORAUX_CANDIDAT_TIERS_TEMPS:
+        return ORAUX_CANDIDAT_TT
+    if sql is dfw.SELECT_ORAUX_EXAMINATEUR:
+        id_examinateur = args[0]
+        return ORAUX_EXAMINATEUR_MATHS_TT if id_examinateur == 1 else ORAUX_EXAMINATEUR_PHILO_TT
     if sql is dfw.SELECT_LISTE_EDITION_ORAL:
         id_candidat = args[0]
         return AUTRE_ORAL_101 if id_candidat == 101 else []
@@ -87,12 +130,6 @@ class TestDeclarerTiersTempsForm:
         db_mock.make_sql_select.return_value = []
         r = admin_client.get("/gestion/candidat/tiers-temps?id_candidat=999")
         assert r.status_code == 404
-
-    def test_get_deja_tiers_temps(self, admin_client, db_mock):
-        db_mock.make_sql_select.return_value = [CANDIDAT_INFO_DEJA_TT]
-        r = admin_client.get("/gestion/candidat/tiers-temps?id_candidat=100")
-        assert r.status_code == 200
-        assert "déjà un tiers-temps" in r.data.decode()
 
 
 class TestDeclarerTiersTempsPrevisualisation:
@@ -162,12 +199,48 @@ class TestDeclarerTiersTempsConfirmation:
         assert "candidat_N100" in canaux
         assert "candidat_N101" in canaux
 
-    def test_confirmer_deja_tiers_temps_ne_fait_rien(self, admin_client, db_mock):
-        db_mock.make_sql_select.return_value = [CANDIDAT_INFO_DEJA_TT]
+
+class TestRetirerTiersTemps:
+    """Un candidat qui a déjà un tiers-temps se voit proposer un RETRAIT
+    (préparation réduite + cascade plus tôt) plutôt qu'un blocage."""
+
+    def test_previsualisation_propose_le_retrait(self, admin_client, db_mock):
+        db_mock.make_sql_select.side_effect = _side_effect_retrait
+        r = admin_client.get("/gestion/candidat/tiers-temps?id_candidat=100")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "N100" in body
+        assert "N101" in body
+
+    def test_confirmer_retire_le_flag_et_restaure_les_horaires(self, admin_client, db_mock, monkeypatch):
+        import app as app_module
+        publish_mock = MagicMock()
+        monkeypatch.setattr(app_module.sse, "publish", publish_mock)
         db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.side_effect = _side_effect_retrait
+
         r = admin_client.post("/gestion/candidat/tiers-temps", data={
             "id_candidat": "100", "etape": "confirmer",
         })
         assert r.status_code == 200
-        assert "déjà un tiers-temps" in r.data.decode()
-        db_mock.make_sql_update.assert_not_called()
+
+        import db_facility_web as dfw
+        _, kwargs_tt = next(
+            c for c in db_mock.make_sql_update.call_args_list if c.args[0] is dfw.UPDATE_CANDIDAT_TIERS_TEMPS
+        )
+        assert kwargs_tt["tiers_temps"] == 0
+
+        # L'oral Maths du candidat retrouve son horaire d'origine (9h20/9h40)
+        _, kwargs_oral_maths = next(
+            c for c in db_mock.make_sql_update.call_args_list
+            if c.args[0] is dfw.UPDATE_INFOS_ORAL and c.kwargs.get("id") == 10
+        )
+        assert kwargs_oral_maths["heure_oral"] == "09:20"
+        assert kwargs_oral_maths["heure_fin"] == "09:40"
+
+        # La cascade retrouve aussi son horaire d'origine (9h40)
+        _, kwargs_oral_cascade = next(
+            c for c in db_mock.make_sql_update.call_args_list
+            if c.args[0] is dfw.UPDATE_INFOS_ORAL and c.kwargs.get("id") == 30
+        )
+        assert kwargs_oral_cascade["heure_sujet"] == "09:40"

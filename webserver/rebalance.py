@@ -611,7 +611,7 @@ def proposer_compaction(
     )
 
 
-# ── Déclaration de tiers-temps d'un candidat en cours de journée ─────────────
+# ── Déclaration (ou retrait) de tiers-temps d'un candidat en cours de journée
 # Un candidat déclare un tiers-temps le jour J (après le placement initial) :
 # ses deux oraux voient leur temps de préparation étendu d'1/3 (même règle que
 # AlgoOne.calcul_horaires pour un candidat tiers-temps à la construction du
@@ -619,6 +619,13 @@ def proposer_compaction(
 # (début de préparation) reste inchangée. Comme l'examinateur reste occupé
 # plus longtemps, tous les oraux suivants chez ce même examinateur ce jour-là
 # doivent être décalés du même delta pour ne jamais se chevaucher.
+#
+# Le retrait d'un tiers-temps posé par erreur inverse exactement ce calcul :
+# la préparation actuelle (déjà étendue) représente 4/3 de la préparation de
+# base, donc on lui retire 1/4 pour retrouver cette base — et la cascade
+# décale les oraux suivants plus TÔT du même delta (négatif), sans jamais
+# créer de nouveau chevauchement (un décalage uniforme d'une file d'oraux
+# préserve tous les écarts déjà en place, quel que soit le sens).
 
 def _arrondir_minute(td: timedelta) -> timedelta:
     """Arrondit un timedelta à la minute la plus proche — même granularité que
@@ -666,35 +673,39 @@ class PlanTiersTemps:
     conflit_bloquant: str | None = None
     """Non None si les deux oraux du candidat lui-même se chevauperaient une
     fois leur préparation étendue (très rare : suppose un écart minimum déjà
-    proche de zéro) — aucun changement ne doit alors être appliqué, une
-    intervention manuelle (édition d'oral) est nécessaire."""
+    proche de zéro, et ne peut se produire qu'à la déclaration — un retrait
+    ne fait que réduire les fenêtres, jamais les faire chevaucher) — aucun
+    changement ne doit alors être appliqué, une intervention manuelle
+    (édition d'oral) est nécessaire."""
 
 
 def planifier_tiers_temps(
     oral_a: OralActuel,
-    temps_preparation_a: timedelta,
     oraux_examinateur_a: list[OralActuel],
     oral_b: OralActuel,
-    temps_preparation_b: timedelta,
     oraux_examinateur_b: list[OralActuel],
     autres_heures_sujet_cascade: dict[int, timedelta | None],
     ecart_mini_minutes: float,
+    activer: bool = True,
     heure_pause_meridienne: timedelta | None = None,
     duree_pause_meridienne: timedelta = timedelta(0),
 ) -> PlanTiersTemps:
     """
-    Calcule le décalage à appliquer pour déclarer le tiers-temps d'un candidat.
+    Calcule le décalage à appliquer pour déclarer (ou retirer) le tiers-temps
+    d'un candidat.
 
-    :param oral_a: un des deux oraux actuels du candidat (matière A)
-    :param temps_preparation_a: temps de préparation de base de la matière A
-        — càd NON étendu (le candidat n'a, à ce stade, pas encore de
-        tiers-temps) ; se déduit simplement de `oral_a.heure_oral - oral_a.heure_sujet`
+    :param oral_a: un des deux oraux actuels du candidat (matière A) — le
+        temps de préparation actuel se déduit de `oral_a.heure_oral - oral_a.heure_sujet`
     :param oraux_examinateur_a: les AUTRES oraux du jour de l'examinateur de
         la matière A (hors `oral_a`)
-    :param oral_b, temps_preparation_b, oraux_examinateur_b: idem pour la matière B
+    :param oral_b, oraux_examinateur_b: idem pour la matière B
     :param autres_heures_sujet_cascade: {id_candidat: heure_sujet de son AUTRE
         oral (fixe), ou None} pour les candidats dont l'oral est cascadé —
         sert à vérifier que l'écart minimum reste respecté après décalage
+    :param activer: True pour déclarer le tiers-temps (préparation actuelle
+        considérée NON étendue, on lui ajoute 1/3), False pour le retirer
+        (préparation actuelle considérée étendue à 4/3, on lui retire 1/4
+        pour retrouver la base — cf. commentaire de section ci-dessus)
     :param heure_pause_meridienne, duree_pause_meridienne: pause méridienne
         configurée (None = désactivée)
     """
@@ -702,10 +713,9 @@ def planifier_tiers_temps(
     changements_propres: list[ChangementTiersTemps] = []
     changements_cascade: list[ChangementTiersTemps] = []
 
-    def _traiter(
-        oral: OralActuel, temps_preparation: timedelta, oraux_examinateur: list[OralActuel],
-    ) -> None:
-        delta = _arrondir_minute(temps_preparation / 3)
+    def _traiter(oral: OralActuel, oraux_examinateur: list[OralActuel]) -> None:
+        gap_actuel = oral.heure_oral - oral.heure_sujet
+        delta = _arrondir_minute(gap_actuel / 3) if activer else -_arrondir_minute(gap_actuel / 4)
         nouvelle_heure_oral = oral.heure_oral + delta
         nouvelle_heure_fin = oral.heure_fin + delta
         changements_propres.append(ChangementTiersTemps(
@@ -738,8 +748,8 @@ def planifier_tiers_temps(
                 ecart_mini_rompu=ecart_rompu, chevauche_pause=chevauche_pause,
             ))
 
-    _traiter(oral_a, temps_preparation_a, oraux_examinateur_a)
-    _traiter(oral_b, temps_preparation_b, oraux_examinateur_b)
+    _traiter(oral_a, oraux_examinateur_a)
+    _traiter(oral_b, oraux_examinateur_b)
 
     ch_a, ch_b = changements_propres
     if (

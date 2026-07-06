@@ -128,11 +128,13 @@ class TestEditCandidatDeclareTiersTemps:
         assert args[0] is dfw.UPDATE_CANDIDAT_INFOS
         assert kwargs["tiers_temps"] == 1
 
-    def test_decocher_ne_declenche_pas_la_cascade(self, admin_client, db_mock):
+    def test_decocher_sans_oral_publie_pose_juste_le_flag(self, admin_client, db_mock):
         def _side_effect_deja_tt(sql, *args):
             import db_facility_web as dfw
             if sql is dfw.SELECT_CANDIDAT_TIERS_TEMPS:
                 return [CANDIDAT_AVEC_TT]
+            if sql is dfw.SELECT_ORAUX_CANDIDAT_TIERS_TEMPS:
+                return []
             return []
         db_mock.make_sql_select.side_effect = _side_effect_deja_tt
         db_mock.make_sql_update.reset_mock()
@@ -147,6 +149,65 @@ class TestEditCandidatDeclareTiersTemps:
         args, kwargs = db_mock.make_sql_update.call_args
         assert args[0] is dfw.UPDATE_CANDIDAT_INFOS
         assert kwargs["tiers_temps"] == 0
+
+    def test_decocher_declenche_le_retrait_avec_cascade(self, admin_client, db_mock, monkeypatch):
+        """Décocher pour un candidat AVEC oraux déjà étendus déclenche le
+        retrait (préparation réduite + cascade), symétrique de l'activation."""
+        import app as app_module
+        monkeypatch.setattr(app_module.sse, "publish", MagicMock())
+        oraux_tt = [
+            {"id": 10, "id_candidat": 100, "numero": "N100", "etablissement": "",
+             "id_examinateur": 1, "examinateur": "ProfMaths",
+             "heure_sujet": _td(9), "heure_oral": _td(9, 27), "heure_fin": _td(9, 47)},
+            {"id": 20, "id_candidat": 100, "numero": "N100", "etablissement": "",
+             "id_examinateur": 2, "examinateur": "ProfPhilo",
+             "heure_sujet": _td(11), "heure_oral": _td(11, 20), "heure_fin": _td(11, 35)},
+        ]
+        oraux_examinateur_maths_tt = [
+            {"id_candidat": 100, "id": 10, "candidat": "Cand Test", "numero": "N100",
+             "etablissement": "", "tiers_temps": 1,
+             "heure_sujet": _td(9), "heure_oral": _td(9, 27), "heure_fin": _td(9, 47), "maj": 0},
+        ]
+        oraux_examinateur_philo_tt = [
+            {"id_candidat": 100, "id": 20, "candidat": "Cand Test", "numero": "N100",
+             "etablissement": "", "tiers_temps": 1,
+             "heure_sujet": _td(11), "heure_oral": _td(11, 20), "heure_fin": _td(11, 35), "maj": 0},
+        ]
+
+        def _side_effect_retrait(sql, *args):
+            import db_facility_web as dfw
+            if sql is dfw.SELECT_CANDIDAT_TIERS_TEMPS:
+                return [CANDIDAT_AVEC_TT]
+            if sql is dfw.SELECT_ORAUX_CANDIDAT_TIERS_TEMPS:
+                return oraux_tt
+            if sql is dfw.SELECT_ORAUX_EXAMINATEUR:
+                return oraux_examinateur_maths_tt if args[0] == 1 else oraux_examinateur_philo_tt
+            if sql is dfw.SELECT_LISTE_EDITION_ORAL:
+                return []
+            return []
+
+        db_mock.make_sql_select.side_effect = _side_effect_retrait
+        db_mock.make_sql_update.reset_mock()
+
+        r = admin_client.post("/gestion/edit-candidat", data={
+            "id": "100", "nom": "Cand Test", "numero": "N100",
+            # case décochée : pas de "tiers_temps" dans le formulaire
+        })
+        assert r.status_code == 302
+
+        import db_facility_web as dfw
+        sql_appelees = [c.args[0] for c in db_mock.make_sql_update.call_args_list]
+        assert sql_appelees.count(dfw.UPDATE_INFOS_ORAL) == 2
+        _, kwargs_candidat = next(
+            c for c in db_mock.make_sql_update.call_args_list if c.args[0] is dfw.UPDATE_CANDIDAT_INFOS
+        )
+        assert kwargs_candidat["tiers_temps"] == 0
+        _, kwargs_oral_maths = next(
+            c for c in db_mock.make_sql_update.call_args_list
+            if c.args[0] is dfw.UPDATE_INFOS_ORAL and c.kwargs.get("id") == 10
+        )
+        assert kwargs_oral_maths["heure_oral"] == "09:20"
+        assert kwargs_oral_maths["heure_fin"] == "09:40"
 
     def test_conflit_bloquant_empeche_toute_mise_a_jour(self, admin_client, db_mock):
         # Écart minimum très faible entre les deux matières -> chevauchement

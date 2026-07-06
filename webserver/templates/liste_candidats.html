@@ -35,12 +35,11 @@
             <td>
                 {% if c['tiers_temps'] %}
                 <div class="tooltip">🔴 <span class="tooltiptext">aménagement d'épreuves</span></div>
-                {% else %}
+                {% endif %}
                 <button type="button" class="outline" style="font-size:.8rem; padding:.2em .6em;"
                         onclick="document.location='{{ url_for('declarer_tiers_temps_candidat', id_candidat=c['id']) }}';">
-                    ⏱️ Déclarer
+                    {% if c['tiers_temps'] %}⏱️ Retirer{% else %}⏱️ Déclarer{% endif %}
                 </button>
-                {% endif %}
             </td>
             <td>
                 <a href="{{ url_for('edit_candidat', id=c['id'], link_back=url_of_page) }}">
