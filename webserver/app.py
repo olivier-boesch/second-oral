@@ -2916,6 +2916,7 @@ _ALGO_PARAMS_DEFAULTS = {
     "debug":            False,
     "engine":           "monte_carlo",
     "cp_timeout":       60,
+    "cp_optimal":       False,
     "pause_meridienne_debut": "",
     "pause_meridienne_duree": 60,
 }
@@ -3135,7 +3136,8 @@ def algo_save_params() -> ResponseReturnValue:
         engine = str(data.get("engine", "monte_carlo")).strip().lower()
         engines_valides = ("monte_carlo", "cpsat")
         params["engine"]     = engine if engine in engines_valides else "monte_carlo"
-        params["cp_timeout"] = max(5, min(600, int(data.get("cp_timeout", 60))))
+        params["cp_timeout"] = max(5, min(1200, int(data.get("cp_timeout", 60))))
+        params["cp_optimal"] = bool(data.get("cp_optimal", False))
         pause_debut = str(data.get("pause_meridienne_debut", "")).strip()
         if pause_debut:
             h, m = pause_debut.split(":")

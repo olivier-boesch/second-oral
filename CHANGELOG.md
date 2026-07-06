@@ -2,7 +2,20 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `cp_timeout` (délai max du solveur CP-SAT, `/gestion/algo`) : plafond relevé de 600s à 1200s (20 min), backend et champ du formulaire.
+
 ### Added
+
+**Algorithme de placement — mode optimal CP-SAT**
+- Nouvelle option `cp_optimal` (`/gestion/algo`) ou `ALGO_CP_OPTIMAL` : supprime toute limite de temps au solveur CP-SAT, qui tourne alors jusqu'à preuve mathématique d'optimalité plutôt que de s'arrêter à `cp_timeout`
+- ⚠️ Avertissement explicite dans l'UI (texte rouge + confirmation JS à l'activation) et dans `docs/algo.md` : peut prendre plusieurs heures, voire ne jamais aboutir, sur un jeu de données réel — un arrêt manuel (`/gestion/algo/stop`) ne publie aucune solution (contrairement à l'expiration normale de `cp_timeout`, qui conserve la meilleure solution trouvée)
+- Désactivé par défaut ; ignoré si le moteur Monte-Carlo est sélectionné
+
+**Tests (suite 10)**
+- `tests/unit/test_algo_cp.py::TestAlgoCPModeOptimal` : désactivé par défaut, délai appliqué normalement quand désactivé, aucune limite (`max_time_in_seconds` reste à `inf`) quand activé
+- `tests/integration/test_flask_routes.py` : sauvegarde/valeur par défaut de `cp_optimal` via `/gestion/algo/params`
 
 **Gestion en cours de journée (suite 3) — suggestion de renfort inédit**
 - Après l'ajout d'un nouvel examinateur avec une matière (`/gestion/add-examinateur`), un bandeau apparaît sur `/gestion/credentials` proposant de rééquilibrer dès maintenant vers lui les oraux déjà en cours pour cette matière

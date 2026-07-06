@@ -374,6 +374,50 @@ class TestAdminRoutes:
         assert r.status_code == 200
         assert json.loads(r.data)["params"]["debug"] is True
 
+    def test_save_params_cp_timeout_borne_a_1200(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """cp_timeout est borné à 1200s max (au-delà, clampé silencieusement)."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70, "cp_timeout": 5000}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["cp_timeout"] == 1200
+
+    def test_save_params_cp_optimal_desactive_par_defaut(self, admin_client, tmp_path,
+                                                          flask_app, monkeypatch):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["cp_optimal"] is False
+
+    def test_save_params_cp_optimal_active(self, admin_client, tmp_path, flask_app, monkeypatch):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70, "cp_optimal": True}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["cp_optimal"] is True
+
     def test_save_params_invalid(self, admin_client):
         r = admin_client.post(
             "/gestion/algo/params",

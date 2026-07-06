@@ -317,3 +317,52 @@ class TestAlgoCPEquiteEntreExaminateurs:
             o.examinateur.nom for o in alg.liste_oraux if o.matiere.nom == "Maths"
         )
         assert max(charges.values()) - min(charges.values()) <= 1
+
+
+class TestAlgoCPModeOptimal:
+    """ALGO_CP_OPTIMAL désactive toute limite de temps (max_time_in_seconds
+    reste à son défaut `inf`) — désactivé par défaut, actif seulement si
+    explicitement demandé via la variable d'environnement."""
+
+    def _construire(self, tmp_path):
+        return _build_algo_cp(
+            tmp_path,
+            candidats=[_cand("Cand0", "1300000000")],
+            exams=[_exam("ProfA", "Maths", "A101"), _exam("ProfB", "Philo", "B101")],
+        )
+
+    def test_desactive_par_defaut(self):
+        import algo_cp
+        assert algo_cp.ALGO_CP_OPTIMAL is False
+
+    def test_timeout_applique_quand_mode_optimal_desactive(self, tmp_path, monkeypatch):
+        import algo_cp
+        monkeypatch.setattr(algo_cp, "ALGO_CP_OPTIMAL", False)
+        captures = []
+        original_solve = algo_cp.cp_model.CpSolver.Solve
+
+        def _solve_espion(self, model, *args, **kwargs):
+            captures.append(self.parameters.max_time_in_seconds)
+            return original_solve(self, model, *args, **kwargs)
+
+        monkeypatch.setattr(algo_cp.cp_model.CpSolver, "Solve", _solve_espion)
+        alg = self._construire(tmp_path)
+        alg.resoudre()
+        assert captures == [float(algo_cp.ALGO_CP_TIMEOUT)]
+
+    def test_aucune_limite_quand_mode_optimal_active(self, tmp_path, monkeypatch):
+        import math
+        import algo_cp
+        monkeypatch.setattr(algo_cp, "ALGO_CP_OPTIMAL", True)
+        captures = []
+        original_solve = algo_cp.cp_model.CpSolver.Solve
+
+        def _solve_espion(self, model, *args, **kwargs):
+            captures.append(self.parameters.max_time_in_seconds)
+            return original_solve(self, model, *args, **kwargs)
+
+        monkeypatch.setattr(algo_cp.cp_model.CpSolver, "Solve", _solve_espion)
+        alg = self._construire(tmp_path)
+        alg.resoudre()
+        assert len(captures) == 1
+        assert math.isinf(captures[0])

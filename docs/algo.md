@@ -90,7 +90,8 @@ Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → sec
 | `ALGO_ECART_MINI`         | `80` (min)     | Écart minimum entre les deux oraux d'un candidat                         |
 | `ALGO_HEURE_DEBUT`        | `08:10`        | Heure de début des premiers créneaux                                     |
 | `ALGO_CRENEAUX`           | `13`           | Nombre de créneaux disponibles par examinateur                           |
-| `ALGO_CP_TIMEOUT`         | `60` (s)       | Délai max du solveur CP-SAT (CP-SAT uniquement)                          |
+| `ALGO_CP_TIMEOUT`         | `60` (s)       | Délai max du solveur CP-SAT (CP-SAT uniquement, ignoré si `ALGO_CP_OPTIMAL` est actif) |
+| `ALGO_CP_OPTIMAL`         | `false`        | ⚠️ Supprime toute limite de temps au solveur CP-SAT — cf. avertissement ci-dessous |
 | `ALGO_PETITES_MATIERES_FIN_JOURNEE` | `true` | Repousse les matières peu demandées en fin de journée (les 2 moteurs) |
 | `ALGO_SEUIL_PETITE_MATIERE`        | `0.5`  | Ratio candidats/capacité en-dessous duquel une matière est jugée "petite"|
 | `ALGO_MARGE_PETITE_MATIERE`        | `2`    | Créneaux de marge laissés en plus du strict nécessaire pour une petite matière |
@@ -98,6 +99,27 @@ Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → sec
 | `ALGO_PAUSE_MERIDIENNE_DUREE`      | `0` (min) | Durée de la pause méridienne ; ignorée si `ALGO_PAUSE_MERIDIENNE_DEBUT` est vide |
 
 Chaque variable spécifique à un moteur est ignorée quand un autre moteur est sélectionné.
+
+### ⚠️ Mode optimal CP-SAT (`ALGO_CP_OPTIMAL`)
+
+**Supprime totalement la limite de temps du solveur** (`ALGO_CP_TIMEOUT` est alors ignoré) : CP-SAT
+ne s'arrête que lorsqu'il a **prouvé mathématiquement** que la solution trouvée est optimale, quel
+que soit le temps nécessaire.
+
+> **Avertissement** : sur un jeu de données réel (dizaines/centaines de candidats), cela peut
+> prendre plusieurs heures, voire ne jamais aboutir — la preuve d'optimalité est un problème
+> combinatoire bien plus coûteux que trouver une bonne solution. Le lancement de l'algorithme reste
+> bloqué (en cours) tout ce temps ; seul un arrêt manuel (`/gestion/algo/stop`) permet de
+> l'interrompre, auquel cas **aucune solution n'est publiée** (le processus est simplement tué,
+> contrairement à une expiration de `ALGO_CP_TIMEOUT` qui conserve la meilleure solution trouvée).
+>
+> Réservé à des essais volontaires (diagnostic, petit jeu de données) — jamais recommandé pour un
+> lancement réel en production. C'est pourquoi l'interface (`/gestion/algo`) affiche un
+> avertissement explicite et demande une confirmation avant d'activer la case correspondante, et
+> que le défaut reste désactivé (`ALGO_CP_OPTIMAL=false` / `cp_optimal: false`).
+
+Désactivé par défaut, réglable uniquement via `ALGO_CP_OPTIMAL` ou la case à cocher **Mode optimal**
+sur `/gestion/algo` (section avancée, à côté du délai max CP-SAT).
 
 ### Petites matières repoussées en fin de journée
 

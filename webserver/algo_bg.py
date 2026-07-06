@@ -88,6 +88,8 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
                 env["ALGO_ENGINE"] = str(params["engine"])
             if "cp_timeout" in params:
                 env["ALGO_CP_TIMEOUT"] = str(params["cp_timeout"])
+            if "cp_optimal" in params:
+                env["ALGO_CP_OPTIMAL"] = "1" if params["cp_optimal"] else "0"
             if "pause_meridienne_debut" in params:
                 env["ALGO_PAUSE_MERIDIENNE_DEBUT"] = str(params["pause_meridienne_debut"])
             if "pause_meridienne_duree" in params:

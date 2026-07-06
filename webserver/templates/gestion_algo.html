@@ -276,8 +276,23 @@
                     <span class="info-icon" title="Temps maximum accordé au solveur CP-SAT pour trouver le meilleur placement possible. Au-delà, le meilleur résultat trouvé jusque-là est utilisé. Ignoré si l'algorithme Monte-Carlo est sélectionné.">?</span>
                 </label>
                 <input class="param-input" type="number" id="p-cp-timeout" name="cp_timeout"
-                       min="5" max="600" value="{{ algo_params.cp_timeout }}">
-                <span class="param-hint">En secondes — par défaut 60s (ignoré hors mode CP-SAT)</span>
+                       min="5" max="1200" value="{{ algo_params.cp_timeout }}">
+                <span class="param-hint">En secondes — par défaut 60s (ignoré hors mode CP-SAT, ou si le mode optimal ci-dessous est activé)</span>
+            </div>
+            <div class="param-row" id="p-cp-optimal-row">
+                <label class="param-label" for="p-cp-optimal">
+                    Mode optimal (CP-SAT)
+                    <span class="info-icon" title="Supprime toute limite de temps : le solveur ne s'arrête que lorsqu'il a prouvé mathématiquement que la solution est optimale. Le délai max ci-dessus est alors ignoré.">?</span>
+                </label>
+                <input type="checkbox" id="p-cp-optimal" name="cp_optimal"
+                       {% if algo_params.cp_optimal %}checked{% endif %}
+                       onchange="onCpOptimalChange(this)">
+                <span class="param-hint" style="color:#b91c1c; font-weight:600;">
+                    ⚠️ ATTENTION : aucune limite de temps — le calcul peut durer plusieurs heures
+                    (voire ne jamais aboutir) et bloque le lancement jusqu'à la fin ou un arrêt
+                    manuel (bouton Arrêter). À réserver à des essais hors production, sur un
+                    petit jeu de données. Ignoré si l'algorithme Monte-Carlo est sélectionné.
+                </span>
             </div>
             <div class="param-row">
                 <label class="param-label" for="p-ecart-mini">
@@ -602,6 +617,19 @@ function onEngineChange() {
     const engine = document.getElementById('p-engine').value;
     document.getElementById('p-n-run-row').style.opacity      = engine === 'monte_carlo' ? 1 : .4;
     document.getElementById('p-cp-timeout-row').style.opacity = engine === 'cpsat'       ? 1 : .4;
+    document.getElementById('p-cp-optimal-row').style.opacity = engine === 'cpsat'       ? 1 : .4;
+}
+
+// ── Confirmation avant activation du mode optimal (aucune limite de temps) ──
+function onCpOptimalChange(checkbox) {
+    if (checkbox.checked && !confirm(
+        "Aucune limite de temps ne sera appliquée : le solveur CP-SAT tournera "
+        + "jusqu'à preuve d'optimalité, ce qui peut prendre plusieurs heures "
+        + "(voire ne jamais aboutir) sur un jeu de données réel.\n\n"
+        + "Confirmer l'activation du mode optimal ?"
+    )) {
+        checkbox.checked = false;
+    }
 }
 
 // ── Sauvegarde des paramètres algo ───────────────────────────────────────────
@@ -615,6 +643,7 @@ function sauvegarderParams() {
         debug:       document.getElementById('p-debug').checked,
         engine:      document.getElementById('p-engine').value,
         cp_timeout:  parseInt(document.getElementById('p-cp-timeout').value,  10),
+        cp_optimal:  document.getElementById('p-cp-optimal').checked,
         pause_meridienne_debut: document.getElementById('p-pause-meridienne-debut').value,
         pause_meridienne_duree: parseInt(document.getElementById('p-pause-meridienne-duree').value, 10),
     };

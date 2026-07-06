@@ -22,11 +22,16 @@ from algo import (
     Examinateur,
     Matiere,
     PasDeCreneauDisponible,
+    _env_bool,
     _env_int,
     log,
 )
 
 ALGO_CP_TIMEOUT = _env_int("ALGO_CP_TIMEOUT", 60)
+# Mode optimal : AUCUNE limite de temps, le solveur tourne jusqu'à preuve
+# d'optimalité — peut prendre des heures sur un jeu de données réel.
+# Désactivé par défaut ; ALGO_CP_TIMEOUT est ignoré quand actif.
+ALGO_CP_OPTIMAL = _env_bool("ALGO_CP_OPTIMAL", False)
 
 
 class _ProgressLogger(cp_model.CpSolverSolutionCallback):
@@ -224,7 +229,15 @@ class AlgoCP(AlgoOne):
         model.Minimize(POIDS_EQUITE * sum(ecarts_charge) + objectif_tassement)
 
         solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = float(ALGO_CP_TIMEOUT)
+        if ALGO_CP_OPTIMAL:
+            log.warning(
+                f"Run {self.numero_run} : CP-SAT — mode OPTIMAL activé (ALGO_CP_OPTIMAL) : "
+                "AUCUNE limite de temps, le solveur tourne jusqu'à preuve d'optimalité. "
+                "Cela peut prendre plusieurs heures, voire ne jamais aboutir, sur un jeu "
+                "de données réel — utilisez /gestion/algo/stop pour interrompre si besoin."
+            )
+        else:
+            solver.parameters.max_time_in_seconds = float(ALGO_CP_TIMEOUT)
         solver.parameters.num_search_workers = max(1, cpu_count() or 1)
         solver.parameters.random_seed = random.randint(1, 2 ** 31 - 1)
         # NB : on n'active volontairement PAS solver.parameters.log_search_progress
@@ -246,6 +259,9 @@ class AlgoCP(AlgoOne):
         statut_libelle = {
             cp_model.OPTIMAL: "OPTIMAL — solution prouvée optimale",
             cp_model.FEASIBLE: (
+                "FEASIBLE — résolution interrompue avant preuve d'optimalité ; "
+                "meilleure solution trouvée conservée"
+                if ALGO_CP_OPTIMAL else
                 f"FEASIBLE — délai de {ALGO_CP_TIMEOUT}s (ALGO_CP_TIMEOUT) atteint "
                 f"avant preuve d'optimalité ; meilleure solution trouvée conservée"
             ),
