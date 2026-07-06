@@ -419,3 +419,67 @@ class TestProposerCompaction:
 
     def test_liste_vide_retourne_none(self):
         assert proposer_compaction([], _td(9), {}, 40) is None
+
+    def test_refuse_si_chevauche_pause(self):
+        # Déplacer l'oral de 10h vers 9h (créneau libéré) ferait travailler
+        # l'examinateur de 9h15 à 9h30 — en plein dans la pause [9h10, 9h40).
+        oral_10h = _oral(3, 102, "N102", id_examinateur=1, examinateur_nom="ProfMaths", heure_sujet=_td(10))
+        compaction = proposer_compaction(
+            [oral_10h], creneau_libere=_td(9), autres_heures_sujet={102: None}, ecart_mini_minutes=40,
+            heure_pause_meridienne=_td(9, 10), duree_pause_meridienne=timedelta(minutes=30),
+        )
+        assert compaction is None
+
+
+class TestPauseMeridienneRebalance:
+    """La pause méridienne configurée ne doit jamais être proposée comme
+    nouveau créneau, à aucun palier (glouton, CP-SAT, extension de grille)."""
+
+    def test_placer_saute_le_meme_horaire_si_chevauche_la_pause(self):
+        # Même heure (9h) chevauche la pause [9h15, 9h45) -> repli sur 9h30,
+        # qui se termine (10h00) juste après la fin de la pause (9h45).
+        oral = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA", heure_sujet=_td(9))
+        examinateurs = [ExaminateurCible(id=2, nom="ProfB", etablissements=[''])]
+        plan = planifier_absence(
+            oraux_a_reaffecter=[oral],
+            examinateurs_disponibles=examinateurs,
+            occupations_initiales={2: []},
+            grille_horaires=[_td(9), _td(9, 30)],
+            autres_heures_sujet={100: None},
+            ecart_mini_minutes=0,
+            profs_a_eviter={},
+            heure_pause_meridienne=_td(9, 15),
+            duree_pause_meridienne=timedelta(minutes=30),
+        )
+        assert not plan.non_replaces
+        assert plan.changements[0].nouvelle_heure_sujet == _td(9, 30)
+
+    def test_construire_grille_etendue_saute_la_pause(self):
+        grille = construire_grille_etendue(
+            [_td(9)], duree_creneau=timedelta(minutes=20), plafond_minutes=60,
+            heure_pause_meridienne=_td(9, 30), duree_pause_meridienne=timedelta(minutes=25),
+        )
+        # Aucun horaire généré à l'intérieur de [9h30, 9h55).
+        assert not any(_td(9, 30) <= h < _td(9, 55) for h in grille)
+        assert _td(9, 55) in grille
+
+    def test_resoudre_oraux_difficiles_evite_la_pause(self):
+        oral = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA", heure_sujet=_td(9))
+        examinateurs = [ExaminateurCible(id=2, nom="ProfB", etablissements=[''])]
+        resultat = resoudre_oraux_difficiles(
+            [oral], examinateurs, {}, [_td(9), _td(9, 30)],
+            {100: None}, 0, {},
+            heure_pause_meridienne=_td(9, 10), duree_pause_meridienne=timedelta(minutes=30),
+        )
+        assert not resultat.non_replaces
+        assert resultat.changements[0].nouvelle_heure_sujet == _td(9, 30)
+
+    def test_planifier_changement_matiere_evite_la_pause(self):
+        oral_maths = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfMaths", heure_sujet=_td(9))
+        examinateurs_philo = [ExaminateurCible(id=2, nom="ProfPhilo", etablissements=[''])]
+        changement = planifier_changement_matiere(
+            oral_maths, examinateurs_philo, {2: []}, [_td(9), _td(9, 30)], None, 0, {},
+            heure_pause_meridienne=_td(9, 15), duree_pause_meridienne=timedelta(minutes=30),
+        )
+        assert changement is not None
+        assert changement.nouvelle_heure_sujet == _td(9, 30)

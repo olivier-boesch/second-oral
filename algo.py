@@ -66,6 +66,18 @@ def _env_float(key, default):
     except (ValueError, TypeError):
         return default
 
+def _env_time_optional(key):
+    """Comme _env_time, mais retourne None (fonctionnalité désactivée) si la
+    variable est absente ou vide, plutôt qu'une heure par défaut arbitraire."""
+    raw = _os.environ.get(key, "").strip()
+    if not raw:
+        return None
+    try:
+        h, m = raw.split(":")
+        return time(hour=int(h), minute=int(m))
+    except Exception:
+        return None
+
 N_run               = _env_int("ALGO_N_RUN",    1_000)
 ECART_MINI_CANDIDAT = timedelta(minutes=_env_int("ALGO_ECART_MINI", 80))
 HEURE_DEBUT         = _env_time("ALGO_HEURE_DEBUT", 8, 10)
@@ -79,6 +91,10 @@ ALGO_ENGINE         = _os.environ.get("ALGO_ENGINE", "monte_carlo").strip().lowe
 PETITES_MATIERES_FIN_JOURNEE = _env_bool("ALGO_PETITES_MATIERES_FIN_JOURNEE", True)
 SEUIL_PETITE_MATIERE         = _env_float("ALGO_SEUIL_PETITE_MATIERE", 0.5)
 MARGE_PETITE_MATIERE         = _env_int("ALGO_MARGE_PETITE_MATIERE", 2)
+# Pause méridienne (aucune par défaut — None désactive la fonctionnalité) :
+# heure de début et durée réglables depuis /gestion/algo.
+PAUSE_MERIDIENNE_DEBUT = _env_time_optional("ALGO_PAUSE_MERIDIENNE_DEBUT")
+PAUSE_MERIDIENNE_DUREE = timedelta(minutes=_env_int("ALGO_PAUSE_MERIDIENNE_DUREE", 0))
 
 # données
 DATA_DIR = 'data'
@@ -534,7 +550,9 @@ class AlgoOne:
                  max_creneaux_journee: int = 15, temps_pause: timedelta = timedelta(minutes=20),
                  intervalle_pause: int = 4, traiter_matiere_principales_en_premier: bool = True, numero_run: int = 0,
                  optimiser_petites_matieres: bool = False, seuil_petite_matiere: float = 0.5,
-                 marge_flexibilite_petite_matiere: int = 2):
+                 marge_flexibilite_petite_matiere: int = 2,
+                 heure_pause_meridienne: time | None = None,
+                 duree_pause_meridienne: timedelta = timedelta(minutes=0)):
         """
         :param filename_candidats: nom du fichier des candidats
         :type filename_candidats: str
@@ -568,6 +586,11 @@ class AlgoOne:
         :param marge_flexibilite_petite_matiere: nombre de créneaux de marge laissés ouverts
             en plus du strict nécessaire, pour ne pas sur-contraindre l'écart minimum candidat
         :type marge_flexibilite_petite_matiere: int
+        :param heure_pause_meridienne: heure à partir de laquelle aucun oral ne doit être en
+            cours pour un examinateur (None désactive la pause méridienne) ; cf. calcul_horaires
+        :type heure_pause_meridienne: time | None
+        :param duree_pause_meridienne: durée de la pause méridienne
+        :type duree_pause_meridienne: timedelta
         """
         self.filename_candidats: str = filename_candidats
         self.filename_examinateurs: str = filename_examinateurs
@@ -588,6 +611,8 @@ class AlgoOne:
         self.optimiser_petites_matieres = optimiser_petites_matieres
         self.seuil_petite_matiere = seuil_petite_matiere
         self.marge_flexibilite_petite_matiere = marge_flexibilite_petite_matiere
+        self.heure_pause_meridienne = heure_pause_meridienne
+        self.duree_pause_meridienne = duree_pause_meridienne
 
     def setup_from_files(self) -> None:
         """Charge les données depuis les fichiers et crée les objets"""
@@ -925,6 +950,18 @@ class AlgoOne:
         temps_arrondi = int(round((temps.total_seconds() / 60) / arrondi, 0) * arrondi)
         return (datetime.combine(date(1, 1, 1), heure) + timedelta(minutes=temps_arrondi)).time()
 
+    def _chevauche_pause_meridienne(self, heure_courante: time, matiere_courante: "Matiere") -> bool:
+        """Vrai si un oral démarrant à `heure_courante` serait déjà dans la
+        pause méridienne, ou s'étendrait dedans (sujet + oral), auquel cas il
+        doit être repoussé après la pause plutôt que de l'entamer."""
+        if self.heure_pause_meridienne is None:
+            return False
+        if heure_courante >= self.heure_pause_meridienne:
+            return True
+        duree_totale = matiere_courante.temps_preparation + matiere_courante.temps_oral
+        heure_fin_prevue = self.ajouter_temps(heure_courante, duree_totale)
+        return heure_fin_prevue > self.heure_pause_meridienne
+
     def calcul_horaires(self) -> None:
         """
         Calcule les horaires des oraux à partir des créneaux.
@@ -934,6 +971,7 @@ class AlgoOne:
             for examinateur_courant in matiere_courante.examinateurs:
                 oraux_examinateur = examinateur_courant.oraux
                 heure_courante = self.heure_debut
+                pause_meridienne_appliquee = False
                 i=0
                 while isinstance(oraux_examinateur[i], CreneauInterdit):
                     heure_courante = self.ajouter_temps(heure_courante, matiere_courante.temps_oral)
@@ -958,6 +996,14 @@ class AlgoOne:
                             # la même salle (ex. temps_preparation=40 → 40/3=13.3min réels contre
                             # 10min seulement compensés ici).
                             heure_courante = self.ajouter_temps(heure_courante, matiere_courante.temps_preparation / 3)
+                    if (
+                        self.heure_pause_meridienne is not None
+                        and not pause_meridienne_appliquee
+                        and self._chevauche_pause_meridienne(heure_courante, matiere_courante)
+                    ):
+                        heure_courante = max(heure_courante, self.heure_pause_meridienne)
+                        heure_courante = self.ajouter_temps(heure_courante, self.duree_pause_meridienne)
+                        pause_meridienne_appliquee = True
                     if oraux_examinateur[i_oral] is not None:
                         oraux_examinateur[i_oral].heure_sujet = heure_courante
                         oraux_examinateur[i_oral].heure_oral = self.ajouter_temps(heure_courante,
@@ -1112,6 +1158,10 @@ if __name__ == '__main__':
         'seuil_petite_matiere': SEUIL_PETITE_MATIERE,
         'marge_flexibilite_petite_matiere': MARGE_PETITE_MATIERE,
     }
+    _pause_meridienne_kwargs = {
+        'heure_pause_meridienne': PAUSE_MERIDIENNE_DEBUT,
+        'duree_pause_meridienne': PAUSE_MERIDIENNE_DUREE,
+    }
     if ALGO_ENGINE == "cpsat":
         # Moteur CP-SAT : une seule résolution (pas de tirages Monte-Carlo),
         # avec écart minimum candidat garanti par construction du modèle.
@@ -1125,7 +1175,8 @@ if __name__ == '__main__':
                       'heure_debut': HEURE_DEBUT,
                       'traiter_matiere_principales_en_premier': True,
                       'numero_run': 0,
-                      **_petites_matieres_kwargs}
+                      **_petites_matieres_kwargs,
+                      **_pause_meridienne_kwargs}
         results = [algo_cp_run(parameters)]
     else:
         log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
@@ -1139,6 +1190,7 @@ if __name__ == '__main__':
                                'max_creneaux_journee': CRENEAUX,
                                'heure_debut': HEURE_DEBUT,
                                **_petites_matieres_kwargs,
+                               **_pause_meridienne_kwargs,
                                'traiter_matiere_principales_en_premier': True,
                                'numero_run': i}
                                 for i in range(N_run)]

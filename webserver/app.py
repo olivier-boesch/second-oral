@@ -1781,6 +1781,16 @@ def _oral_actuel_depuis_ligne(ligne: dict) -> rebalance.OralActuel:
     )
 
 
+def _pause_meridienne_params() -> tuple[timedelta | None, timedelta]:
+    """Lit la pause méridienne configurée (`/gestion/algo`) et la convertit
+    en (heure_pause_meridienne, duree_pause_meridienne) — None si désactivée."""
+    algo_params = _load_algo_params()
+    pause_debut_str = str(algo_params.get('pause_meridienne_debut', '') or '')
+    heure_pause_meridienne = _time_str_to_td(pause_debut_str) if pause_debut_str else None
+    duree_pause_meridienne = timedelta(minutes=algo_params.get('pause_meridienne_duree', 0))
+    return heure_pause_meridienne, duree_pause_meridienne
+
+
 def _construire_contexte_disponibilite(info_examinateur: dict) -> dict:
     """
     Charge une seule fois les données nécessaires au calcul du plan de
@@ -1815,6 +1825,8 @@ def _construire_contexte_disponibilite(info_examinateur: dict) -> dict:
         autre = next((a for a in autres if a['matiere'] != info_examinateur['matiere']), None)
         autres_heures_sujet[id_candidat] = _to_td(autre['heure_sujet']) if autre else None
 
+    heure_pause_meridienne, duree_pause_meridienne = _pause_meridienne_params()
+
     return {
         'oraux': oraux,
         'grille_horaires': grille_horaires,
@@ -1822,6 +1834,8 @@ def _construire_contexte_disponibilite(info_examinateur: dict) -> dict:
         'profs_a_eviter': profs_a_eviter,
         'autres_heures_sujet': autres_heures_sujet,
         'ecart_mini_minutes': _load_algo_params()['ecart_mini'],
+        'heure_pause_meridienne': heure_pause_meridienne,
+        'duree_pause_meridienne': duree_pause_meridienne,
     }
 
 
@@ -1852,6 +1866,8 @@ def _calculer_plan_disponibilite(
     profs_a_eviter = ctx['profs_a_eviter']
     autres_heures_sujet = ctx['autres_heures_sujet']
     ecart_mini_minutes = ctx['ecart_mini_minutes']
+    heure_pause_meridienne = ctx['heure_pause_meridienne']
+    duree_pause_meridienne = ctx['duree_pause_meridienne']
 
     plan = rebalance.PlanRebalancement()
     borne_fin = dispo_retour if dispo_retour is not None else timedelta(hours=23, minutes=59)
@@ -1873,6 +1889,7 @@ def _calculer_plan_disponibilite(
         plan.etendre(rebalance.planifier_absence(
             oraux_a_reaffecter, examinateurs_disponibles, occupations, grille_horaires,
             autres_heures_sujet, ecart_mini_minutes, profs_a_eviter,
+            heure_pause_meridienne, duree_pause_meridienne,
         ))
 
     if dispo_retour is not None:
@@ -1902,6 +1919,7 @@ def _calculer_plan_disponibilite(
         plan.etendre(rebalance.planifier_renfort(
             oraux_deplacables, examinateurs_par_id[id_examinateur], occupations2, grille_horaires,
             autres_heures_sujet, ecart_mini_minutes, profs_a_eviter, charge_par_examinateur,
+            heure_pause_meridienne, duree_pause_meridienne,
         ))
 
     return plan
@@ -1945,12 +1963,18 @@ def _tenter_resolution_poussee(
     grille = grille_initiale
     if etendre:
         duree = rebalance.duree_creneau_estimee(grille_initiale, plan.non_replaces)
-        grille = rebalance.construire_grille_etendue(grille_initiale, duree)
+        grille = rebalance.construire_grille_etendue(
+            grille_initiale, duree,
+            heure_pause_meridienne=ctx['heure_pause_meridienne'],
+            duree_pause_meridienne=ctx['duree_pause_meridienne'],
+        )
 
     resultat = rebalance.resoudre_oraux_difficiles(
         plan.non_replaces, examinateurs_disponibles, occupations, grille,
         ctx['autres_heures_sujet'], ctx['ecart_mini_minutes'], ctx['profs_a_eviter'],
         grille_initiale=grille_initiale,
+        heure_pause_meridienne=ctx['heure_pause_meridienne'],
+        duree_pause_meridienne=ctx['duree_pause_meridienne'],
     )
 
     return rebalance.PlanRebalancement(
@@ -2108,6 +2132,7 @@ def _calculer_plan_changement_matiere(
     changement = rebalance.planifier_changement_matiere(
         oral_actuel, examinateurs_disponibles, occupations, ctx['grille_horaires'],
         autre_heure_sujet, ctx['ecart_mini_minutes'], ctx['profs_a_eviter'],
+        ctx['heure_pause_meridienne'], ctx['duree_pause_meridienne'],
     )
     ctx['occupations'] = occupations
     ctx['autre_heure_sujet'] = autre_heure_sujet
@@ -2124,11 +2149,17 @@ def _tenter_resolution_poussee_matiere(
     grille = grille_initiale
     if etendre:
         duree = rebalance.duree_creneau_estimee(grille_initiale, [oral_actuel])
-        grille = rebalance.construire_grille_etendue(grille_initiale, duree)
+        grille = rebalance.construire_grille_etendue(
+            grille_initiale, duree,
+            heure_pause_meridienne=ctx['heure_pause_meridienne'],
+            duree_pause_meridienne=ctx['duree_pause_meridienne'],
+        )
     resultat = rebalance.resoudre_oraux_difficiles(
         [oral_actuel], examinateurs, ctx['occupations'], grille,
         {oral_actuel.id_candidat: ctx['autre_heure_sujet']}, ctx['ecart_mini_minutes'],
         ctx['profs_a_eviter'], grille_initiale=grille_initiale,
+        heure_pause_meridienne=ctx['heure_pause_meridienne'],
+        duree_pause_meridienne=ctx['duree_pause_meridienne'],
     )
     return resultat.changements[0] if resultat.changements else None
 
@@ -2159,8 +2190,10 @@ def _proposer_compaction(
         )
         autre = next((a for a in autres if a['id'] != o.id), None)
         autres_heures_sujet[o.id_candidat] = _to_td(autre['heure_sujet']) if autre else None
+    heure_pause_meridienne, duree_pause_meridienne = _pause_meridienne_params()
     return rebalance.proposer_compaction(
         oraux_meme_examinateur, oral_actuel.heure_sujet, autres_heures_sujet, ecart_mini_minutes,
+        heure_pause_meridienne, duree_pause_meridienne,
     )
 
 
@@ -2842,6 +2875,8 @@ _ALGO_PARAMS_DEFAULTS = {
     "debug":            False,
     "engine":           "monte_carlo",
     "cp_timeout":       60,
+    "pause_meridienne_debut": "",
+    "pause_meridienne_duree": 60,
 }
 
 def _load_algo_params() -> dict:
@@ -3060,6 +3095,15 @@ def algo_save_params() -> ResponseReturnValue:
         engines_valides = ("monte_carlo", "cpsat")
         params["engine"]     = engine if engine in engines_valides else "monte_carlo"
         params["cp_timeout"] = max(5, min(600, int(data.get("cp_timeout", 60))))
+        pause_debut = str(data.get("pause_meridienne_debut", "")).strip()
+        if pause_debut:
+            h, m = pause_debut.split(":")
+            params["pause_meridienne_debut"] = f"{int(h):02d}:{int(m):02d}"
+        else:
+            params["pause_meridienne_debut"] = ""
+        params["pause_meridienne_duree"] = max(
+            0, min(240, int(data.get("pause_meridienne_duree", 60))),
+        )
     except (ValueError, KeyError):
         return jsonify({"ok": False, "reason": "invalid_params"}), 400
     _DATA_DIR.mkdir(parents=True, exist_ok=True)

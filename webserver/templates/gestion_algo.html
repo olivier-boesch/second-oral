@@ -233,6 +233,24 @@
             </select>
             <span class="param-hint">CP-SAT garantit l'écart minimum candidat ; N_run (Monte-Carlo) est ignoré hors de ce mode</span>
         </div>
+        <div class="param-row">
+            <label class="param-label" for="p-pause-meridienne-debut">
+                Pause méridienne — début
+                <span class="info-icon" title="Heure à partir de laquelle aucun oral ne doit être en cours pour un examinateur. Laisser vide pour désactiver la pause méridienne. Un oral qui empièterait sur cette heure est repoussé après la pause.">?</span>
+            </label>
+            <input class="param-input" type="time" id="p-pause-meridienne-debut" name="pause_meridienne_debut"
+                   value="{{ algo_params.pause_meridienne_debut }}">
+            <span class="param-hint">Vide = pas de pause méridienne</span>
+        </div>
+        <div class="param-row">
+            <label class="param-label" for="p-pause-meridienne-duree">
+                Pause méridienne — durée (min)
+                <span class="info-icon" title="Durée de la pause méridienne, en minutes. Ignorée si aucune heure de début n'est renseignée.">?</span>
+            </label>
+            <input class="param-input" type="number" id="p-pause-meridienne-duree" name="pause_meridienne_duree"
+                   min="0" max="240" value="{{ algo_params.pause_meridienne_duree }}">
+            <span class="param-hint">En minutes — ignoré si aucune heure de début n'est renseignée</span>
+        </div>
     </div>
 
     <details class="params-advanced">
@@ -597,6 +615,8 @@ function sauvegarderParams() {
         debug:       document.getElementById('p-debug').checked,
         engine:      document.getElementById('p-engine').value,
         cp_timeout:  parseInt(document.getElementById('p-cp-timeout').value,  10),
+        pause_meridienne_debut: document.getElementById('p-pause-meridienne-debut').value,
+        pause_meridienne_duree: parseInt(document.getElementById('p-pause-meridienne-duree').value, 10),
     };
     fb.textContent = 'Sauvegarde…';
     fb.style.color = '#555';

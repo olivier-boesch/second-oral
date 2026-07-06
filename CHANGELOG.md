@@ -4,6 +4,18 @@
 
 ### Added
 
+**Algorithme de placement — pause méridienne**
+- Nouveaux paramètres réglables depuis `/gestion/algo` (`pause_meridienne_debut`, `pause_meridienne_duree`) ou via `ALGO_PAUSE_MERIDIENNE_DEBUT`/`ALGO_PAUSE_MERIDIENNE_DUREE` : aucun oral ne se déroule plus pour un examinateur pendant la pause configurée
+- Appliqué dans `AlgoOne.calcul_horaires()` (conversion créneau → horaire réel, après résolution) : un oral qui empièterait sur la pause est repoussé pour démarrer juste après sa fin, une seule fois par examinateur — les créneaux suivants s'enchaînent ensuite normalement
+- Aucune modification nécessaire dans `algo_cp.py` : la logique étant dans la classe de base `AlgoOne`, les deux moteurs (Monte-Carlo et CP-SAT) en bénéficient automatiquement
+- Désactivée par défaut (heure de début vide) pour ne changer aucun comportement existant
+- Également respectée par la replanification en cours de journée (`webserver/rebalance.py` — absences/renforts d'examinateur, changement de matière d'un candidat) : `_placer` (glouton), `resoudre_oraux_difficiles` (CP-SAT, paliers 2/3), `construire_grille_etendue` (extension d'horaire) et `proposer_compaction` ne proposent jamais un créneau qui ferait travailler un examinateur pendant la pause — lue à chaque calcul de plan (`app.py::_pause_meridienne_params()`), donc toujours à jour sans relancer l'algorithme
+
+**Tests (suite 8)**
+- `tests/unit/test_algo.py::TestPauseMeridienne` : désactivée par défaut, aucun oral ne chevauche la pause, oral repoussé juste après la fin de la pause, un seul rattrapage par examinateur (les créneaux suivants restent régulièrement espacés)
+- `tests/unit/test_rebalance.py::TestPauseMeridienneRebalance` (+ un cas dans `TestProposerCompaction`) : glouton, CP-SAT et extension de grille évitent tous la pause configurée
+- `tests/integration/test_disponibilite_examinateur.py::TestDisponibiliteExaminateurPauseMeridienne` : la pause lue depuis `/gestion/algo` est bien transmise jusqu'à la résolution poussée
+
 **Algorithme de placement**
 - Second moteur de résolution, sélectionnable depuis `/gestion/algo` (paramètre `engine`) ou via `ALGO_ENGINE` : CP-SAT (Google OR-Tools, `algo_cp.py`, `AlgoCP`), en alternative au glouton Monte-Carlo historique (`AlgoOne`)
 - CP-SAT modélise l'appairage candidat/examinateur/créneau comme un problème de contraintes et le résout en une seule fois (au lieu de 1000 tirages aléatoires) ; l'écart minimum entre les deux oraux d'un candidat devient une contrainte garantie plutôt qu'un critère de sélection a posteriori (plus de run "non conforme")

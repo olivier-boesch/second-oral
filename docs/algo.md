@@ -94,6 +94,8 @@ Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → sec
 | `ALGO_PETITES_MATIERES_FIN_JOURNEE` | `true` | Repousse les matières peu demandées en fin de journée (les 2 moteurs) |
 | `ALGO_SEUIL_PETITE_MATIERE`        | `0.5`  | Ratio candidats/capacité en-dessous duquel une matière est jugée "petite"|
 | `ALGO_MARGE_PETITE_MATIERE`        | `2`    | Créneaux de marge laissés en plus du strict nécessaire pour une petite matière |
+| `ALGO_PAUSE_MERIDIENNE_DEBUT`      | *(vide)* | Heure à partir de laquelle aucun oral ne doit être en cours pour un examinateur ; vide = désactivée |
+| `ALGO_PAUSE_MERIDIENNE_DUREE`      | `0` (min) | Durée de la pause méridienne ; ignorée si `ALGO_PAUSE_MERIDIENNE_DEBUT` est vide |
 
 Chaque variable spécifique à un moteur est ignorée quand un autre moteur est sélectionné.
 
@@ -102,10 +104,9 @@ Chaque variable spécifique à un moteur est ignorée quand un autre moteur est 
 Les matières peu demandées (peu de candidats par rapport aux créneaux disponibles chez leurs
 examinateurs) voient leurs premiers créneaux marqués `CreneauInterdit` — le même mécanisme déjà
 utilisé pour décaler le début de journée d'un examinateur (`Heure mini` dans `examinateurs.csv`).
-Comme les trois moteurs respectent déjà `CreneauInterdit` de façon identique, ce comportement est
+Comme les deux moteurs respectent déjà `CreneauInterdit` de façon identique, ce comportement est
 implémenté une seule fois, dans `AlgoOne._reserver_petites_matieres()` (appelée depuis
-`setup_from_files()`), et profite donc automatiquement à `AlgoOne`, `AlgoCP` et `AlgoGA` sans
-duplication.
+`setup_from_files()`), et profite donc automatiquement à `AlgoOne` et `AlgoCP` sans duplication.
 
 Une matière est jugée "petite" quand `candidats / (examinateurs × créneaux disponibles) <
 ALGO_SEUIL_PETITE_MATIERE`. Le nombre de créneaux laissés ouverts par examinateur est calculé à
@@ -117,6 +118,30 @@ Ce comportement est **opt-in au niveau de l'API** (`AlgoOne.__init__(optimiser_p
 par défaut) pour ne pas changer le comportement des appelants existants (tests, scripts) qui ne le
 demandent pas explicitement — mais activé par défaut en production via `__main__` (donc par défaut
 dans `/gestion/algo` et `ALGO_ENGINE`), piloté par `ALGO_PETITES_MATIERES_FIN_JOURNEE`.
+
+### Pause méridienne
+
+Contrairement aux petites matières (qui bloquent des *créneaux* avant résolution), la pause
+méridienne agit **après** la résolution, dans `AlgoOne.calcul_horaires()` — comme la pause
+périodique existante (`temps_pause`/`intervalle_pause`, insérée toutes les N oraux), mais
+déclenchée une seule fois par examinateur, dès que l'heure configurée est atteinte plutôt qu'un
+nombre d'oraux. L'assignation candidat/examinateur/créneau n'est donc pas modifiée : seule la
+conversion créneau → horaire réel décale les oraux suivants.
+
+Dès qu'un oral entamerait ou chevaucherait la pause (créneau `[heure_sujet, heure_fin]`), il est
+repoussé pour démarrer juste après la fin de la pause — une seule fois par examinateur, ensuite
+les créneaux s'enchaînent normalement. Cette logique étant dans la classe de base, elle profite
+automatiquement aux deux moteurs (`AlgoOne` et `AlgoCP`) sans code spécifique à `algo_cp.py`.
+
+Désactivée par défaut (`ALGO_PAUSE_MERIDIENNE_DEBUT` vide) ; réglable depuis `/gestion/algo` (heure
+de début + durée en minutes) ou via `ALGO_PAUSE_MERIDIENNE_DEBUT`/`ALGO_PAUSE_MERIDIENNE_DUREE`.
+
+La pause méridienne configurée est aussi respectée par la replanification en cours de journée
+(`webserver/rebalance.py` — absences/renforts d'examinateur, changement de matière d'un candidat) :
+`_placer` (glouton), `resoudre_oraux_difficiles` (CP-SAT, paliers 2/3) et `construire_grille_etendue`
+(extension d'horaire) n'ont jamais le droit de proposer un créneau qui ferait travailler un
+examinateur pendant la pause — celle-ci est lue depuis `/gestion/algo` à chaque calcul de plan
+(`app.py::_pause_meridienne_params`), donc toujours à jour même sans relancer l'algorithme.
 
 ---
 

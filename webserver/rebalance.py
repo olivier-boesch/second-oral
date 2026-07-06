@@ -107,6 +107,19 @@ def _ecart_suffisant(
     return gap_min >= ecart_mini_minutes
 
 
+def _chevauche_pause(
+    heure_oral: timedelta, heure_fin: timedelta,
+    heure_pause_meridienne: timedelta | None, duree_pause_meridienne: timedelta,
+) -> bool:
+    """Vrai si l'examinateur serait occupé (`heure_oral` -> `heure_fin`, cf.
+    convention de ce module) pendant la pause méridienne configurée — aucune
+    pause configurée (`heure_pause_meridienne` à None) ne bloque jamais rien."""
+    if heure_pause_meridienne is None or duree_pause_meridienne <= timedelta(0):
+        return False
+    pause_fin = heure_pause_meridienne + duree_pause_meridienne
+    return heure_fin > heure_pause_meridienne and heure_oral < pause_fin
+
+
 def _placer(
     oral: OralActuel,
     examinateurs: list[ExaminateurCible],
@@ -115,6 +128,8 @@ def _placer(
     autre_heure_sujet: timedelta | None,
     ecart_mini_minutes: float,
     profs_a_eviter: dict[str, list[str]],
+    heure_pause_meridienne: timedelta | None = None,
+    duree_pause_meridienne: timedelta = timedelta(0),
 ) -> Changement | None:
     """
     Cherche un (examinateur, heure_sujet) pour reloger `oral`.
@@ -128,6 +143,10 @@ def _placer(
     un trou dans son planning plutôt que d'isoler le nouvel oral loin de ses
     autres oraux. À défaut d'un tel créneau pour un examinateur donné, on
     retombe sur la proximité avec l'heure d'origine de `oral`.
+
+    Un créneau qui ferait travailler l'examinateur pendant la pause
+    méridienne configurée (`heure_pause_meridienne`/`duree_pause_meridienne`)
+    n'est jamais proposé, à aucune des deux priorités.
     """
     duree_prep = oral.heure_oral - oral.heure_sujet
     duree_oral = oral.heure_fin - oral.heure_oral
@@ -135,21 +154,22 @@ def _placer(
     heure_sujet = oral.heure_sujet
     heure_oral = heure_sujet + duree_prep
     heure_fin = heure_oral + duree_oral
-    for examinateur in examinateurs:
-        if examinateur.id == oral.id_examinateur:
-            continue  # ne serait pas un déplacement
-        if not _examinateur_autorise(examinateur, oral, profs_a_eviter):
-            continue
-        if not _intervalle_libre(occupations.get(examinateur.id, []), heure_oral, heure_fin):
-            continue
-        occupations.setdefault(examinateur.id, []).append((heure_oral, heure_fin))
-        return Changement(
-            id_oral=oral.id, id_candidat=oral.id_candidat, numero=oral.numero,
-            ancien_examinateur_nom=oral.examinateur_nom,
-            nouvel_examinateur_id=examinateur.id, nouvel_examinateur_nom=examinateur.nom,
-            ancienne_heure_sujet=oral.heure_sujet, nouvelle_heure_sujet=heure_sujet,
-            nouvelle_heure_oral=heure_oral, nouvelle_heure_fin=heure_fin,
-        )
+    if not _chevauche_pause(heure_oral, heure_fin, heure_pause_meridienne, duree_pause_meridienne):
+        for examinateur in examinateurs:
+            if examinateur.id == oral.id_examinateur:
+                continue  # ne serait pas un déplacement
+            if not _examinateur_autorise(examinateur, oral, profs_a_eviter):
+                continue
+            if not _intervalle_libre(occupations.get(examinateur.id, []), heure_oral, heure_fin):
+                continue
+            occupations.setdefault(examinateur.id, []).append((heure_oral, heure_fin))
+            return Changement(
+                id_oral=oral.id, id_candidat=oral.id_candidat, numero=oral.numero,
+                ancien_examinateur_nom=oral.examinateur_nom,
+                nouvel_examinateur_id=examinateur.id, nouvel_examinateur_nom=examinateur.nom,
+                ancienne_heure_sujet=oral.heure_sujet, nouvelle_heure_sujet=heure_sujet,
+                nouvelle_heure_oral=heure_oral, nouvelle_heure_fin=heure_fin,
+            )
 
     autres_heures = sorted(
         (h for h in set(grille_horaires) if h != oral.heure_sujet),
@@ -162,6 +182,8 @@ def _placer(
             continue
         heure_oral = heure_sujet + duree_prep
         heure_fin = heure_oral + duree_oral
+        if _chevauche_pause(heure_oral, heure_fin, heure_pause_meridienne, duree_pause_meridienne):
+            continue
         for examinateur in examinateurs:
             if not _examinateur_autorise(examinateur, oral, profs_a_eviter):
                 continue
@@ -200,6 +222,8 @@ def planifier_absence(
     autres_heures_sujet: dict[int, timedelta | None],
     ecart_mini_minutes: float,
     profs_a_eviter: dict[str, list[str]],
+    heure_pause_meridienne: timedelta | None = None,
+    duree_pause_meridienne: timedelta = timedelta(0),
 ) -> PlanRebalancement:
     """
     Réaffecte les oraux d'un examinateur indisponible vers les autres
@@ -214,6 +238,9 @@ def planifier_absence(
     :param autres_heures_sujet: {id_candidat: heure_sujet de son AUTRE oral (fixe), ou None}
     :param ecart_mini_minutes: écart minimum requis entre les deux oraux d'un candidat
     :param profs_a_eviter: {numero_candidat: [noms de profs à éviter]}
+    :param heure_pause_meridienne: heure de début de la pause méridienne configurée
+        (None = désactivée), jamais proposée comme nouveau créneau
+    :param duree_pause_meridienne: durée de la pause méridienne
     """
     occupations = {k: list(v) for k, v in occupations_initiales.items()}
     plan = PlanRebalancement()
@@ -221,6 +248,7 @@ def planifier_absence(
         changement = _placer(
             oral, examinateurs_disponibles, occupations, grille_horaires,
             autres_heures_sujet.get(oral.id_candidat), ecart_mini_minutes, profs_a_eviter,
+            heure_pause_meridienne, duree_pause_meridienne,
         )
         if changement is not None:
             plan.changements.append(changement)
@@ -238,6 +266,8 @@ def planifier_renfort(
     ecart_mini_minutes: float,
     profs_a_eviter: dict[str, list[str]],
     charge_par_examinateur: dict[int, int],
+    heure_pause_meridienne: timedelta | None = None,
+    duree_pause_meridienne: timedelta = timedelta(0),
 ) -> PlanRebalancement:
     """
     Décharge les examinateurs les plus chargés de la matière vers un
@@ -254,6 +284,9 @@ def planifier_renfort(
     :param examinateur_renfort: l'examinateur qui devient disponible
     :param charge_par_examinateur: {id_examinateur: nb d'oraux restants dans
         la fenêtre}, incluant le renfort (à 0 au départ)
+    :param heure_pause_meridienne: heure de début de la pause méridienne configurée
+        (None = désactivée), jamais proposée comme nouveau créneau
+    :param duree_pause_meridienne: durée de la pause méridienne
     """
     occupations = {k: list(v) for k, v in occupations_initiales.items()}
     charge = dict(charge_par_examinateur)
@@ -277,6 +310,7 @@ def planifier_renfort(
         changement = _placer(
             oral, [examinateur_renfort], occupations, grille_horaires,
             autres_heures_sujet.get(oral.id_candidat), ecart_mini_minutes, profs_a_eviter,
+            heure_pause_meridienne, duree_pause_meridienne,
         )
         if changement is not None:
             plan.changements.append(changement)
@@ -308,11 +342,20 @@ def duree_creneau_estimee(grille_horaires: list[timedelta], oraux: list[OralActu
 
 def construire_grille_etendue(
     grille_horaires: list[timedelta], duree_creneau: timedelta, plafond_minutes: int = 120,
+    heure_pause_meridienne: timedelta | None = None,
+    duree_pause_meridienne: timedelta = timedelta(0),
 ) -> list[timedelta]:
     """Prolonge la grille horaire au-delà du dernier horaire déjà utilisé
     aujourd'hui, par pas de `duree_creneau`, jusqu'à `plafond_minutes` de plus
     — pour proposer de véritables nouveaux créneaux (palier « extension »),
-    plutôt que de se limiter aux horaires déjà utilisés pour cette matière."""
+    plutôt que de se limiter aux horaires déjà utilisés pour cette matière.
+
+    Si une pause méridienne est configurée, aucun nouveau créneau n'est
+    généré à l'intérieur (estimation prudente sur la base de `duree_creneau`,
+    faute de connaître à l'avance la préparation/durée exacte du futur oral)
+    — l'extension saute directement à la fin de la pause et `plafond_minutes`
+    est prolongé d'autant, pour conserver la même amplitude réelle
+    d'extension malgré le saut."""
     if not grille_horaires:
         return list(grille_horaires)
     grille = set(grille_horaires)
@@ -320,6 +363,16 @@ def construire_grille_etendue(
     limite = dernier + timedelta(minutes=plafond_minutes)
     t = dernier + duree_creneau
     while t <= limite:
+        if (
+            heure_pause_meridienne is not None
+            and duree_pause_meridienne > timedelta(0)
+            and t + duree_creneau > heure_pause_meridienne
+            and t < heure_pause_meridienne + duree_pause_meridienne
+        ):
+            saut = heure_pause_meridienne + duree_pause_meridienne - t
+            t += saut
+            limite += saut
+            continue
         grille.add(t)
         t += duree_creneau
     return sorted(grille)
@@ -334,6 +387,8 @@ def resoudre_oraux_difficiles(
     ecart_mini_minutes: float,
     profs_a_eviter: dict[str, list[str]],
     grille_initiale: list[timedelta] | None = None,
+    heure_pause_meridienne: timedelta | None = None,
+    duree_pause_meridienne: timedelta = timedelta(0),
 ) -> PlanRebalancement:
     """
     Résout par CP-SAT (Google OR-Tools) les oraux qu'un placement glouton
@@ -353,6 +408,11 @@ def resoudre_oraux_difficiles(
     :param grille_initiale: grille du jour AVANT extension éventuelle, pour
         marquer `Changement.hors_grille` — si None, `grille_horaires` sert
         aussi de référence (donc `hors_grille` toujours faux).
+    :param heure_pause_meridienne: heure de début de la pause méridienne
+        configurée (None = désactivée) — aucune variable n'est créée pour un
+        (oral, examinateur, heure_sujet) qui ferait travailler l'examinateur
+        pendant la pause, quelle que soit l'origine de `grille_horaires`.
+    :param duree_pause_meridienne: durée de la pause méridienne
     """
     from ortools.sat.python import cp_model
 
@@ -390,6 +450,10 @@ def resoudre_oraux_difficiles(
                     continue
                 heure_oral = heure_sujet + duree_prep
                 heure_fin = heure_oral + duree_oral
+                if _chevauche_pause(
+                    heure_oral, heure_fin, heure_pause_meridienne, duree_pause_meridienne,
+                ):
+                    continue
                 var = model.NewBoolVar(  # type: ignore[attr-defined]
                     f"x_{oral.id}_{examinateur.id}_{int(heure_sujet.total_seconds())}"
                 )
@@ -470,6 +534,8 @@ def planifier_changement_matiere(
     autre_heure_sujet: timedelta | None,
     ecart_mini_minutes: float,
     profs_a_eviter: dict[str, list[str]],
+    heure_pause_meridienne: timedelta | None = None,
+    duree_pause_meridienne: timedelta = timedelta(0),
 ) -> Changement | None:
     """
     Cherche un nouvel (examinateur, horaire) dans la nouvelle matière pour un
@@ -480,10 +546,14 @@ def planifier_changement_matiere(
         `id_examinateur`/`examinateur_nom` ne sont utilisés que pour ignorer
         un « swap » vers soi-même — sans effet ici puisque la nouvelle
         matière a des examinateurs différents)
+    :param heure_pause_meridienne: heure de début de la pause méridienne
+        configurée (None = désactivée), jamais proposée comme nouveau créneau
+    :param duree_pause_meridienne: durée de la pause méridienne
     """
     return _placer(
         oral_a_remplacer, examinateurs_nouvelle_matiere, occupations_nouvelle_matiere,
         grille_horaires_nouvelle_matiere, autre_heure_sujet, ecart_mini_minutes, profs_a_eviter,
+        heure_pause_meridienne, duree_pause_meridienne,
     )
 
 
@@ -492,6 +562,8 @@ def proposer_compaction(
     creneau_libere: timedelta,
     autres_heures_sujet: dict[int, timedelta | None],
     ecart_mini_minutes: float,
+    heure_pause_meridienne: timedelta | None = None,
+    duree_pause_meridienne: timedelta = timedelta(0),
 ) -> Changement | None:
     """
     Suggestion optionnelle (jamais appliquée automatiquement) : une fois le
@@ -503,10 +575,14 @@ def proposer_compaction(
     Aucune vérification d'exclusion n'est nécessaire ici (même examinateur
     qu'avant pour le candidat déplacé, donc établissement/prof à éviter
     restent valides par construction) — seul l'écart minimum avec son autre
-    oral est revérifié au nouveau créneau, plus précoce.
+    oral est revérifié au nouveau créneau, plus précoce, ainsi que la pause
+    méridienne configurée.
 
     :param oraux_examinateur_libere: les oraux ACTUELS de cet examinateur
         pour cette matière (hors l'oral qui vient d'être libéré)
+    :param heure_pause_meridienne: heure de début de la pause méridienne
+        configurée (None = désactivée)
+    :param duree_pause_meridienne: durée de la pause méridienne
     """
     candidats_deplacables = [o for o in oraux_examinateur_libere if o.heure_sujet > creneau_libere]
     if not candidats_deplacables:
@@ -522,6 +598,10 @@ def proposer_compaction(
     duree_oral = plus_tardif.heure_fin - plus_tardif.heure_oral
     nouvelle_heure_oral = creneau_libere + duree_prep
     nouvelle_heure_fin = nouvelle_heure_oral + duree_oral
+    if _chevauche_pause(
+        nouvelle_heure_oral, nouvelle_heure_fin, heure_pause_meridienne, duree_pause_meridienne,
+    ):
+        return None
     return Changement(
         id_oral=plus_tardif.id, id_candidat=plus_tardif.id_candidat, numero=plus_tardif.numero,
         ancien_examinateur_nom=plus_tardif.examinateur_nom,

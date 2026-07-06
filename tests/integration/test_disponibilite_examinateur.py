@@ -182,6 +182,41 @@ class TestDisponibiliteExaminateurResolutionPoussee:
         assert kwargs["examinateur"] == 2  # ProfB
 
 
+class TestDisponibiliteExaminateurPauseMeridienne:
+    """La pause méridienne configurée depuis /gestion/algo doit être transmise
+    jusqu'à la résolution poussée (rebalance.construire_grille_etendue) —
+    le comportement de rebalance.py lui-même est couvert par
+    tests/unit/test_rebalance.py::TestPauseMeridienneRebalance."""
+
+    def test_pause_transmise_a_la_resolution_poussee(self, admin_client, db_mock, monkeypatch):
+        import json as _json
+        import app as app_module
+        import rebalance
+
+        app_module._ALGO_PARAMS_FILE.write_text(_json.dumps({
+            "pause_meridienne_debut": "10:00", "pause_meridienne_duree": 30,
+        }))
+        db_mock.make_sql_select.side_effect = _side_effect_matiere_difficile
+
+        appels = []
+        original = rebalance.construire_grille_etendue
+
+        def _espion(*args, **kwargs):
+            appels.append(kwargs)
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(rebalance, "construire_grille_etendue", _espion)
+
+        r = admin_client.post("/gestion/examinateur/disponibilite", data={
+            "id_examinateur": "1", "etape": "resolution_poussee_etendue",
+            "indisponible_a_partir_de": "09:00", "disponible_a_nouveau_a_partir_de": "",
+        })
+        assert r.status_code == 200
+        assert appels
+        assert appels[0]["heure_pause_meridienne"] == timedelta(hours=10)
+        assert appels[0]["duree_pause_meridienne"] == timedelta(minutes=30)
+
+
 class TestDisponibiliteExaminateurConfirmation:
     def test_confirmer_applique_et_notifie(self, admin_client, db_mock, monkeypatch):
         import app as app_module

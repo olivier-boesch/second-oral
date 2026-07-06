@@ -661,3 +661,67 @@ class TestEquiteEntreExaminateurs:
         )
         assert len(charges) == 3
         assert max(charges.values()) - min(charges.values()) <= 1
+
+
+class TestPauseMeridienne:
+    """calcul_horaires : aucun oral ne doit être en cours (heure_oral -> heure_fin)
+    pendant la pause méridienne configurée — un oral qui empièterait dessus est
+    repoussé après la pause, une seule fois par examinateur."""
+
+    def _construire(self, tmp_path, n_candidats=6, **kwargs):
+        candidats = [_cand(f"Cand{i}", f"95000000{i}") for i in range(n_candidats)]
+        exams = [_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")]
+        kwargs.setdefault("temps_pause", timedelta(minutes=0))
+        kwargs.setdefault("intervalle_pause", 1000)  # neutralise la pause périodique existante
+        kwargs.setdefault("heure_debut", time(hour=8, minute=0))
+        alg = _build_algo(tmp_path, candidats=candidats, exams=exams, **kwargs)
+        alg.resoudre()
+        alg.calcul_horaires()
+        return alg
+
+    def test_desactivee_par_defaut(self, tmp_path):
+        alg = self._construire(tmp_path)
+        assert alg.heure_pause_meridienne is None
+
+    def test_aucun_oral_ne_chevauche_la_pause(self, tmp_path):
+        pause_debut = time(hour=8, minute=50)
+        pause_fin_dt = datetime.combine(date(1, 1, 1), pause_debut) + timedelta(minutes=30)
+        alg = self._construire(
+            tmp_path,
+            heure_pause_meridienne=pause_debut,
+            duree_pause_meridienne=timedelta(minutes=30),
+        )
+        for oral in alg.liste_oraux:
+            debut = datetime.combine(date(1, 1, 1), oral.heure_oral)
+            fin = datetime.combine(date(1, 1, 1), oral.heure_fin)
+            pause_debut_dt = datetime.combine(date(1, 1, 1), pause_debut)
+            assert fin <= pause_debut_dt or debut >= pause_fin_dt
+
+    def test_oral_repousse_juste_apres_la_pause(self, tmp_path):
+        # Sans pause, l'examinateur Maths enchaînerait 8h00, 8h20, 8h40... :
+        # l'oral d'indice 1 (sujet à 8h20, oral 8h40-9h00) empièterait sur la
+        # pause [8h50, 9h20) -> il doit être repoussé juste après (9h20).
+        alg = self._construire(
+            tmp_path,
+            heure_pause_meridienne=time(hour=8, minute=50),
+            duree_pause_meridienne=timedelta(minutes=30),
+        )
+        prof_maths = next(m for m in alg.liste_matieres if m.nom == "Maths").examinateurs[0]
+        heures_sujet = [o.heure_sujet for o in prof_maths.oraux if o is not None]
+        assert heures_sujet[0] == time(hour=8, minute=0)
+        assert heures_sujet[1] == time(hour=9, minute=20)
+
+    def test_pause_appliquee_une_seule_fois(self, tmp_path):
+        alg = self._construire(
+            tmp_path,
+            heure_pause_meridienne=time(hour=8, minute=50),
+            duree_pause_meridienne=timedelta(minutes=30),
+        )
+        prof_maths = next(m for m in alg.liste_matieres if m.nom == "Maths").examinateurs[0]
+        heures_sujet = sorted(o.heure_sujet for o in prof_maths.oraux if o is not None)
+        # Après le rattrapage à 9h20, les créneaux s'enchaînent de nouveau
+        # normalement (pas de second saut) : écart constant de 20 min.
+        for h1, h2 in zip(heures_sujet[1:], heures_sujet[2:]):
+            dt1 = datetime.combine(date(1, 1, 1), h1)
+            dt2 = datetime.combine(date(1, 1, 1), h2)
+            assert dt2 - dt1 == timedelta(minutes=20)

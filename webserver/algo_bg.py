@@ -88,6 +88,10 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
                 env["ALGO_ENGINE"] = str(params["engine"])
             if "cp_timeout" in params:
                 env["ALGO_CP_TIMEOUT"] = str(params["cp_timeout"])
+            if "pause_meridienne_debut" in params:
+                env["ALGO_PAUSE_MERIDIENNE_DEBUT"] = str(params["pause_meridienne_debut"])
+            if "pause_meridienne_duree" in params:
+                env["ALGO_PAUSE_MERIDIENNE_DUREE"] = str(params["pause_meridienne_duree"])
         # Force le mode non-bufférisé : chaque ligne est envoyée immédiatement
         # sans attendre le remplissage du buffer stdout Python (crucial pour le
         # streaming temps-réel vers le log console).
