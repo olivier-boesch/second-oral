@@ -1141,6 +1141,19 @@ class TestEditExaminateur:
 
 # ── Liste des examinateurs — suppression ──────────────────────────────────────
 
+class TestListeExaminateursSalleLink:
+    def test_salle_pointe_vers_la_page_salle(self, admin_client, db_mock):
+        """La salle doit renvoyer vers la fiche salle en direct, pas vers l'édition."""
+        examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "loge": "L1", "matiere": "Maths", "etablissements": "",
+                       "nb_oraux": 0}
+        db_mock.make_sql_select.return_value = [examinateur]
+        r = admin_client.get("/gestion/liste-examinateurs")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert '<a href="/salle/A01" target="_blank">A01</a>' in body
+
+
 class TestListeExaminateursDelete:
     def test_delete_button_asks_confirmation(self, admin_client, db_mock):
         """Le bouton de suppression doit demander confirmation en JS."""
