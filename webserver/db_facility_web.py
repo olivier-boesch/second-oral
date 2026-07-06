@@ -524,9 +524,16 @@ class DbInterface:
         return data
 
     def make_sql_update(self, query, **kwargs):
-        """Exécute une requête INSERT/UPDATE/DELETE paramétrée."""
+        """Exécute une requête INSERT/UPDATE/DELETE paramétrée.
+
+        :returns: `cursor.lastrowid` (id auto-incrémenté de la ligne insérée
+            pour un INSERT ; sans signification pour UPDATE/DELETE, mais
+            inoffensif à ignorer).
+        """
         if not self.con.is_connected():
             self.connect()
         with self.con.cursor() as cur:
             cur.execute(query, kwargs if kwargs else None)
+            lastrowid = cur.lastrowid
         self.con.commit()
+        return lastrowid

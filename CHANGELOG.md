@@ -4,6 +4,15 @@
 
 ### Added
 
+**Gestion en cours de journée (suite 3) — suggestion de renfort inédit**
+- Après l'ajout d'un nouvel examinateur avec une matière (`/gestion/add-examinateur`), un bandeau apparaît sur `/gestion/credentials` proposant de rééquilibrer dès maintenant vers lui les oraux déjà en cours pour cette matière
+- Le lien mène au formulaire existant de disponibilité (`/gestion/examinateur/disponibilite?renfort=1`), avec le champ « Disponible de nouveau à partir de » pré-rempli sur l'heure courante (arrondie aux 5 minutes suivantes) — modifiable avant de prévisualiser
+- Aucune nouvelle logique de rééquilibrage : réutilise entièrement `rebalance.planifier_renfort()` (déjà non bloquant, déjà conscient de la pause méridienne et de l'équité de charge) — seule la « colle » UI est ajoutée
+- `DbInterface.make_sql_update()` / `db_update()` retournent désormais `cursor.lastrowid`, nécessaire pour connaître l'id du nouvel examinateur juste après l'INSERT
+
+**Tests (suite 9)**
+- `tests/integration/test_add_examinateur_renfort_inedit.py` : suggestion présente/absente selon qu'une matière a été renseignée, bandeau affiché uniquement pour un id d'examinateur réellement existant, pré-remplissage de l'heure uniquement avec `?renfort=1`
+
 **Algorithme de placement — pause méridienne**
 - Nouveaux paramètres réglables depuis `/gestion/algo` (`pause_meridienne_debut`, `pause_meridienne_duree`) ou via `ALGO_PAUSE_MERIDIENNE_DEBUT`/`ALGO_PAUSE_MERIDIENNE_DUREE` : aucun oral ne se déroule plus pour un examinateur pendant la pause configurée
 - Appliqué dans `AlgoOne.calcul_horaires()` (conversion créneau → horaire réel, après résolution) : un oral qui empièterait sur la pause est repoussé pour démarrer juste après sa fin, une seule fois par examinateur — les créneaux suivants s'enchaînent ensuite normalement

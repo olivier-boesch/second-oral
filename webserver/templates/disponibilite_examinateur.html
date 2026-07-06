@@ -43,7 +43,8 @@
     <span class="dispo-hint">Laisser vide si l'examinateur n'a pas encore été présent aujourd'hui (retard)</span>
 
     <label for="disponible_a_nouveau_a_partir_de">Disponible de nouveau à partir de</label>
-    <input type="time" name="disponible_a_nouveau_a_partir_de" id="disponible_a_nouveau_a_partir_de">
+    <input type="time" name="disponible_a_nouveau_a_partir_de" id="disponible_a_nouveau_a_partir_de"
+           value="{{ disponible_prefill|default('', true) }}">
     <span class="dispo-hint">Laisser vide en cas d'absence pour le reste de la journée</span>
 
     <div style="display:flex; gap:.5em; flex-wrap:wrap; margin-top:1em;">

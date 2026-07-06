@@ -387,8 +387,12 @@ def db_get(sql, *args, no_list_auto=True):
 
 
 def db_update(sql, **kwargs):
-    """Exécute un INSERT/UPDATE/DELETE."""
-    app._db.make_sql_update(sql, **kwargs)
+    """Exécute un INSERT/UPDATE/DELETE.
+
+    :returns: id auto-incrémenté de la ligne insérée (INSERT), sinon sans
+        signification particulière — voir `DbInterface.make_sql_update`.
+    """
+    return app._db.make_sql_update(sql, **kwargs)
 
 
 def fetch_candidat(id_candidat) -> dict | None:
@@ -2000,11 +2004,23 @@ def disponibilite_examinateur() -> ResponseReturnValue:
         abort(404, "Examinateur introuvable")
 
     if request.method == "GET":
+        disponible_prefill = ""
+        if request.args.get("renfort") == "1":
+            # Renfort inédit (cf. add_examinateur/gestion_credentials) : heure
+            # courante arrondie aux 5 minutes suivantes comme point de départ
+            # suggéré — l'admin garde la main pour l'ajuster avant de valider.
+            now = datetime.now(TIMEZONE)
+            minute_arrondie = (now.minute // 5 + 1) * 5
+            now_arrondie = now.replace(second=0, microsecond=0) + timedelta(
+                minutes=minute_arrondie - now.minute,
+            )
+            disponible_prefill = now_arrondie.strftime("%H:%M")
         return render_template(
             "disponibilite_examinateur.html",
             centre=CENTRE_EXAMEN,
             examinateur=info,
             etape="saisie",
+            disponible_prefill=disponible_prefill,
             url_of_page=request.url,
             username=get_username(),
             authenticated=is_authenticated(),
@@ -2391,7 +2407,7 @@ def add_examinateur() -> ResponseReturnValue:
             'etablissements': ','.join(request.form.getlist('etablissements')),
             'password_hash': hash_password(password, salle),
         }
-        db_update(db_facility_web.INSERT_EXAMINATEUR, **d)
+        id_nouvel_examinateur = db_update(db_facility_web.INSERT_EXAMINATEUR, **d)
 
         # Stocker le nouveau mot de passe dans credentials.enc
         creds = _load_credentials()
@@ -2401,6 +2417,16 @@ def add_examinateur() -> ResponseReturnValue:
         base_url = request.host_url.rstrip('/')
         papillon_filename = 'papillons_examinateurs.pdf'
         _regenerer_papillons_examinateurs(base_url)
+        # Renfort inédit : un examinateur nouvellement ajouté avec une matière
+        # peut recevoir dès maintenant une partie des oraux déjà en cours
+        # pour cette matière (cf. docs/workflow_admin.md) — suggestion, pas
+        # d'action automatique : le lien pré-remplit juste le formulaire de
+        # disponibilité existant, l'admin choisit/confirme l'heure et valide.
+        if d['matiere']:
+            return redirect(url_for(
+                'gestion_credentials', new_papillon=papillon_filename,
+                nouvel_examinateur_id=id_nouvel_examinateur,
+            ))
         return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
 
     # GET
@@ -3325,6 +3351,13 @@ def gestion_credentials() -> ResponseReturnValue:
     _raw_papillon = request.args.get('new_papillon', '')
     # Valider le nom de fichier (même règle que la route /download — anti path-traversal)
     new_papillon = _raw_papillon if re.match(r'^[\w\-. ]+\.pdf$', _raw_papillon) else None
+    # Suggestion de renfort inédit (cf. add_examinateur) : ne retenir l'id
+    # transmis que s'il correspond bien à un examinateur existant, pour ne
+    # jamais afficher un lien vers une fiche inexistante ou usurpée.
+    _id_nouvel_examinateur = request.args.get('nouvel_examinateur_id', type=int)
+    nouvel_examinateur = next(
+        (e for e in examinateurs if e['id'] == _id_nouvel_examinateur), None,
+    )
     return render_template(
         "credentials.html",
         centre=CENTRE_EXAMEN,
@@ -3334,6 +3367,7 @@ def gestion_credentials() -> ResponseReturnValue:
         candidats=candidats,
         examinateurs=examinateurs,
         loges=loges,
+        nouvel_examinateur=nouvel_examinateur,
         store_ok=store_ok,
         new_papillon=new_papillon,
     )
