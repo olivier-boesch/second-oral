@@ -760,3 +760,47 @@ class TestParserHeureMini:
         # (30 // 20 = 1), pas 0 (arrondi à l'heure) ni 2 (arrondi à l'heure sup.).
         n_interdits = sum(1 for o in prof_maths.oraux if isinstance(o, CreneauInterdit))
         assert n_interdits == 1
+
+
+class TestPremierOralApresCreneauxInterdits:
+    """Régression : un examinateur qui commence après le début de journée
+    (créneaux interdits en tête, cf. 'Heure mini') voyait son premier oral
+    décalé d'un créneau supplémentaire par rapport à l'heure déclarée."""
+
+    def test_premier_oral_respecte_heure_mini_declaree(self, tmp_path):
+        # Journée à 7h20, examinateur déclaré à 8h00 -> 40 min d'écart, soit
+        # exactement 2 créneaux interdits de 20 min (_PREPS_BASE). Son premier
+        # oral doit démarrer pile à 8h00, pas 8h20.
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"97000000{i}") for i in range(3)],
+            exams=[_exam("Prof Maths", "Maths", "A101", heure="8:00"),
+                   _exam("Prof Philo", "Philo", "B101")],
+            heure_debut=time(hour=7, minute=20),
+        )
+        alg.resoudre()
+        alg.calcul_horaires()
+        prof_maths = next(m for m in alg.liste_matieres if m.nom == "Maths").examinateurs[0]
+        heures_sujet = sorted(
+            o.heure_sujet for o in prof_maths.oraux
+            if o is not None and not isinstance(o, CreneauInterdit)
+        )
+        assert heures_sujet[0] == time(hour=8, minute=0)
+        assert heures_sujet[1] == time(hour=8, minute=20)
+
+    def test_examinateur_qui_commence_avec_la_journee_inchange(self, tmp_path):
+        """Non-régression : un examinateur dont 'Heure mini' == heure_debut
+        de la journée (aucun créneau interdit) doit toujours démarrer pile
+        à cette heure."""
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"98000000{i}") for i in range(2)],
+            exams=[_exam("Prof Maths", "Maths", "A101", heure="7:20"),
+                   _exam("Prof Philo", "Philo", "B101")],
+            heure_debut=time(hour=7, minute=20),
+        )
+        alg.resoudre()
+        alg.calcul_horaires()
+        prof_maths = next(m for m in alg.liste_matieres if m.nom == "Maths").examinateurs[0]
+        heures_sujet = sorted(o.heure_sujet for o in prof_maths.oraux if o is not None)
+        assert heures_sujet[0] == time(hour=7, minute=20)

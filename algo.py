@@ -993,7 +993,7 @@ class AlgoOne:
                         heure_courante = self.ajouter_temps(heure_courante, self.temps_pause)
                 n_oraux_avant_pause = i % self.intervalle_pause
                 for i_oral in range(i, len(oraux_examinateur)):
-                    if i_oral != 0:
+                    if i_oral != i:
                         if not self.interrompre_oral and matiere_courante.temps_preparation.total_seconds() % matiere_courante.temps_oral.total_seconds() != 0:
                             heure_courante = self.ajouter_temps(heure_courante, matiere_courante.temps_preparation)
                         else:
