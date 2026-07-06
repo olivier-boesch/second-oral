@@ -334,6 +334,48 @@ Le flux se déroule en 3 étapes, sur le même modèle que la disponibilité exa
 
 **Limite actuelle :** un seul candidat à la fois change de matière.
 
+### Déclaration de tiers-temps d'un candidat en cours de journée
+
+`/gestion/liste-candidats` → bouton **⏱️ Déclarer** sur la ligne du candidat concerné (visible
+uniquement si le candidat n'a pas déjà un tiers-temps).
+
+Permet de traiter le cas d'un élève qui déclare un tiers-temps le jour J, après que l'algorithme a
+déjà placé les oraux : ses deux oraux voient leur temps de préparation étendu d'1/3 (règle déjà
+appliquée par `algo.py` pour un tiers-temps connu à la construction du planning) — l'heure de sujet
+(début de préparation) ne change pas, seule l'heure d'oral (et donc de fin) recule. Comme les deux
+examinateurs concernés restent occupés plus longtemps, **tous les oraux suivants chez ces mêmes
+examinateurs ce jour-là sont automatiquement décalés du même délai**, pour ne jamais les chevaucher.
+
+Le flux se déroule en 2 étapes (pas de saisie : la seule information nécessaire est le candidat) :
+1. **Prévisualisation** : tableau de tous les oraux affectés — les deux du candidat lui-même (🟩) et
+   ceux cascadés chez ses deux examinateurs (🟨), avec pour chacun l'heure de sujet/oral/fin avant et
+   après décalage.
+2. **Confirmation** : le flag tiers-temps du candidat est activé, tous les oraux affectés sont mis à
+   jour en base, et chacun déclenche la même notification SSE ciblée (candidat, salle, loge) qu'une
+   édition manuelle d'oral.
+
+**Vérifications :**
+- **Écart minimum** : pour chaque oral cascadé, l'écart avec l'AUTRE oral (fixe, dans une autre
+  matière) de ce candidat est revérifié après décalage — signalé (🟧 ⚠) mais jamais bloquant
+  automatiquement (résolution manuelle si besoin, via édition d'oral).
+- **Pause méridienne** : un oral cascadé qui chevaucherait la pause méridienne configurée est
+  également signalé (🕐), sans bloquer.
+- **Chevauchement du candidat lui-même** : si l'extension de préparation ferait chevaucher les deux
+  oraux du candidat entre eux (écart minimum déjà très faible entre ses deux matières), aucun
+  changement n'est proposé — un message explicite demande une résolution manuelle.
+
+**Alternative : case « Tiers temps » sur `/gestion/edit-candidat`.** La fiche d'édition d'un candidat
+a aussi une case à cocher « Tiers temps ». Cocher cette case pour un candidat qui ne l'avait pas déjà
+déclenche **exactement la même adaptation** (extension + cascade) que le bouton ⏱️ Déclarer ci-dessus
+— les deux chemins sont désormais unifiés, il n'y a pas de risque de désynchroniser les horaires en
+passant par l'un ou l'autre. Si le candidat n'a pas encore d'oral publié (avant tout lancement de
+l'algorithme), la case ne fait que poser le flag, sans adaptation possible (rien à adapter). Décocher
+la case ne fait que retirer le flag — les horaires déjà étendus ne sont pas recalculés en sens
+inverse (retrait d'un tiers-temps non géré pour l'instant).
+
+**Limite actuelle :** un seul candidat à la fois déclare un tiers-temps ; ne gère pas le retrait d'un
+tiers-temps déjà déclaré (à faire via l'édition manuelle du candidat et des oraux concernés).
+
 ### Renouvellement des identifiants
 
 `/gestion/credentials` (accessible depuis l'accueil admin → bloc **Préparation** → **Identifiants**) permet de **renouveler les identifiants sans relancer l'algo**, pour chaque catégorie indépendamment :

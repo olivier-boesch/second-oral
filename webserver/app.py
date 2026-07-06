@@ -1732,25 +1732,63 @@ def liste_candidats() -> ResponseReturnValue:
 @admin_required
 @nocache
 def edit_candidat() -> ResponseReturnValue:
-    """Édition des informations d'un candidat (nom, numéro, tiers temps)."""
+    """Édition des informations d'un candidat (nom, numéro, tiers temps).
+
+    Cocher « Tiers temps » pour un candidat qui ne l'avait pas déjà déclenche
+    la même adaptation d'horaires que /gestion/candidat/tiers-temps
+    (extension de préparation des deux oraux + cascade sur les oraux
+    suivants des deux examinateurs concernés) — cf. docs/workflow_admin.md.
+    Décocher ne fait que retirer le flag (les horaires déjà étendus ne sont
+    pas recalculés en sens inverse). Si le candidat n'a pas encore d'oral
+    publié (avant tout lancement d'algo), la case ne fait que poser le flag,
+    sans adaptation possible.
+    """
     if request.method == 'POST':
-        d = {
-            'id': request.form.get('id'),
-            'nom': (request.form.get('nom') or '').strip(),
-            'numero': (request.form.get('numero') or '').strip(),
-            'tiers_temps': 1 if request.form.get('tiers_temps') == 'on' else 0,
-        }
-        if not d['nom'] or not d['numero']:
+        id_candidat_str = request.form.get('id')
+        nom = (request.form.get('nom') or '').strip()
+        numero = (request.form.get('numero') or '').strip()
+        nouveau_tiers_temps = 1 if request.form.get('tiers_temps') == 'on' else 0
+        if not nom or not numero or not id_candidat_str:
             abort(400, "Nom et numéro sont obligatoires")
-        db_update(db_facility_web.UPDATE_CANDIDAT_INFOS, **d)
+        id_candidat = int(id_candidat_str)
+
+        candidat_actuel = db_get(db_facility_web.SELECT_CANDIDAT_TIERS_TEMPS, id_candidat)
+        if not candidat_actuel:
+            abort(404, "Candidat introuvable")
+        active_tiers_temps = nouveau_tiers_temps == 1 and not candidat_actuel['tiers_temps']
+
+        if active_tiers_temps:
+            plan = _calculer_plan_tiers_temps(id_candidat)
+            if plan is not None and plan.conflit_bloquant:
+                url = _safe_redirect_url(request.form.get('link_back'))
+                donnees_candidat = dict(candidat_actuel)
+                donnees_candidat['nom'] = nom
+                donnees_candidat['numero'] = numero
+                return render_template(
+                    'edit_candidat.html',
+                    centre=CENTRE_EXAMEN,
+                    donnees_candidat=donnees_candidat,
+                    url_of_page=request.url,
+                    link_back=url,
+                    username=get_username(),
+                    authenticated=is_authenticated(),
+                    error_msg=plan.conflit_bloquant,
+                ), 400
+            if plan is not None:
+                _appliquer_oraux_tiers_temps(plan)
+
+        db_update(
+            db_facility_web.UPDATE_CANDIDAT_INFOS,
+            id=id_candidat, nom=nom, numero=numero, tiers_temps=nouveau_tiers_temps,
+        )
         url = _safe_redirect_url(request.form.get('link_back'))
         return redirect(url or url_for('liste_candidats'))
 
     # GET
-    id_candidat = request.args.get('id', None)
-    if id_candidat is None:
+    id_candidat_arg = request.args.get('id', None)
+    if id_candidat_arg is None:
         abort(404, "Pas de candidat avec cet identifiant")
-    donnees_candidat = db_get(db_facility_web.SELECT_INFOS_CANDIDAT_BY_ID, id_candidat)
+    donnees_candidat = db_get(db_facility_web.SELECT_INFOS_CANDIDAT_BY_ID, id_candidat_arg)
     if donnees_candidat is None:
         abort(404, "Candidat introuvable")
     url = _safe_redirect_url(request.args.get('link_back'))
@@ -2426,6 +2464,141 @@ def changer_matiere_candidat() -> ResponseReturnValue:
         url_of_page=request.url,
         username=get_username(),
         authenticated=is_authenticated(),
+    )
+
+
+def _oraux_examinateur_pour_cascade(
+    id_examinateur: int, examinateur_nom: str, id_oral_exclu: int,
+) -> list[rebalance.OralActuel]:
+    """Charge les autres oraux du jour d'un examinateur (hors `id_oral_exclu`,
+    l'oral du candidat qui déclare le tiers-temps), pour la cascade de
+    décalage — cf. rebalance.planifier_tiers_temps."""
+    lignes = db_get(db_facility_web.SELECT_ORAUX_EXAMINATEUR, id_examinateur, no_list_auto=False)
+    return [
+        rebalance.OralActuel(
+            id=l['id'], id_candidat=l['id_candidat'], numero=l['numero'],
+            etablissement=l['etablissement'] or '', id_examinateur=id_examinateur,
+            examinateur_nom=examinateur_nom,
+            heure_sujet=_to_td(l['heure_sujet']), heure_oral=_to_td(l['heure_oral']),
+            heure_fin=_to_td(l['heure_fin']),
+        )
+        for l in lignes if l['id'] != id_oral_exclu
+    ]
+
+
+def _calculer_plan_tiers_temps(id_candidat: int) -> rebalance.PlanTiersTemps | None:
+    """Calcule le plan d'extension + cascade pour la déclaration de
+    tiers-temps d'un candidat (cf. rebalance.planifier_tiers_temps).
+
+    :returns: None si le candidat n'a pas exactement deux oraux publiés
+        (pas encore de planning à adapter — ex. avant tout lancement d'algo).
+    """
+    lignes_oraux = db_get(
+        db_facility_web.SELECT_ORAUX_CANDIDAT_TIERS_TEMPS, id_candidat, no_list_auto=False,
+    )
+    if len(lignes_oraux) != 2:
+        return None
+    oral_a = _oral_actuel_depuis_ligne(lignes_oraux[0])
+    oral_b = _oral_actuel_depuis_ligne(lignes_oraux[1])
+    temps_preparation_a = oral_a.heure_oral - oral_a.heure_sujet
+    temps_preparation_b = oral_b.heure_oral - oral_b.heure_sujet
+
+    oraux_examinateur_a = _oraux_examinateur_pour_cascade(
+        oral_a.id_examinateur, oral_a.examinateur_nom, oral_a.id,
+    )
+    oraux_examinateur_b = _oraux_examinateur_pour_cascade(
+        oral_b.id_examinateur, oral_b.examinateur_nom, oral_b.id,
+    )
+
+    # Écart minimum : pour chaque candidat cascadé, il faut l'heure de sujet
+    # de son AUTRE oral (fixe, dans une autre matière) — même principe que
+    # pour la disponibilité examinateur / le changement de matière.
+    autres_heures_sujet: dict[int, timedelta | None] = {}
+    for autre in oraux_examinateur_a + oraux_examinateur_b:
+        if autre.id_candidat in autres_heures_sujet:
+            continue
+        autres = db_get(
+            db_facility_web.SELECT_LISTE_EDITION_ORAL, autre.id_candidat, no_list_auto=False,
+        )
+        reste = next((a for a in autres if a['id'] != autre.id), None)
+        autres_heures_sujet[autre.id_candidat] = _to_td(reste['heure_sujet']) if reste else None
+
+    heure_pause_meridienne, duree_pause_meridienne = _pause_meridienne_params()
+    ecart_mini_minutes = _load_algo_params()['ecart_mini']
+
+    return rebalance.planifier_tiers_temps(
+        oral_a, temps_preparation_a, oraux_examinateur_a,
+        oral_b, temps_preparation_b, oraux_examinateur_b,
+        autres_heures_sujet, ecart_mini_minutes,
+        heure_pause_meridienne, duree_pause_meridienne,
+    )
+
+
+def _appliquer_oraux_tiers_temps(plan: rebalance.PlanTiersTemps) -> None:
+    """Persiste les oraux d'un plan de tiers-temps déjà calculé (candidat +
+    cascade) et notifie — ne touche pas au flag Candidat.tiers_temps
+    lui-même (à la charge de l'appelant)."""
+    for c in plan.changements:
+        d = {
+            'id': c.id_oral, 'examinateur': c.id_examinateur,
+            'heure_sujet': _td_to_time_str(c.nouvelle_heure_sujet),
+            'heure_oral': _td_to_time_str(c.nouvelle_heure_oral),
+            'heure_fin': _td_to_time_str(c.nouvelle_heure_fin), 'mis_a_jour': 1,
+        }
+        _appliquer_changement_oral(d, c.numero)
+
+
+@app.route("/gestion/candidat/tiers-temps", methods=["GET", "POST"])
+@admin_required
+@nocache
+def declarer_tiers_temps_candidat() -> ResponseReturnValue:
+    """
+    Déclare le tiers-temps d'un candidat en cours de journée : étend la
+    préparation de ses deux oraux d'1/3 (heure_oral/heure_fin décalées,
+    heure_sujet inchangée) et cascade le même décalage sur tous les oraux
+    suivants des deux examinateurs concernés, pour ne jamais les chevaucher —
+    cf. docs/workflow_admin.md.
+    """
+    id_candidat = request.values.get("id_candidat", type=int)
+    if id_candidat is None:
+        abort(404, "Pas de candidat avec ce numéro")
+    candidat_info = db_get(db_facility_web.SELECT_CANDIDAT_TIERS_TEMPS, id_candidat)
+    if not candidat_info:
+        abort(404, "Candidat introuvable")
+
+    if candidat_info['tiers_temps']:
+        return render_template(
+            "declarer_tiers_temps_candidat.html",
+            centre=CENTRE_EXAMEN, candidat=candidat_info, etape="deja_tiers_temps",
+            url_of_page=request.url, username=get_username(), authenticated=is_authenticated(),
+        )
+
+    plan = _calculer_plan_tiers_temps(id_candidat)
+    if plan is None:
+        abort(400, "Le candidat doit avoir exactement deux oraux publiés pour "
+                   "déclarer un tiers-temps.")
+
+    etape = "previsualisation"
+    if request.method == "POST":
+        etape = request.form.get("etape", "previsualisation")
+
+    if etape == "confirmer":
+        if plan.conflit_bloquant:
+            abort(400, plan.conflit_bloquant)
+        db_update(
+            db_facility_web.UPDATE_CANDIDAT_TIERS_TEMPS, id_candidat=id_candidat, tiers_temps=1,
+        )
+        _appliquer_oraux_tiers_temps(plan)
+        return render_template(
+            "declarer_tiers_temps_candidat.html",
+            centre=CENTRE_EXAMEN, candidat=candidat_info, etape="termine", plan=plan,
+            url_of_page=request.url, username=get_username(), authenticated=is_authenticated(),
+        )
+
+    return render_template(
+        "declarer_tiers_temps_candidat.html",
+        centre=CENTRE_EXAMEN, candidat=candidat_info, etape="previsualisation", plan=plan,
+        url_of_page=request.url, username=get_username(), authenticated=is_authenticated(),
     )
 
 

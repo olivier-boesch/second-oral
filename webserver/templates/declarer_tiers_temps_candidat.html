@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>2ndOral — Tiers-temps : {{ candidat['nom'] }}</title>
+    {% include 'style.html' %}
+    <style>
+        .tt-table { width:100%; border-collapse:collapse; margin-top:1em; }
+        .tt-table th, .tt-table td { padding:.4em .6em; text-align:left; font-size:.9em; }
+        .tt-soi { background:#d4edda; }
+        .tt-cascade { background:#fff3cd; }
+        .tt-alerte { background:#fde2c8; }
+        .tt-hint { font-size:.85rem; color:var(--text-sm); margin:.4em 0 .8em 0; }
+    </style>
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+
+<h1>Déclaration de tiers-temps — {{ candidat['nom'] }} ({{ candidat['numero'] }})</h1>
+
+<div style="max-width:760px; margin:0 auto;">
+
+{% if etape == 'deja_tiers_temps' %}
+<p style="background:#fde8e8; color:#b91c1c; border-left:4px solid #b91c1c;
+          padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
+    🚫 Ce candidat a déjà un tiers-temps déclaré.
+</p>
+<button type="button" onclick="document.location='{{ url_for('liste_candidats') }}';">
+    ← Retour à la liste des candidats
+</button>
+{% endif %}
+
+{% if etape == 'previsualisation' %}
+<p style="font-size:.9em; color:var(--text-md);">
+    La préparation de ses deux oraux est étendue d'1/3 (l'heure de sujet ne change pas, seule
+    l'heure d'oral recule) ; les oraux suivants chez les deux mêmes examinateurs sont décalés
+    du même délai pour ne jamais se chevaucher.
+</p>
+
+{% if plan.conflit_bloquant %}
+<p style="background:#fde8e8; color:#b91c1c; border-left:4px solid #b91c1c;
+          padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
+    🚫 {{ plan.conflit_bloquant }}
+</p>
+<div style="display:flex; gap:.5em; flex-wrap:wrap; margin-top:1em;">
+    <button type="button" class="outline"
+            onclick="document.location='{{ url_for('liste_candidats') }}';">
+        ← Annuler
+    </button>
+</div>
+{% else %}
+<form action="{{ url_for('declarer_tiers_temps_candidat') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="id_candidat" value="{{ candidat['id'] }}">
+    <input type="hidden" name="etape" value="confirmer">
+
+    <table class="tt-table">
+        <tr>
+            <th>Candidat</th>
+            <th>Examinateur</th>
+            <th>Heure sujet</th>
+            <th>Heure oral</th>
+            <th>Heure fin</th>
+        </tr>
+        {% for c in plan.changements %}
+        <tr class="{{ 'tt-soi' if c.est_le_candidat else ('tt-alerte' if (c.ecart_mini_rompu or c.chevauche_pause) else 'tt-cascade') }}">
+            <td>{{ c.numero }}{% if c.est_le_candidat %} <strong>(lui-même)</strong>{% endif %}</td>
+            <td>{{ c.examinateur_nom }}</td>
+            <td>
+                {{ c.ancienne_heure_sujet|heure }}
+                {%- if c.ancienne_heure_sujet != c.nouvelle_heure_sujet %} → {{ c.nouvelle_heure_sujet|heure }}{% endif %}
+            </td>
+            <td>{{ c.ancienne_heure_oral|heure }} → {{ c.nouvelle_heure_oral|heure }}</td>
+            <td>
+                {{ c.ancienne_heure_fin|heure }} → {{ c.nouvelle_heure_fin|heure }}
+                {%- if c.ecart_mini_rompu %} ⚠{% endif %}{% if c.chevauche_pause %} 🕐{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    <p class="tt-hint">
+        🟩 le candidat lui-même (préparation étendue) — 🟨 oral cascadé (décalé du même délai)
+        — 🟧 ⚠ écart minimum rompu avec l'autre oral du candidat cascadé,
+        🕐 chevauche la pause méridienne (à signaler à l'examinateur concerné)
+    </p>
+
+    <div style="display:flex; gap:.5em; flex-wrap:wrap; margin-top:1em;">
+        <button type="submit">✓ Confirmer et notifier</button>
+        <button type="button" class="outline"
+                onclick="document.location='{{ url_for('liste_candidats') }}';">
+            ← Annuler
+        </button>
+    </div>
+</form>
+{% endif %}
+{% endif %}
+
+{% if etape == 'termine' %}
+<p style="background:#d1fae5; color:#065f46; border-left:4px solid #059669;
+          padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
+    ✔ Tiers-temps déclaré pour {{ candidat['nom'] }} — {{ plan.changements|length }} oral(aux)
+    mis à jour, notifications envoyées.
+</p>
+<button type="button" onclick="document.location='{{ url_for('liste_candidats') }}';">
+    ← Retour à la liste des candidats
+</button>
+{% endif %}
+
+</div>
+
+{% include 'footer.html' %}
+</body>
+</html>

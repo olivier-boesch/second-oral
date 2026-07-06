@@ -15,6 +15,7 @@ from rebalance import (  # noqa: E402
     planifier_absence,
     planifier_changement_matiere,
     planifier_renfort,
+    planifier_tiers_temps,
     proposer_compaction,
     resoudre_oraux_difficiles,
 )
@@ -483,3 +484,124 @@ class TestPauseMeridienneRebalance:
         )
         assert changement is not None
         assert changement.nouvelle_heure_sujet == _td(9, 30)
+
+
+class TestPlanifierTiersTemps:
+    """Déclaration de tiers-temps d'un candidat en cours de journée : ses deux
+    oraux voient leur préparation étendue d'1/3, et les oraux suivants chez
+    les deux mêmes examinateurs sont cascadés du même délai."""
+
+    def test_extension_preparation_candidat(self):
+        # Maths (ProfA) : prep 20min -> +7min (arrondi de 20/3=6.66)
+        oral_a = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA",
+                        heure_sujet=_td(9), heure_oral=_td(9, 20), heure_fin=_td(9, 40))
+        # Philo (ProfB) : prep 15min -> +5min (exact)
+        oral_b = _oral(2, 100, "N100", id_examinateur=2, examinateur_nom="ProfB",
+                        heure_sujet=_td(11), heure_oral=_td(11, 15), heure_fin=_td(11, 30))
+
+        plan = planifier_tiers_temps(
+            oral_a, timedelta(minutes=20), [],
+            oral_b, timedelta(minutes=15), [],
+            autres_heures_sujet_cascade={}, ecart_mini_minutes=40,
+        )
+        assert plan.conflit_bloquant is None
+        assert len(plan.changements) == 2
+        ch_a, ch_b = plan.changements
+        assert ch_a.est_le_candidat is True
+        assert ch_a.nouvelle_heure_sujet == _td(9)  # heure de sujet inchangée
+        assert ch_a.nouvelle_heure_oral == _td(9, 27)
+        assert ch_a.nouvelle_heure_fin == _td(9, 47)
+        assert ch_b.est_le_candidat is True
+        assert ch_b.nouvelle_heure_sujet == _td(11)
+        assert ch_b.nouvelle_heure_oral == _td(11, 20)
+        assert ch_b.nouvelle_heure_fin == _td(11, 35)
+
+    def test_cascade_decale_les_oraux_suivants_du_meme_delai(self):
+        oral_a = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA",
+                        heure_sujet=_td(9), heure_oral=_td(9, 20), heure_fin=_td(9, 40))
+        oral_b = _oral(2, 100, "N100", id_examinateur=2, examinateur_nom="ProfB",
+                        heure_sujet=_td(11), heure_oral=_td(11, 15), heure_fin=_td(11, 30))
+        # Candidat suivant chez ProfA, juste après oral_a (9h40)
+        suivant = _oral(3, 101, "N101", id_examinateur=1, examinateur_nom="ProfA",
+                         heure_sujet=_td(9, 40), heure_oral=_td(10), heure_fin=_td(10, 20))
+
+        plan = planifier_tiers_temps(
+            oral_a, timedelta(minutes=20), [suivant],
+            oral_b, timedelta(minutes=15), [],
+            autres_heures_sujet_cascade={101: _td(13)},  # loin, aucun souci d'écart
+            ecart_mini_minutes=40,
+        )
+        cascade = next(c for c in plan.changements if not c.est_le_candidat)
+        assert cascade.id_oral == 3
+        # Décalé de +7 min (même délai que l'extension de oral_a), écart préservé
+        assert cascade.nouvelle_heure_sujet == _td(9, 47)
+        assert cascade.nouvelle_heure_oral == _td(10, 7)
+        assert cascade.nouvelle_heure_fin == _td(10, 27)
+        assert cascade.ecart_mini_rompu is False
+
+    def test_cascade_ignore_les_oraux_avant_le_candidat(self):
+        oral_a = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA",
+                        heure_sujet=_td(9), heure_oral=_td(9, 20), heure_fin=_td(9, 40))
+        oral_b = _oral(2, 100, "N100", id_examinateur=2, examinateur_nom="ProfB",
+                        heure_sujet=_td(11), heure_oral=_td(11, 15), heure_fin=_td(11, 30))
+        avant = _oral(9, 102, "N102", id_examinateur=1, examinateur_nom="ProfA",
+                       heure_sujet=_td(8), heure_oral=_td(8, 20), heure_fin=_td(8, 40))
+
+        plan = planifier_tiers_temps(
+            oral_a, timedelta(minutes=20), [avant],
+            oral_b, timedelta(minutes=15), [],
+            autres_heures_sujet_cascade={}, ecart_mini_minutes=40,
+        )
+        assert not any(c.id_oral == 9 for c in plan.changements)
+
+    def test_ecart_mini_rompu_signale_sans_bloquer(self):
+        oral_a = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA",
+                        heure_sujet=_td(9), heure_oral=_td(9, 20), heure_fin=_td(9, 40))
+        oral_b = _oral(2, 100, "N100", id_examinateur=2, examinateur_nom="ProfB",
+                        heure_sujet=_td(11), heure_oral=_td(11, 15), heure_fin=_td(11, 30))
+        suivant = _oral(3, 101, "N101", id_examinateur=1, examinateur_nom="ProfA",
+                         heure_sujet=_td(9, 40), heure_oral=_td(10), heure_fin=_td(10, 20))
+
+        plan = planifier_tiers_temps(
+            oral_a, timedelta(minutes=20), [suivant],
+            oral_b, timedelta(minutes=15), [],
+            # Autre oral du candidat 101 très proche de sa nouvelle heure (9h47 + 7min) -> écart rompu
+            autres_heures_sujet_cascade={101: _td(10, 10)},
+            ecart_mini_minutes=40,
+        )
+        assert plan.conflit_bloquant is None  # jamais bloquant pour un oral cascadé
+        cascade = next(c for c in plan.changements if not c.est_le_candidat)
+        assert cascade.ecart_mini_rompu is True
+
+    def test_chevauche_pause_meridienne_signale(self):
+        oral_a = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA",
+                        heure_sujet=_td(9), heure_oral=_td(9, 20), heure_fin=_td(9, 40))
+        oral_b = _oral(2, 100, "N100", id_examinateur=2, examinateur_nom="ProfB",
+                        heure_sujet=_td(11), heure_oral=_td(11, 15), heure_fin=_td(11, 30))
+        suivant = _oral(3, 101, "N101", id_examinateur=1, examinateur_nom="ProfA",
+                         heure_sujet=_td(9, 40), heure_oral=_td(10), heure_fin=_td(10, 20))
+
+        plan = planifier_tiers_temps(
+            oral_a, timedelta(minutes=20), [suivant],
+            oral_b, timedelta(minutes=15), [],
+            autres_heures_sujet_cascade={101: None}, ecart_mini_minutes=0,
+            heure_pause_meridienne=_td(10, 5), duree_pause_meridienne=timedelta(minutes=30),
+        )
+        cascade = next(c for c in plan.changements if not c.est_le_candidat)
+        assert cascade.chevauche_pause is True
+
+    def test_conflit_bloquant_si_chevauchement_entre_les_deux_oraux_du_candidat(self):
+        # Écart minimum initial très faible (2 min) entre Maths et Philo : après
+        # extension des deux préparations, les fenêtres se chevauchent.
+        oral_a = _oral(1, 200, "N200", id_examinateur=1, examinateur_nom="ProfA",
+                        heure_sujet=_td(9), heure_oral=_td(9, 20), heure_fin=_td(9, 40))
+        oral_b = _oral(2, 200, "N200", id_examinateur=2, examinateur_nom="ProfB",
+                        heure_sujet=_td(9, 42), heure_oral=_td(9, 57), heure_fin=_td(10, 12))
+
+        plan = planifier_tiers_temps(
+            oral_a, timedelta(minutes=20), [],
+            oral_b, timedelta(minutes=15), [],
+            autres_heures_sujet_cascade={}, ecart_mini_minutes=1,
+        )
+        assert plan.conflit_bloquant is not None
+        assert plan.changements == []

@@ -32,8 +32,14 @@
         <tr class="{{ loop.cycle("tr_light", "tr_dark") }}">
             <td>{{ c['nom'] }}</td>
             <td>{{ c['numero'] }}</td>
-            <td>{% if c['tiers_temps'] %}
+            <td>
+                {% if c['tiers_temps'] %}
                 <div class="tooltip">🔴 <span class="tooltiptext">aménagement d'épreuves</span></div>
+                {% else %}
+                <button type="button" class="outline" style="font-size:.8rem; padding:.2em .6em;"
+                        onclick="document.location='{{ url_for('declarer_tiers_temps_candidat', id_candidat=c['id']) }}';">
+                    ⏱️ Déclarer
+                </button>
                 {% endif %}
             </td>
             <td>

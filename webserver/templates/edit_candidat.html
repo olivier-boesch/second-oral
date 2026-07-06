@@ -10,6 +10,14 @@
 {% include 'admin_nav.html' %}
 <h1>Édition candidat : {{ donnees_candidat['nom'] }}</h1>
 <div style="max-width:480px; margin:0 auto;">
+
+{% if error_msg %}
+<p style="background:#fde8e8; color:#b91c1c; border-left:4px solid #b91c1c;
+          padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
+    🚫 {{ error_msg }}
+</p>
+{% endif %}
+
 <form class="form-salle" action="{{ url_for('edit_candidat') }}" method="post"
       style="width:100%; max-width:100%;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -30,9 +38,16 @@
     <p>
         <label>
             <input type="checkbox" name="tiers_temps"
-                   {% if donnees_candidat['tiers_temps'] %}checked{% endif %}>
+                   {% if donnees_candidat['tiers_temps'] %}checked{% endif %}
+                   onchange="onTiersTempsChange(this)">
             Tiers temps (aménagement d'épreuves)
         </label>
+        <br><small>
+            Cocher étend automatiquement la préparation de ses deux oraux (s'ils sont déjà
+            publiés) et décale les oraux suivants chez ses deux examinateurs pour ne pas les
+            chevaucher — mêmes notifications qu'une déclaration via
+            <a href="{{ url_for('declarer_tiers_temps_candidat', id_candidat=donnees_candidat['id']) }}">⏱️ Déclarer</a>.
+        </small>
     </p>
     <div style="display:flex; gap:.6em; justify-content:center; align-items:center; margin-top:1.5em;">
         <button type="submit" style="width:auto; margin-top:0;">Valider</button>
@@ -47,6 +62,17 @@
     </div>
 </form>
 </div>
+<script>
+function onTiersTempsChange(checkbox) {
+    if (checkbox.checked && !confirm(
+        "Déclarer un tiers-temps va étendre la préparation des deux oraux de ce candidat "
+        + "et décaler tous les oraux suivants chez ses deux examinateurs pour ne pas les "
+        + "chevaucher.\n\nConfirmer ?"
+    )) {
+        checkbox.checked = false;
+    }
+}
+</script>
 {% include 'footer.html' %}
 </body>
 </html>

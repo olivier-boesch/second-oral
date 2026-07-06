@@ -254,6 +254,30 @@ UPDATE_CANDIDAT_CHOIX2 = """
 UPDATE Candidat SET choix2 = %(nouvelle_matiere)s WHERE id = %(id_candidat)s
 """
 
+# ---------- Déclaration de tiers-temps d'un candidat en cours de journée ─────
+
+SELECT_CANDIDAT_TIERS_TEMPS = """
+SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
+       Candidat.tiers_temps AS tiers_temps
+FROM Candidat WHERE Candidat.id = %s
+"""
+
+SELECT_ORAUX_CANDIDAT_TIERS_TEMPS = """
+SELECT Oral.id AS id, Candidat.id AS id_candidat, Candidat.numero AS numero,
+       Candidat.etablissement AS etablissement,
+       Examinateur.id AS id_examinateur, Examinateur.nom AS examinateur,
+       Oral.heure_sujet AS heure_sujet, Oral.heure_oral AS heure_oral, Oral.heure_fin AS heure_fin
+FROM Oral
+    JOIN Candidat ON Oral.candidat = Candidat.id
+    JOIN Examinateur ON Oral.examinateur = Examinateur.id
+WHERE Candidat.id = %s
+ORDER BY Oral.heure_sujet
+"""
+
+UPDATE_CANDIDAT_TIERS_TEMPS = """
+UPDATE Candidat SET tiers_temps = %(tiers_temps)s WHERE id = %(id_candidat)s
+"""
+
 # ---------- Tokens signature
 
 INSERT_TOKEN_SIGNATURE = """
@@ -328,7 +352,7 @@ GROUP BY Examinateur.nom
 """
 
 SELECT_ORAUX_EXAMINATEUR = """
-SELECT Candidat.nom AS candidat, Candidat.numero AS numero,
+SELECT Candidat.id AS id_candidat, Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.etablissement AS etablissement, Candidat.tiers_temps AS tiers_temps,
        Oral.heure_sujet AS heure_sujet, Oral.heure_oral AS heure_oral,
        Oral.heure_fin AS heure_fin, Oral.mis_a_jour AS maj, Oral.id AS id
