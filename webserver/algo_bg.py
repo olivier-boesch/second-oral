@@ -25,6 +25,14 @@ REDIS_CHANNEL = "algo_output"
 _process: subprocess.Popen | None = None
 _lock = threading.Lock()
 
+# Délai laissé à algo.py pour s'arrêter proprement après SIGTERM avant
+# d'escalader vers SIGKILL (cf. stop_algo) — le moteur CP-SAT (OR-Tools)
+# tourne sur plusieurs threads natifs (num_search_workers) pendant Solve() ;
+# selon la façon dont ce pool de threads masque les signaux, SIGTERM peut
+# rester en attente jusqu'à la fin du calcul au lieu d'interrompre le
+# processus immédiatement. SIGKILL, lui, ne peut jamais être bloqué/ignoré.
+_STOP_GRACE_PERIOD_S = 5.0
+
 
 def is_running() -> bool:
     """Vrai si algo.py est en cours d'exécution."""
@@ -40,6 +48,11 @@ def stop_algo() -> bool:
     laisser de workers orphelins. Le thread `_stream` (déjà lancé) détecte
     la fin du processus et publie normalement le message `done`.
 
+    Si le groupe de processus est toujours vivant après `_STOP_GRACE_PERIOD_S`
+    secondes (ex. CP-SAT bloqué en calcul natif, SIGTERM resté en attente),
+    un SIGKILL est envoyé en secours dans un thread séparé — SIGKILL ne peut
+    ni être bloqué ni ignoré, contrairement à SIGTERM.
+
     :returns: True si un arrêt a été déclenché, False si rien ne tournait.
     """
     with _lock:
@@ -47,10 +60,22 @@ def stop_algo() -> bool:
         if proc is None or proc.poll() is not None:
             return False
         try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, signal.SIGTERM)
         except ProcessLookupError:
             return False
-        return True
+
+    def _escalader_si_toujours_vivant() -> None:
+        try:
+            proc.wait(timeout=_STOP_GRACE_PERIOD_S)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    threading.Thread(target=_escalader_si_toujours_vivant, daemon=True).start()
+    return True
 
 
 def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,

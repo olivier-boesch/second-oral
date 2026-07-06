@@ -62,3 +62,25 @@ class TestStopAlgo:
         proc.wait()
         algo_bg._process = proc
         assert algo_bg.stop_algo() is False
+
+    def test_escalade_vers_sigkill_si_sigterm_ignore(self, monkeypatch):
+        """Régression : un process qui ignore SIGTERM (ex. CP-SAT bloqué en
+        calcul natif, cf. commentaire sur _STOP_GRACE_PERIOD_S) doit quand
+        même être arrêté, via l'escalade vers SIGKILL après le délai de grâce."""
+        monkeypatch.setattr(algo_bg, "_STOP_GRACE_PERIOD_S", 0.3)
+        proc = subprocess.Popen(
+            [sys.executable, "-c",
+             "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+             "print('ready', flush=True); time.sleep(30)"],
+            start_new_session=True, stdout=subprocess.PIPE, text=True,
+        )
+        assert proc.stdout is not None
+        proc.stdout.readline()  # attend que le handler SIG_IGN soit bien installé
+        algo_bg._process = proc
+        assert algo_bg.stop_algo() is True
+        # SIGTERM seul est ignoré par le process -> il doit encore tourner juste après
+        _time.sleep(0.05)
+        assert proc.poll() is None
+        # Passé le délai de grâce, l'escalade SIGKILL doit avoir eu lieu
+        proc.wait(timeout=5)
+        assert proc.poll() is not None
