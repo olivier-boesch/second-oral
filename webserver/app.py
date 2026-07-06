@@ -455,9 +455,16 @@ def qr(path, **kwargs):
 
 @app.template_filter('heure')
 def heure_filter(td):
-    """Filtre Jinja2 : formate un timedelta en HH:MM (cf. rebalance.py)."""
-    if td is None:
+    """Filtre Jinja2 : formate en HH:MM (cf. rebalance.py).
+
+    Accepte aussi bien un `timedelta` (rebalance.py, dataclasses internes)
+    qu'une valeur TIME brute issue directement d'une requête SQL — le driver
+    mysql-connector-python peut renvoyer un `timedelta` ou une chaîne
+    HH:MM:SS selon la version/le contexte (cf. `_to_td`, même normalisation).
+    """
+    if td is None or td == '':
         return ''
+    td = _to_td(td)
     total_minutes = int(td.total_seconds()) // 60
     h, m = divmod(total_minutes, 60)
     return f"{h:02d}:{m:02d}"

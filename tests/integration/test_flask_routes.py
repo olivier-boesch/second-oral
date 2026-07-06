@@ -993,6 +993,28 @@ class TestEditExaminateur:
         body = r.data.decode()
         assert "0123456789A" in body
         assert "Lycée X" in body
+
+    def test_liste_oraux_avec_heures_en_chaine(self, admin_client, db_mock):
+        """Régression prod : mysql-connector-python peut renvoyer les colonnes
+        TIME en str "HH:MM:SS" plutôt qu'en timedelta selon le driver — le
+        filtre |heure ne doit pas planter dans ce cas (AttributeError:
+        'str' object has no attribute 'total_seconds')."""
+        examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "loge": "L1", "matiere": "Maths", "etablissements": "",
+                       "nb_oraux": 1}
+        oral = {
+            "id": 1, "candidat": "Dupont Jean", "numero": "0123456789A",
+            "etablissement": "Lycée X", "tiers_temps": 0,
+            "heure_sujet": "09:00:00", "heure_oral": "09:15:00",
+            "heure_fin": "09:30:00", "maj": 0,
+        }
+        db_mock.make_sql_select.side_effect = [[examinateur], [oral]]
+        r = admin_client.get("/gestion/edit-examinateur?id_examinateur=10")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "09:00" in body
+        assert "09:15" in body
+        assert "09:30" in body
         assert "09:00" in body
         assert "09:15" in body
         assert "09:30" in body
