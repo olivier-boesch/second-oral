@@ -72,6 +72,18 @@
 **Tests (suite 6)**
 - `tests/unit/test_algo_ga.py` : réduction effective des violations d'écart minimum et de déséquilibre de charge par les nouvelles réparations locales, comportement du taux de mutation adaptatif (0 = aucun changement, 1 = déclenchement systématique)
 
+**Gestion en cours de journée (suite 2) — changement de matière d'un candidat**
+- Nouveau bouton **🔄 Changer** sur `/gestion/liste-candidats` : remplace un des deux oraux d'un candidat (choix1 ou choix2) par un oral dans une nouvelle matière, en cours de journée après le placement initial
+- Réutilise à l'identique l'infrastructure de la disponibilité examinateur : placement glouton (palier 1), puis les deux mêmes paliers de résolution poussée par CP-SAT (mêmes horaires, puis extension d'horaire) si le glouton échoue à trouver un examinateur/créneau disponible dans la nouvelle matière
+- Écran de prévisualisation avec le même code couleur (🟩/🟨/🟧🕐) ; à la confirmation, le choix (`choix1`/`choix2`) du candidat est mis à jour en base et les notifications SSE ciblent à la fois le nouvel examinateur et l'ancien (dont la salle/loge doit savoir que ce candidat ne viendra plus)
+- Suggestion optionnelle (case à cocher) : compacter le planning de l'ancien examinateur en déplaçant son oral le plus tardif vers le créneau qui vient de se libérer
+- Portée volontairement limitée à un seul candidat à la fois
+- Nouvelles requêtes `SELECT_CANDIDAT_CHANGEMENT_MATIERE`, `SELECT_ORAL_POUR_CHANGEMENT_MATIERE`, `UPDATE_CANDIDAT_CHOIX1`, `UPDATE_CANDIDAT_CHOIX2` dans `db_facility_web.py` ; nouvelles fonctions `rebalance.planifier_changement_matiere()` et `rebalance.proposer_compaction()`
+
+**Tests (suite 7)**
+- `tests/unit/test_rebalance.py` : `planifier_changement_matiere` (priorité même heure, repli avec écart minimum respecté, exclusions respectées, aucune option disponible), `proposer_compaction` (proposition de l'oral le plus tardif, absence d'oral déplaçable, écart minimum non respecté, liste vide)
+- `tests/integration/test_changer_matiere_candidat.py` : câblage de la route (formulaire, refus d'une matière déjà choisie, aucune écriture en base pendant la prévisualisation, confirmation avec double notification ancien/nouvel examinateur)
+
 ### Fixed
 
 - `/gestion/examinateur/disponibilite` : les oraux replacés uniquement grâce à la résolution poussée (palier 2 « mêmes horaires » ou palier 3 « extension d'horaire ») n'étaient jamais écrits en base à la confirmation — celle-ci recalculait le plan à partir de zéro (glouton seul), perdant silencieusement le résultat des paliers précédents. Le niveau de résolution atteint est désormais reporté d'une requête à l'autre (champ caché `niveau_resolution`) et rejoué avant application, pour que « Confirmer et notifier » persiste exactement ce qui a été prévisualisé.

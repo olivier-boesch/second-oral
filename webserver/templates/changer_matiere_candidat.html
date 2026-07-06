@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>2ndOral — Changement de matière : {{ candidat['nom'] }}</title>
+    {% include 'style.html' %}
+    <style>
+        .cm-table { width:100%; border-collapse:collapse; margin-top:1em; }
+        .cm-table th, .cm-table td { padding:.4em .6em; text-align:left; font-size:.9em; }
+        .cm-meme-heure { background:#d4edda; }
+        .cm-heure-changee { background:#fff3cd; }
+        .cm-hors-grille { background:#fde2c8; }
+        .cm-hint { font-size:.85rem; color:var(--text-sm); margin:.2em 0 .8em 0; }
+        .cm-oral-choix { display:flex; align-items:center; gap:.5em; margin:.3em 0; }
+    </style>
+</head>
+<body class="body-for-sticky">
+{% include 'auth_icon.html' %}
+
+<h1>Changement de matière — {{ candidat['nom'] }} ({{ candidat['numero'] }})</h1>
+
+<div style="max-width:640px; margin:0 auto;">
+
+{% if error_msg %}
+<p style="background:#fde8e8; color:#b91c1c; border-left:4px solid #b91c1c;
+          padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
+    🚫 {{ error_msg }}
+</p>
+{% endif %}
+
+{% if etape == 'saisie' %}
+<p style="font-size:.9em; color:var(--text-md);">
+    Sélectionnez l'oral à remplacer (la matière abandonnée) et la nouvelle matière. L'autre
+    oral du candidat reste inchangé et sert de référence pour l'écart minimum.
+</p>
+<form action="{{ url_for('changer_matiere_candidat') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="id_candidat" value="{{ candidat['id'] }}">
+    <input type="hidden" name="etape" value="previsualisation">
+
+    <p><strong>Oral à remplacer :</strong></p>
+    {% for o in oraux %}
+    <label class="cm-oral-choix">
+        <input type="radio" name="id_oral_a_remplacer" value="{{ o['id'] }}" required>
+        {{ o['matiere'] }} — {{ o['examinateur'] }} ({{ o['salle'] }}) à {{ o['heure_sujet'] }}
+    </label>
+    {% endfor %}
+
+    <label for="nouvelle_matiere">Nouvelle matière</label>
+    <select name="nouvelle_matiere" id="nouvelle_matiere" required>
+        {% for m in matieres %}
+        {% if m['id'] != candidat['choix1'] and m['id'] != candidat['choix2'] %}
+        <option value="{{ m['id'] }}">{{ m['nom'] }}</option>
+        {% endif %}
+        {% endfor %}
+    </select>
+
+    <div style="display:flex; gap:.5em; flex-wrap:wrap; margin-top:1em;">
+        <button type="submit">→ Prévisualiser</button>
+        <button type="button" class="outline"
+                onclick="document.location='{{ url_for('liste_candidats') }}';">
+            ← Annuler
+        </button>
+    </div>
+</form>
+{% endif %}
+
+{% if etape == 'previsualisation' %}
+<form action="{{ url_for('changer_matiere_candidat') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="id_candidat" value="{{ candidat['id'] }}">
+    <input type="hidden" name="etape" id="cm-etape" value="confirmer">
+    <input type="hidden" name="niveau_resolution" value="{{ niveau_resolution }}">
+    <input type="hidden" name="id_oral_a_remplacer" value="{{ id_oral_a_remplacer }}">
+    <input type="hidden" name="nouvelle_matiere" value="{{ nouvelle_matiere }}">
+
+    {% if changement %}
+    <p style="font-size:.9em;">Nouvel oral proposé :</p>
+    <table class="cm-table">
+        <tr>
+            <th>Candidat</th>
+            <th>Ancien examinateur</th>
+            <th>Nouvel examinateur</th>
+            <th>Heure actuelle</th>
+            <th>Nouvelle heure</th>
+        </tr>
+        <tr class="{{ 'cm-hors-grille' if changement.hors_grille else ('cm-meme-heure' if changement.meme_heure else 'cm-heure-changee') }}">
+            <td>{{ changement.numero }}</td>
+            <td>{{ changement.ancien_examinateur_nom }}</td>
+            <td>{{ changement.nouvel_examinateur_nom }}</td>
+            <td>{{ changement.ancienne_heure_sujet|heure }}</td>
+            <td>{{ changement.nouvelle_heure_sujet|heure }}{% if not changement.meme_heure %} ⚠{% endif %}{% if changement.hors_grille %} 🕐{% endif %}</td>
+        </tr>
+    </table>
+    <p class="cm-hint">
+        🟩 même heure (seul l'examinateur change) — 🟨 heure modifiée (déjà utilisée aujourd'hui)
+        — 🟧 nouvel horaire 🕐 (extension de journée, à signaler aussi à l'examinateur concerné)
+    </p>
+    {% else %}
+    <p style="color:#b91c1c; font-size:.9em;">
+        ⚠ Aucun placement trouvé automatiquement dans la nouvelle matière.
+    </p>
+    <div style="display:flex; gap:.5em; flex-wrap:wrap; margin-bottom:1em;">
+        <button type="button" class="outline"
+                onclick="document.getElementById('cm-etape').value='resolution_poussee_grille';this.closest('form').submit();">
+            🔧 Résolution poussée (mêmes horaires)
+        </button>
+        <button type="button" class="outline"
+                onclick="document.getElementById('cm-etape').value='resolution_poussee_etendue';this.closest('form').submit();">
+            🔧🕐 Résolution poussée + extension d'horaire
+        </button>
+    </div>
+    {% endif %}
+
+    {% if compaction %}
+    <p style="font-size:.9em; margin-top:1em;">
+        <label style="display:flex; align-items:center; gap:.5em; cursor:pointer;">
+            <input type="checkbox" name="inclure_compaction" style="width:auto; accent-color:var(--primary);">
+            Suggestion optionnelle : compacter le planning de l'ancien examinateur en déplaçant
+            aussi <strong>{{ compaction.numero }}</strong> de {{ compaction.ancienne_heure_sujet|heure }}
+            vers {{ compaction.nouvelle_heure_sujet|heure }} (créneau libéré)
+        </label>
+    </p>
+    {% endif %}
+
+    <div style="display:flex; gap:.5em; flex-wrap:wrap; margin-top:1em;">
+        {% if changement %}
+        <button type="submit">✓ Confirmer et notifier</button>
+        {% endif %}
+        <button type="button" class="outline"
+                onclick="document.location='{{ url_for('changer_matiere_candidat', id_candidat=candidat['id']) }}';">
+            ↺ Recommencer
+        </button>
+        <button type="button" class="outline"
+                onclick="document.location='{{ url_for('liste_candidats') }}';">
+            ← Annuler
+        </button>
+    </div>
+</form>
+{% endif %}
+
+{% if etape == 'termine' %}
+<p style="background:#d1fae5; color:#065f46; border-left:4px solid #059669;
+          padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
+    ✔ Oral de {{ changement.numero }} déplacé vers {{ changement.nouvel_examinateur_nom }}
+    à {{ changement.nouvelle_heure_sujet|heure }}, notifications envoyées.
+    {% if compaction %}
+    <br>✔ Planning de {{ compaction.ancien_examinateur_nom }} compacté (déplacement de
+    {{ compaction.numero }} vers {{ compaction.nouvelle_heure_sujet|heure }}).
+    {% endif %}
+</p>
+<button type="button" onclick="document.location='{{ url_for('liste_candidats') }}';">
+    ← Retour à la liste des candidats
+</button>
+{% endif %}
+
+</div>
+
+{% include 'footer.html' %}
+</body>
+</html>

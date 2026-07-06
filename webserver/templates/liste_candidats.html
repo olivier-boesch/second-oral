@@ -25,6 +25,7 @@
             <th>Numéro</th>
             <th>Tiers temps</th>
             <th>Éditer</th>
+            <th>Matière</th>
             <th>Identifiants</th>
         </tr>
         {% for c in candidats %}
@@ -42,6 +43,12 @@
                         <span class="tooltiptext">éditer</span>
                     </div>
                 </a>
+            </td>
+            <td>
+                <button type="button" class="outline" style="font-size:.8rem; padding:.2em .6em;"
+                        onclick="document.location='{{ url_for('changer_matiere_candidat', id_candidat=c['id']) }}';">
+                    🔄 Changer
+                </button>
             </td>
             <td>
                 <form method="post" action="{{ url_for('renew_candidat', id=c['id']) }}" style="margin:0">

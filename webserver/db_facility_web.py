@@ -223,6 +223,37 @@ WHERE Examinateur.matiere = %s
 ORDER BY Oral.heure_sujet
 """
 
+# ---------- Changement de matière d'un candidat ──────────────────────────────
+
+SELECT_CANDIDAT_CHANGEMENT_MATIERE = """
+SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
+       Candidat.etablissement AS etablissement,
+       Candidat.choix1 AS choix1, Candidat.choix2 AS choix2
+FROM Candidat
+WHERE Candidat.id = %s
+"""
+
+SELECT_ORAL_POUR_CHANGEMENT_MATIERE = """
+SELECT Oral.id AS id, Oral.heure_sujet AS heure_sujet, Oral.heure_oral AS heure_oral,
+       Oral.heure_fin AS heure_fin,
+       Examinateur.id AS id_examinateur, Examinateur.nom AS examinateur,
+       Examinateur.matiere AS id_matiere,
+       Candidat.id AS id_candidat, Candidat.numero AS numero,
+       Candidat.etablissement AS etablissement
+FROM Oral
+    JOIN Examinateur ON Oral.examinateur = Examinateur.id
+    JOIN Candidat ON Oral.candidat = Candidat.id
+WHERE Oral.id = %s
+"""
+
+UPDATE_CANDIDAT_CHOIX1 = """
+UPDATE Candidat SET choix1 = %(nouvelle_matiere)s WHERE id = %(id_candidat)s
+"""
+
+UPDATE_CANDIDAT_CHOIX2 = """
+UPDATE Candidat SET choix2 = %(nouvelle_matiere)s WHERE id = %(id_candidat)s
+"""
+
 # ---------- Tokens signature
 
 INSERT_TOKEN_SIGNATURE = """

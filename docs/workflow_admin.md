@@ -307,6 +307,21 @@ Ces deux résolutions poussées peuvent être relancées successivement depuis l
 
 **Limite actuelle :** un seul examinateur à la fois change de disponibilité (pas de gestion de plusieurs absences/renforts simultanés sur la même matière).
 
+### Changement de matière d'un candidat en cours de journée
+
+`/gestion/liste-candidats` → bouton **🔄 Changer** sur la ligne du candidat concerné.
+
+Permet de traiter le cas d'un élève qui change de matière le jour J, après que l'algorithme a déjà placé les oraux : un des deux oraux du candidat (choix1 ou choix2) doit être remplacé par un oral dans la nouvelle matière, avec un nouvel examinateur et potentiellement un nouvel horaire.
+
+Le flux se déroule en 3 étapes, sur le même modèle que la disponibilité examinateur :
+1. **Saisie** : choix de l'oral à remplacer (parmi les deux oraux actuels du candidat) et de la nouvelle matière — le sélecteur exclut les matières déjà choisies (choix1 et choix2 actuels).
+2. **Prévisualisation** : le nouvel examinateur et le nouvel horaire proposés, avec le même code couleur que pour la disponibilité examinateur (🟩 même heure, 🟨 heure modifiée dans la grille du jour, 🟧🕐 extension d'horaire). Si aucun placement automatique (glouton) n'est trouvé, les mêmes deux boutons de résolution poussée sont proposés (voir paliers 2 et 3 ci-dessus, identiques en tous points).
+3. **Confirmation** : le nouvel oral est appliqué en base (et `choix1`/`choix2` du candidat mis à jour avec la nouvelle matière), puis les notifications SSE ciblées sont envoyées — à la fois pour le **nouvel** examinateur (qui reçoit le candidat) et pour l'**ancien** examinateur de la matière abandonnée (dont la salle/loge doit être avertie que ce candidat ne viendra plus), en plus du candidat lui-même.
+
+**Suggestion optionnelle de compaction :** en prévisualisation, si l'ancien examinateur a un oral plus tardif dans la journée, une case à cocher propose de le déplacer vers le créneau qui vient de se libérer, pour compacter son planning (évite de le garder inutilement en poste jusqu'à son dernier horaire initial). Cette suggestion n'est appliquée que si la case est cochée à la confirmation.
+
+**Limite actuelle :** un seul candidat à la fois change de matière.
+
 ### Renouvellement des identifiants
 
 `/gestion/credentials` (accessible depuis l'accueil admin → bloc **Préparation** → **Identifiants**) permet de **renouveler les identifiants sans relancer l'algo**, pour chaque catégorie indépendamment :

@@ -13,7 +13,9 @@ from rebalance import (  # noqa: E402
     construire_grille_etendue,
     duree_creneau_estimee,
     planifier_absence,
+    planifier_changement_matiere,
     planifier_renfort,
+    proposer_compaction,
     resoudre_oraux_difficiles,
 )
 
@@ -296,3 +298,91 @@ class TestResoudreOrauxDifficiles:
         plan = resoudre_oraux_difficiles([], [], {}, [], {}, 40, {})
         assert plan.changements == []
         assert plan.non_replaces == []
+
+
+class TestPlanifierChangementMatiere:
+    """Un candidat change de matière : son oral de l'ancienne matière doit
+    être replacé dans la nouvelle, même heure d'abord."""
+
+    def test_meme_heure_privilegiee_quand_libre(self):
+        oral_maths = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfMaths", heure_sujet=_td(9))
+        examinateurs_philo = [ExaminateurCible(id=2, nom="ProfPhilo", etablissements=[''])]
+        changement = planifier_changement_matiere(
+            oral_maths, examinateurs_philo, {2: []}, [_td(9), _td(9, 30)], None, 40, {},
+        )
+        assert changement is not None
+        assert changement.nouvel_examinateur_id == 2
+        assert changement.nouvelle_heure_sujet == _td(9)
+
+    def test_respecte_ecart_mini_contre_lautre_oral_fixe(self):
+        oral_maths = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfMaths", heure_sujet=_td(9))
+        examinateurs_philo = [ExaminateurCible(id=2, nom="ProfPhilo", etablissements=[''])]
+        # ProfPhilo occupé à 9h (même heure) -> repli nécessaire ; l'autre
+        # oral fixe du candidat est à 9h50, donc 9h30 (20 min d'écart) doit
+        # être refusé et 10h30 (40 min) accepté.
+        occupations = {2: [(_td(9, 15), _td(9, 30))]}
+        changement = planifier_changement_matiere(
+            oral_maths, examinateurs_philo, occupations, [_td(9), _td(9, 30), _td(10, 30)],
+            _td(9, 50), 40, {},
+        )
+        assert changement is not None
+        assert changement.nouvelle_heure_sujet == _td(10, 30)
+
+    def test_respecte_les_exclusions(self):
+        oral_maths = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfMaths",
+                            heure_sujet=_td(9), etablissement="LyceeX")
+        examinateurs_philo = [
+            ExaminateurCible(id=2, nom="ProfPhilo", etablissements=["LyceeX"]),
+            ExaminateurCible(id=3, nom="ProfPhilo2", etablissements=['']),
+        ]
+        changement = planifier_changement_matiere(
+            oral_maths, examinateurs_philo, {2: [], 3: []}, [_td(9)], None, 40, {},
+        )
+        assert changement is not None
+        assert changement.nouvel_examinateur_id == 3
+
+    def test_aucune_option_retourne_none(self):
+        oral_maths = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfMaths", heure_sujet=_td(9))
+        examinateurs_philo = [ExaminateurCible(id=2, nom="ProfPhilo", etablissements=[''])]
+        occupations = {2: [(_td(9, 15), _td(9, 30))]}
+        changement = planifier_changement_matiere(
+            oral_maths, examinateurs_philo, occupations, [_td(9)], None, 40, {},
+        )
+        assert changement is None
+
+
+class TestProposerCompaction:
+    """Suggestion optionnelle : compacter le planning de l'ancien examinateur
+    en déplaçant son oral le plus tardif dans le créneau libéré."""
+
+    def test_propose_le_plus_tardif(self):
+        oral_9h30 = _oral(2, 101, "N101", id_examinateur=1, examinateur_nom="ProfMaths", heure_sujet=_td(9, 30))
+        oral_10h = _oral(3, 102, "N102", id_examinateur=1, examinateur_nom="ProfMaths", heure_sujet=_td(10))
+        compaction = proposer_compaction(
+            [oral_9h30, oral_10h], creneau_libere=_td(9), autres_heures_sujet={101: None, 102: None},
+            ecart_mini_minutes=40,
+        )
+        assert compaction is not None
+        assert compaction.id_oral == oral_10h.id  # le plus tardif
+        assert compaction.nouvelle_heure_sujet == _td(9)
+        assert compaction.nouvel_examinateur_id == 1  # même examinateur
+
+    def test_aucun_oral_plus_tardif_retourne_none(self):
+        oral_8h = _oral(2, 101, "N101", id_examinateur=1, examinateur_nom="ProfMaths", heure_sujet=_td(8))
+        compaction = proposer_compaction(
+            [oral_8h], creneau_libere=_td(9), autres_heures_sujet={101: None}, ecart_mini_minutes=40,
+        )
+        assert compaction is None
+
+    def test_refuse_si_ecart_mini_casse(self):
+        oral_10h = _oral(3, 102, "N102", id_examinateur=1, examinateur_nom="ProfMaths", heure_sujet=_td(10))
+        # L'autre oral fixe de ce candidat est à 9h20 -> le déplacer à 9h
+        # (créneau libéré) ne laisserait que 20 min d'écart, insuffisant.
+        compaction = proposer_compaction(
+            [oral_10h], creneau_libere=_td(9), autres_heures_sujet={102: _td(9, 20)},
+            ecart_mini_minutes=40,
+        )
+        assert compaction is None
+
+    def test_liste_vide_retourne_none(self):
+        assert proposer_compaction([], _td(9), {}, 40) is None

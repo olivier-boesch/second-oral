@@ -417,3 +417,81 @@ def resoudre_oraux_difficiles(
 
     plan.non_replaces = [o for o in oraux if o.id not in resolus]
     return plan
+
+
+# ── Changement de matière d'un candidat en cours de journée ──────────────────
+# Un candidat change de matière le jour J (après le placement initial) : un
+# seul de ses deux oraux doit être remplacé par un nouveau dans la matière
+# choisie — son autre oral reste fixe et sert de référence pour l'écart
+# minimum, exactement comme pour une absence d'examinateur. On réutilise donc
+# `_placer` (même horaire d'abord, repli sur la grille sinon) et, en cas
+# d'échec, `resoudre_oraux_difficiles` (paliers 2/3) exactement comme pour la
+# disponibilité d'un examinateur — cf. app.py.
+
+def planifier_changement_matiere(
+    oral_a_remplacer: OralActuel,
+    examinateurs_nouvelle_matiere: list[ExaminateurCible],
+    occupations_nouvelle_matiere: dict[int, list[tuple[timedelta, timedelta]]],
+    grille_horaires_nouvelle_matiere: list[timedelta],
+    autre_heure_sujet: timedelta | None,
+    ecart_mini_minutes: float,
+    profs_a_eviter: dict[str, list[str]],
+) -> Changement | None:
+    """
+    Cherche un nouvel (examinateur, horaire) dans la nouvelle matière pour un
+    candidat qui en change — même heure d'abord (disruption minimale), repli
+    sur la grille horaire déjà utilisée aujourd'hui pour cette matière sinon.
+
+    :param oral_a_remplacer: l'oral actuel de l'ANCIENNE matière (son
+        `id_examinateur`/`examinateur_nom` ne sont utilisés que pour ignorer
+        un « swap » vers soi-même — sans effet ici puisque la nouvelle
+        matière a des examinateurs différents)
+    """
+    return _placer(
+        oral_a_remplacer, examinateurs_nouvelle_matiere, occupations_nouvelle_matiere,
+        grille_horaires_nouvelle_matiere, autre_heure_sujet, ecart_mini_minutes, profs_a_eviter,
+    )
+
+
+def proposer_compaction(
+    oraux_examinateur_libere: list[OralActuel],
+    creneau_libere: timedelta,
+    autres_heures_sujet: dict[int, timedelta | None],
+    ecart_mini_minutes: float,
+) -> Changement | None:
+    """
+    Suggestion optionnelle (jamais appliquée automatiquement) : une fois le
+    créneau `creneau_libere` vacant chez un examinateur (suite au changement
+    de matière d'un candidat), propose de déplacer son oral le plus tardif
+    dans ce créneau — compacte son planning et libère du temps en fin de
+    journée pour cet examinateur.
+
+    Aucune vérification d'exclusion n'est nécessaire ici (même examinateur
+    qu'avant pour le candidat déplacé, donc établissement/prof à éviter
+    restent valides par construction) — seul l'écart minimum avec son autre
+    oral est revérifié au nouveau créneau, plus précoce.
+
+    :param oraux_examinateur_libere: les oraux ACTUELS de cet examinateur
+        pour cette matière (hors l'oral qui vient d'être libéré)
+    """
+    candidats_deplacables = [o for o in oraux_examinateur_libere if o.heure_sujet > creneau_libere]
+    if not candidats_deplacables:
+        return None
+    plus_tardif = max(candidats_deplacables, key=lambda o: o.heure_sujet)
+
+    if not _ecart_suffisant(
+        creneau_libere, autres_heures_sujet.get(plus_tardif.id_candidat), ecart_mini_minutes,
+    ):
+        return None
+
+    duree_prep = plus_tardif.heure_oral - plus_tardif.heure_sujet
+    duree_oral = plus_tardif.heure_fin - plus_tardif.heure_oral
+    nouvelle_heure_oral = creneau_libere + duree_prep
+    nouvelle_heure_fin = nouvelle_heure_oral + duree_oral
+    return Changement(
+        id_oral=plus_tardif.id, id_candidat=plus_tardif.id_candidat, numero=plus_tardif.numero,
+        ancien_examinateur_nom=plus_tardif.examinateur_nom,
+        nouvel_examinateur_id=plus_tardif.id_examinateur, nouvel_examinateur_nom=plus_tardif.examinateur_nom,
+        ancienne_heure_sujet=plus_tardif.heure_sujet, nouvelle_heure_sujet=creneau_libere,
+        nouvelle_heure_oral=nouvelle_heure_oral, nouvelle_heure_fin=nouvelle_heure_fin,
+    )

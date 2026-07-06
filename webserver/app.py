@@ -2065,6 +2065,256 @@ def disponibilite_examinateur() -> ResponseReturnValue:
     )
 
 
+def _notifier_salle_loge_examinateur(id_examinateur: int, numero: str | None) -> None:
+    """Publie une notification SSE ciblée pour la salle/loge d'un examinateur
+    donné, sans mise à jour d'oral associée — utilisé pour avertir l'ANCIEN
+    examinateur d'un candidat qui change de matière (contrairement à la
+    disponibilité examinateur, ici l'ancien examinateur n'est pas à l'origine
+    du changement et ne le sait pas déjà)."""
+    exam = db_get(
+        db_facility_web.SELECT_SALLE_LOGE_FROM_EXAMINATEUR, id_examinateur, no_list_auto=False,
+    )
+    if exam:
+        sse.publish(data=numero, type="data_updated", channel=f"salle_{exam[0]['salle']}")
+        sse.publish(data=numero, type="data_updated", channel=f"loge_{exam[0]['loge']}")
+
+
+def _calculer_plan_changement_matiere(
+    id_candidat: int,
+    oral_actuel: rebalance.OralActuel,
+    id_nouvelle_matiere: int,
+    nom_nouvelle_matiere: str,
+) -> tuple[rebalance.Changement | None, dict]:
+    """
+    Calcule le remplacement (palier 1, glouton) de l'oral d'un candidat qui
+    change de matière — même heure d'abord, repli sur la grille sinon.
+
+    :return: (changement_ou_None, ctx) — `ctx` est le contexte de la NOUVELLE
+        matière, réutilisable pour la résolution poussée en cas d'échec.
+    """
+    ctx = _construire_contexte_disponibilite(
+        {'id_matiere': id_nouvelle_matiere, 'matiere': nom_nouvelle_matiere},
+    )
+
+    occupations: dict[int, list[tuple[timedelta, timedelta]]] = {}
+    for o in ctx['oraux']:
+        occupations.setdefault(o.id_examinateur, []).append((o.heure_oral, o.heure_fin))
+
+    autres = db_get(db_facility_web.SELECT_LISTE_EDITION_ORAL, id_candidat, no_list_auto=False)
+    autre = next((a for a in autres if a['id'] != oral_actuel.id), None)
+    autre_heure_sujet = _to_td(autre['heure_sujet']) if autre else None
+
+    examinateurs_disponibles = list(ctx['examinateurs_par_id'].values())
+    changement = rebalance.planifier_changement_matiere(
+        oral_actuel, examinateurs_disponibles, occupations, ctx['grille_horaires'],
+        autre_heure_sujet, ctx['ecart_mini_minutes'], ctx['profs_a_eviter'],
+    )
+    ctx['occupations'] = occupations
+    ctx['autre_heure_sujet'] = autre_heure_sujet
+    return changement, ctx
+
+
+def _tenter_resolution_poussee_matiere(
+    oral_actuel: rebalance.OralActuel, ctx: dict, etendre: bool,
+) -> rebalance.Changement | None:
+    """Paliers 2/3 pour le changement de matière — même principe que
+    `_tenter_resolution_poussee`, mais pour un seul oral à replacer."""
+    examinateurs = list(ctx['examinateurs_par_id'].values())
+    grille_initiale = ctx['grille_horaires']
+    grille = grille_initiale
+    if etendre:
+        duree = rebalance.duree_creneau_estimee(grille_initiale, [oral_actuel])
+        grille = rebalance.construire_grille_etendue(grille_initiale, duree)
+    resultat = rebalance.resoudre_oraux_difficiles(
+        [oral_actuel], examinateurs, ctx['occupations'], grille,
+        {oral_actuel.id_candidat: ctx['autre_heure_sujet']}, ctx['ecart_mini_minutes'],
+        ctx['profs_a_eviter'], grille_initiale=grille_initiale,
+    )
+    return resultat.changements[0] if resultat.changements else None
+
+
+def _proposer_compaction(
+    oral_actuel: rebalance.OralActuel, id_ancienne_matiere: int,
+) -> rebalance.Changement | None:
+    """
+    Suggestion optionnelle (jamais appliquée automatiquement) : une fois le
+    créneau de `oral_actuel` libéré chez son examinateur (l'ancienne matière),
+    propose de déplacer l'oral le plus tardif de ce même examinateur dans ce
+    créneau — compacte son planning et libère du temps en fin de journée.
+    """
+    lignes = db_get(
+        db_facility_web.SELECT_ORAUX_MATIERE_DU_JOUR, id_ancienne_matiere, no_list_auto=False,
+    )
+    oraux_meme_examinateur = [
+        _oral_actuel_depuis_ligne(l) for l in lignes
+        if l['id_examinateur'] == oral_actuel.id_examinateur and l['id'] != oral_actuel.id
+    ]
+    if not oraux_meme_examinateur:
+        return None
+    ecart_mini_minutes = _load_algo_params()['ecart_mini']
+    autres_heures_sujet: dict[int, timedelta | None] = {}
+    for o in oraux_meme_examinateur:
+        autres = db_get(
+            db_facility_web.SELECT_LISTE_EDITION_ORAL, o.id_candidat, no_list_auto=False,
+        )
+        autre = next((a for a in autres if a['id'] != o.id), None)
+        autres_heures_sujet[o.id_candidat] = _to_td(autre['heure_sujet']) if autre else None
+    return rebalance.proposer_compaction(
+        oraux_meme_examinateur, oral_actuel.heure_sujet, autres_heures_sujet, ecart_mini_minutes,
+    )
+
+
+@app.route("/gestion/candidat/changer-matiere", methods=["GET", "POST"])
+@admin_required
+@nocache
+def changer_matiere_candidat() -> ResponseReturnValue:
+    """
+    Change la matière (choix1 ou choix2) d'un candidat en cours de journée :
+    remplace son oral de l'ancienne matière par un nouveau dans la matière
+    choisie — cf. docs/workflow_admin.md.
+    """
+    id_candidat = request.values.get("id_candidat", type=int)
+    if id_candidat is None:
+        abort(404, "Pas de candidat avec ce numéro")
+    candidat_info = db_get(db_facility_web.SELECT_CANDIDAT_CHANGEMENT_MATIERE, id_candidat)
+    if not candidat_info:
+        abort(404, "Candidat introuvable")
+
+    oraux_candidat = db_get(
+        db_facility_web.SELECT_LISTE_EDITION_ORAL, id_candidat, no_list_auto=False,
+    )
+    liste_matieres = db_get(db_facility_web.SELECT_LISTE_MATIERES, no_list_auto=False)
+
+    if request.method == "GET":
+        return render_template(
+            "changer_matiere_candidat.html",
+            centre=CENTRE_EXAMEN,
+            candidat=candidat_info,
+            oraux=oraux_candidat,
+            matieres=liste_matieres,
+            etape="saisie",
+            url_of_page=request.url,
+            username=get_username(),
+            authenticated=is_authenticated(),
+        )
+
+    # POST
+    id_oral_a_remplacer = request.form.get("id_oral_a_remplacer", type=int)
+    id_nouvelle_matiere = request.form.get("nouvelle_matiere", type=int)
+    if not id_oral_a_remplacer or not id_nouvelle_matiere:
+        return render_template(
+            "changer_matiere_candidat.html",
+            centre=CENTRE_EXAMEN, candidat=candidat_info, oraux=oraux_candidat,
+            matieres=liste_matieres, etape="saisie",
+            url_of_page=request.url, username=get_username(), authenticated=is_authenticated(),
+            error_msg="Sélectionnez l'oral à remplacer et la nouvelle matière.",
+        ), 400
+    if id_nouvelle_matiere in (candidat_info['choix1'], candidat_info['choix2']):
+        return render_template(
+            "changer_matiere_candidat.html",
+            centre=CENTRE_EXAMEN, candidat=candidat_info, oraux=oraux_candidat,
+            matieres=liste_matieres, etape="saisie",
+            url_of_page=request.url, username=get_username(), authenticated=is_authenticated(),
+            error_msg="La nouvelle matière doit être différente des deux matières déjà choisies.",
+        ), 400
+
+    oral_ligne = db_get(db_facility_web.SELECT_ORAL_POUR_CHANGEMENT_MATIERE, id_oral_a_remplacer)
+    if not oral_ligne or oral_ligne['id_candidat'] != id_candidat:
+        abort(404, "Oral introuvable pour ce candidat")
+    oral_actuel = _oral_actuel_depuis_ligne(oral_ligne)
+    nouvelle_matiere_nom = next(
+        (m['nom'] for m in liste_matieres if m['id'] == id_nouvelle_matiere), None,
+    )
+    if nouvelle_matiere_nom is None:
+        abort(400, "Matière introuvable")
+
+    niveau_resolution = request.form.get("niveau_resolution", "glouton")
+    etape = request.form.get("etape", "previsualisation")
+    if etape == "resolution_poussee_grille":
+        niveau_resolution = "grille"
+    elif etape == "resolution_poussee_etendue":
+        niveau_resolution = "etendue"
+
+    changement, ctx = _calculer_plan_changement_matiere(
+        id_candidat, oral_actuel, id_nouvelle_matiere, nouvelle_matiere_nom,
+    )
+    if changement is None and niveau_resolution in ("grille", "etendue"):
+        changement = _tenter_resolution_poussee_matiere(
+            oral_actuel, ctx, etendre=(niveau_resolution == "etendue"),
+        )
+
+    inclure_compaction = request.form.get("inclure_compaction") == "on"
+    compaction = _proposer_compaction(oral_actuel, oral_ligne['id_matiere'])
+
+    if etape in ("resolution_poussee_grille", "resolution_poussee_etendue"):
+        etape = "previsualisation"
+
+    if etape == "confirmer":
+        if changement is None:
+            abort(400, "Aucun placement disponible à confirmer.")
+        d = {
+            'id': changement.id_oral,
+            'examinateur': changement.nouvel_examinateur_id,
+            'heure_sujet': _td_to_time_str(changement.nouvelle_heure_sujet),
+            'heure_oral': _td_to_time_str(changement.nouvelle_heure_oral),
+            'heure_fin': _td_to_time_str(changement.nouvelle_heure_fin),
+            'mis_a_jour': 1,
+        }
+        # L'ancien examinateur n'est pas la cible de cette mise à jour (donc
+        # pas notifié par _appliquer_changement_oral) mais doit être informé
+        # qu'un candidat a disparu de son planning.
+        _notifier_salle_loge_examinateur(oral_actuel.id_examinateur, changement.numero)
+        _appliquer_changement_oral(d, changement.numero)
+
+        ancienne_matiere_id = oral_ligne['id_matiere']
+        requete_choix = (
+            db_facility_web.UPDATE_CANDIDAT_CHOIX1
+            if candidat_info['choix1'] == ancienne_matiere_id
+            else db_facility_web.UPDATE_CANDIDAT_CHOIX2
+        )
+        db_update(requete_choix, id_candidat=id_candidat, nouvelle_matiere=id_nouvelle_matiere)
+
+        compaction_appliquee = None
+        if inclure_compaction and compaction is not None:
+            d_compaction = {
+                'id': compaction.id_oral,
+                'examinateur': compaction.nouvel_examinateur_id,
+                'heure_sujet': _td_to_time_str(compaction.nouvelle_heure_sujet),
+                'heure_oral': _td_to_time_str(compaction.nouvelle_heure_oral),
+                'heure_fin': _td_to_time_str(compaction.nouvelle_heure_fin),
+                'mis_a_jour': 1,
+            }
+            _appliquer_changement_oral(d_compaction, compaction.numero)
+            compaction_appliquee = compaction
+
+        return render_template(
+            "changer_matiere_candidat.html",
+            centre=CENTRE_EXAMEN,
+            candidat=candidat_info,
+            etape="termine",
+            changement=changement,
+            compaction=compaction_appliquee,
+            url_of_page=request.url,
+            username=get_username(),
+            authenticated=is_authenticated(),
+        )
+
+    return render_template(
+        "changer_matiere_candidat.html",
+        centre=CENTRE_EXAMEN,
+        candidat=candidat_info,
+        etape="previsualisation",
+        changement=changement,
+        compaction=compaction,
+        id_oral_a_remplacer=id_oral_a_remplacer,
+        nouvelle_matiere=id_nouvelle_matiere,
+        niveau_resolution=niveau_resolution,
+        url_of_page=request.url,
+        username=get_username(),
+        authenticated=is_authenticated(),
+    )
+
+
 @app.route('/gestion/delete-examinateur', methods=['POST'])
 @admin_required
 @nocache
