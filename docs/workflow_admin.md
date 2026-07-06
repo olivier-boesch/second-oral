@@ -136,7 +136,7 @@ Nom;Disc.poste;Salle;Heure mini;Etab;Loge
 | `Nom` | Nom complet de l'examinateur | Texte libre | `Dupont Marie` |
 | `Disc.poste` | Discipline enseignée | Nom court ou complet de `preps.csv` | `Maths` |
 | `Salle` | Numéro/nom de la salle | Texte libre (ex. `A101`) | `B201` |
-| `Heure mini` | Heure de début au plus tôt (format 24h, entier) | `8` à `17` | `9` |
+| `Heure mini` | Heure de début au plus tôt (format 24h) | `8` à `17`, ou `H:MM` (ex. `9:30`) | `9` ou `9:30` |
 | `Etab` | Établissement(s) d'origine, séparés par virgule | Texte libre | `St Ex,Lumière` |
 | `Loge` | Salle de loge de rattachement | Texte libre (ex. `B103`) | `B103` |
 
@@ -152,7 +152,7 @@ Durand Paul;Mana;B202;8;St Ex,Diderot;B203
 
 **Règles importantes :**
 - `Disc.poste` doit correspondre à une discipline de `preps.csv`
-- `Heure mini` définit l'heure à partir de laquelle l'examinateur peut recevoir des candidats. Un examinateur avec `Heure mini = 9` n'aura pas d'oral avant 9h00.
+- `Heure mini` définit l'heure à partir de laquelle l'examinateur peut recevoir des candidats. Un examinateur avec `Heure mini = 9` n'aura pas d'oral avant 9h00. Les minutes sont acceptées (`9:30` → pas d'oral avant 9h30).
 - `Etab` : l'algorithme évite d'assigner un candidat dont l'établissement (`Etab` dans candidats.csv) correspond à l'établissement de l'examinateur. Utiliser les **mêmes abréviations** dans les deux fichiers.
 - `Loge` : regroupe les examinateurs par salle de loge pour l'organisation des surveillants. Toutes les salles d'une même loge doivent avoir le même identifiant de loge.
 - Un examinateur peut appartenir à plusieurs établissements (séparés par virgule) : `St Ex,Diderot`

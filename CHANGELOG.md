@@ -8,6 +8,15 @@
 
 ### Added
 
+**`examinateurs.csv` — minutes dans `Heure mini`**
+- La colonne `Heure mini` accepte désormais une heure:minute (`9:30`), en plus du format heure entière historique (`9`) — nouvelle fonction `algo.parser_heure_mini()`
+- Validation mise à jour dans `csv_validator.py` (heure 0-23, minutes 0-59 si présentes) ; la validation stricte de la case ODS (`vHeure`, intervalle numérique 0-23) a été retirée car elle aurait bloqué la saisie de minutes dans le tableur — la validation faisant foi reste celle de `csv_validator.py` à l'upload
+- Aucun changement de comportement pour les fichiers existants (heure entière toujours acceptée)
+
+**Tests (suite 13)**
+- `tests/unit/test_algo.py::TestParserHeureMini` : heure entière, heure:minute, zéro initial, espaces, effet réel sur le nombre de créneaux interdits (précision à la minute, pas seulement à l'heure)
+- `tests/unit/test_csv_validator.py` : heure:minute valide, minutes hors bornes, heure hors bornes avec minutes
+
 **Algorithme de placement — mode optimal CP-SAT**
 - Nouvelle option `cp_optimal` (`/gestion/algo`) ou `ALGO_CP_OPTIMAL` : supprime toute limite de temps au solveur CP-SAT, qui tourne alors jusqu'à preuve mathématique d'optimalité plutôt que de s'arrêter à `cp_timeout`
 - ⚠️ Avertissement explicite dans l'UI (texte rouge + confirmation JS à l'activation) et dans `docs/algo.md` : peut prendre plusieurs heures, voire ne jamais aboutir, sur un jeu de données réel — un arrêt manuel (`/gestion/algo/stop`) ne publie aucune solution (contrairement à l'expiration normale de `cp_timeout`, qui conserve la meilleure solution trouvée)

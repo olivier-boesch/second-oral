@@ -236,6 +236,19 @@ def chercher_par_matiere(liste: list[Union["Oral", "Examinateur"]], matiere: str
             return item
 
 
+def parser_heure_mini(valeur: str) -> time:
+    """Parse la colonne 'Heure mini' de examinateurs.csv.
+
+    Accepte une heure entière ('9') pour compatibilité avec les fichiers
+    existants, ou une heure:minute ('9:30') — toujours en 24h.
+    """
+    valeur = valeur.strip()
+    if ':' in valeur:
+        h, m = valeur.split(':', 1)
+        return time(hour=int(h), minute=int(m))
+    return time(hour=int(valeur))
+
+
 class CreneauInterdit:
     """
         Définit si un créneau est interdit pour placer un oral
@@ -641,7 +654,7 @@ class AlgoOne:
             salle = p["Salle"]
             loge = p['Loge']
             etab = p["Etab"]
-            heure_debut = time(hour=int(p['Heure mini']))
+            heure_debut = parser_heure_mini(p['Heure mini'])
             t = Examinateur(nom=p["Nom"],
                             matiere=matiere,
                             max_creneaux_journee=self.max_creneaux_journee,

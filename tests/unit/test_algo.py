@@ -40,7 +40,9 @@ if "db_facility_save" not in sys.modules:
     _dfs.DbFacility = MagicMock
     sys.modules["db_facility_save"] = _dfs
 
-from algo import AlgoOne, AlgoError, PasDeCreneauDisponible, CreneauInterdit  # noqa: E402
+from algo import (  # noqa: E402
+    AlgoOne, AlgoError, PasDeCreneauDisponible, CreneauInterdit, parser_heure_mini,
+)
 
 
 # ── Constantes CSV ────────────────────────────────────────────────────────────
@@ -725,3 +727,36 @@ class TestPauseMeridienne:
             dt1 = datetime.combine(date(1, 1, 1), h1)
             dt2 = datetime.combine(date(1, 1, 1), h2)
             assert dt2 - dt1 == timedelta(minutes=20)
+
+
+class TestParserHeureMini:
+    """parser_heure_mini : colonne 'Heure mini' de examinateurs.csv —
+    heure entière ('9') pour compatibilité, ou heure:minute ('9:30')."""
+
+    def test_heure_entiere(self):
+        assert parser_heure_mini("9") == time(hour=9, minute=0)
+
+    def test_heure_avec_minutes(self):
+        assert parser_heure_mini("9:30") == time(hour=9, minute=30)
+
+    def test_heure_avec_zero_initial(self):
+        assert parser_heure_mini("09:05") == time(hour=9, minute=5)
+
+    def test_espaces_ignores(self):
+        assert parser_heure_mini("  9:30  ") == time(hour=9, minute=30)
+
+    def test_valeur_integre_dans_le_placement(self, tmp_path):
+        """Les minutes de 'Heure mini' influencent bien le nombre de
+        créneaux interdits (pas seulement l'heure ronde)."""
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"96000000{i}") for i in range(3)],
+            exams=[_exam("Prof Maths", "Maths", "A101", heure="8:30"),
+                   _exam("Prof Philo", "Philo", "B101")],
+        )
+        prof_maths = next(m for m in alg.liste_matieres if m.nom == "Maths").examinateurs[0]
+        # heure_debut de la journée = 8h00 (défaut de _build_algo) ; créneaux
+        # de 20 min (_PREPS_BASE) ; 8h30 - 8h00 = 30 min -> 1 créneau interdit
+        # (30 // 20 = 1), pas 0 (arrondi à l'heure) ni 2 (arrondi à l'heure sup.).
+        n_interdits = sum(1 for o in prof_maths.oraux if isinstance(o, CreneauInterdit))
+        assert n_interdits == 1

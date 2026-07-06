@@ -423,13 +423,6 @@ def generate_ods_modele(preps_rows: list[dict] | None = None) -> bytes:
     )
     validations.addElement(val_tt)
 
-    val_heure = ContentValidation(
-        name="vHeure",
-        condition="of:cell-content-is-between(0;23)",
-        allowemptycell="true",
-    )
-    validations.addElement(val_heure)
-
     val_etab = ContentValidation(
         name="vEtab",
         condition=etab_range,
@@ -457,7 +450,10 @@ def generate_ods_modele(preps_rows: list[dict] | None = None) -> bytes:
     sheet_exam = Table(name="examinateurs")
     doc.spreadsheet.addElement(sheet_exam)
 
-    exam_col_validations = {1: "vDisc", 3: "vHeure", 4: "vEtab", 5: "vEtab", 6: "vEtab"}
+    # 'Heure mini' (3) : pas de validation ODS stricte (accepte 'H' ou 'H:MM',
+    # un intervalle numérique bloquerait la saisie des minutes) — vérifié par
+    # csv_validator.py à l'upload.
+    exam_col_validations = {1: "vDisc", 4: "vEtab", 5: "vEtab", 6: "vEtab"}
 
     hr2 = TableRow()
     for h in _EXAM_ODS_HEADERS:

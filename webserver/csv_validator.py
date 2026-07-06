@@ -78,7 +78,8 @@ def _err(file, row, msg):  return _issue("error",   file, row, msg)
 def _warn(file, row, msg): return _issue("warning", file, row, msg)
 
 _INE_RE = re.compile(r'\(.+\)\s*$')
-_HOUR_RE = re.compile(r'^\d{1,2}$')
+# 'Heure mini' : heure entière ('9') ou heure:minute ('9:30'), cf. algo.parser_heure_mini
+_HOUR_RE = re.compile(r'^(\d{1,2})(?::(\d{1,2}))?$')
 
 
 # ── Validation preps.csv ──────────────────────────────────────────────────────
@@ -167,9 +168,15 @@ def validate_profs(rows: list[dict], matieres: set[str], noms_courts: set[str]) 
             salles.add(salle)
 
         heure = r.get("Heure mini", "").strip()
-        if not _HOUR_RE.match(heure) or not (0 <= int(heure) <= 23):
+        m = _HOUR_RE.match(heure)
+        heure_ok = (
+            m is not None and 0 <= int(m.group(1)) <= 23
+            and (m.group(2) is None or 0 <= int(m.group(2)) <= 59)
+        )
+        if not heure_ok:
             issues.append(_err("examinateurs", i,
-                f"'Heure mini' doit être un entier entre 0 et 23 (valeur : '{heure}')."))
+                f"'Heure mini' doit être une heure entre 0 et 23, au format 'H' ou 'H:MM' "
+                f"(valeur : '{heure}')."))
 
         if not r.get("Loge", "").strip():
             issues.append(_warn("examinateurs", i, f"Colonne 'Loge' vide (prof '{nom}')."))

@@ -206,6 +206,20 @@ class TestValidateProfs:
         errs = errors_of(validate_profs(rows, MATIERES, NOM_COURTS))
         assert any("Heure mini" in e["message"] for e in errs)
 
+    def test_hour_with_minutes_accepted(self):
+        rows = parse_profs(make_profs_row(heure="9:30"))
+        assert validate_profs(rows, MATIERES, NOM_COURTS) == []
+
+    def test_hour_with_minutes_out_of_range(self):
+        rows = parse_profs(make_profs_row(heure="9:75"))
+        errs = errors_of(validate_profs(rows, MATIERES, NOM_COURTS))
+        assert any("Heure mini" in e["message"] for e in errs)
+
+    def test_hour_with_minutes_bad_hour(self):
+        rows = parse_profs(make_profs_row(heure="25:00"))
+        errs = errors_of(validate_profs(rows, MATIERES, NOM_COURTS))
+        assert any("Heure mini" in e["message"] for e in errs)
+
     def test_duplicate_salle_warning(self):
         rows = parse_profs(make_profs_row(salle="1"), make_profs_row(nom="Martin", salle="1"))
         warns = warnings_of(validate_profs(rows, MATIERES, NOM_COURTS))
