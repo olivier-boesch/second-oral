@@ -76,6 +76,10 @@
 
 - `/gestion/examinateur/disponibilite` : les oraux replacés uniquement grâce à la résolution poussée (palier 2 « mêmes horaires » ou palier 3 « extension d'horaire ») n'étaient jamais écrits en base à la confirmation — celle-ci recalculait le plan à partir de zéro (glouton seul), perdant silencieusement le résultat des paliers précédents. Le niveau de résolution atteint est désormais reporté d'une requête à l'autre (champ caché `niveau_resolution`) et rejoué avant application, pour que « Confirmer et notifier » persiste exactement ce qui a été prévisualisé.
 
+### Removed
+
+- **Moteur génétique** (`algo_ga.py`, `AlgoGA`) : retiré après évaluation — qualité de placement trop en retrait des moteurs Monte-Carlo et CP-SAT, y compris après plusieurs tentatives d'amélioration de la convergence (réparation locale mémétique, mutation adaptative). Suppression complète : `algo_ga.py`, `tests/unit/test_algo_ga.py`, la branche `ALGO_ENGINE=genetic` dans `algo.py`, les paramètres `ga_population`/`ga_generations`/`ga_timeout`/`ga_mutation_rate` (backend et UI `/gestion/algo`), et l'option « Génétique » du sélecteur de moteur. `monte_carlo` et `cpsat` restent les deux seuls moteurs disponibles.
+
 ## [2026.2] — 2026-07-06
 
 ### Added

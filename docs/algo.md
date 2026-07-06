@@ -2,23 +2,26 @@
 
 ## Vue d'ensemble
 
-`algo.py` résout le problème d'appairage candidats ↔ examinateurs pour les oraux du second groupe (bac). Trois moteurs sont disponibles, sélectionnables via le paramètre `engine` (`/gestion/algo` ou variable d'environnement `ALGO_ENGINE`) :
+`algo.py` résout le problème d'appairage candidats ↔ examinateurs pour les oraux du second groupe (bac). Deux moteurs sont disponibles, sélectionnables via le paramètre `engine` (`/gestion/algo` ou variable d'environnement `ALGO_ENGINE`) :
 
 - **`monte_carlo`** (historique, défaut) — recherche aléatoire massivement parallèle : on lance 1 000 runs indépendants en multiprocessing, chacun tente un placement différent (ordre des candidats aléatoire à chaque run), et on conserve le meilleur résultat (`algo.py`, `AlgoOne`).
 - **`cpsat`** (`algo_cp.py`, `AlgoCP`) — modélise l'appairage comme un problème de contraintes/optimisation résolu par Google OR-Tools CP-SAT, en une seule résolution. L'écart minimum candidat est une contrainte **garantie** (jamais de run "non conforme"). Le placement exact varie volontairement d'un lancement à l'autre (ordre de parcours mélangé, graine du solveur, bruit de désambiguïsation dans l'objectif) tout en restant proche de l'optimum de tassement des créneaux — voir le commentaire en tête de `AlgoCP.resoudre()`.
-- **`genetic`** (`algo_ga.py`, `AlgoGA`) — algorithme génétique : fait évoluer une population de placements (encodage par permutation, un chromosome par matière) via sélection par tournoi, croisement OX, mutation et réparation locale. L'écart minimum candidat est une pénalité forte dans le fitness (best-effort, comme en Monte-Carlo) ; en revanche, les exclusions établissement/prof à éviter sont vérifiées strictement en fin d'évolution — l'algorithme échoue explicitement (`AucuneSolutionGA`) plutôt que de publier un planning qui les enfreindrait. Intérêt principal : la fonction de fitness peut absorber facilement de futurs critères d'optimisation (préférences, équité de charge...) sans reformuler un modèle de contraintes.
 
 ```
                               ┌─ monte_carlo : 1000 runs parallèles ──► meilleur run ─┐
 candidats.csv ──┐             │                  (Pool de CPUs)                       │
-examinateurs.csv─┤──► ALGO_ENGINE ┼─ cpsat : une résolution CP-SAT (OR-Tools) ────────┼──► BDD + PDFs
+examinateurs.csv─┤──► ALGO_ENGINE ┤                                                    ├──► BDD + PDFs
 preps.csv ──────┘             │                                                        │
-                              └─ genetic : population → générations (algo_ga.py) ─────┘
+                              └─ cpsat : une résolution CP-SAT (OR-Tools) ─────────────┘
 ```
+
+> Un troisième moteur (algorithme génétique, `algo_ga.py`) a été expérimenté puis retiré :
+> la qualité de placement obtenue restait trop en retrait des deux autres moteurs même
+> après plusieurs passes d'amélioration (réparation locale étendue, mutation adaptative).
 
 ### Équité entre examinateurs d'une même matière
 
-Les trois moteurs répartissent la charge le plus équitablement possible entre les
+Les deux moteurs répartissent la charge le plus équitablement possible entre les
 examinateurs d'une même matière (écart maximum d'1 oral entre le plus chargé et
 le moins chargé, quand la répartition parfaite n'est pas un multiple exact) :
 
@@ -29,29 +32,6 @@ le moins chargé, quand la répartition parfaite n'est pas un multiple exact) :
   minimale par matière, avec un poids délibérément énorme par rapport au terme
   de tassement des créneaux — le solveur ne sacrifie jamais l'équité pour un
   meilleur tassement.
-- **`genetic`** : le fitness pénalise ce même écart de charge (`_PENALITE_DESEQUILIBRE`),
-  avec un poids qui domine les variations d'occupation sans toutefois l'emporter
-  sur une vraie violation d'écart minimum candidat.
-
-### Convergence du moteur génétique (`algo_ga.py`)
-
-Deux mécanismes accélèrent significativement la convergence par rapport à un GA "pur" :
-
-- **Réparation locale étendue (algorithme mémétique)** — à chaque génération, en plus de
-  corriger les violations d'exclusion établissement/prof à éviter (`_reparer`), le moteur
-  corrige aussi localement les écarts minimum insuffisants (`_reparer_ecart`) et le
-  déséquilibre de charge entre examinateurs (`_reparer_desequilibre`), par échange ciblé
-  de créneaux. Ces trois réparations cherchent leur partenaire d'échange sur **toute** la
-  permutation (créneaux affectés à un candidat ET créneaux encore inutilisés) — un créneau
-  inutilisé n'a personne à y reloger, donc aucune vérification réciproque n'est nécessaire,
-  et c'est souvent là que se trouve la place manquante (ex. un examinateur encore peu chargé).
-  Sans cette recherche locale à chaque génération, ces critères ne s'amélioraient qu'au
-  hasard du croisement/de la mutation — beaucoup plus lent à converger.
-- **Mutation adaptative** — le taux de mutation décroît linéairement de `ALGO_GA_MUTATION_RATE`
-  (exploration en début d'évolution) vers un minimum interne (`_MUTATION_TAUX_MIN`,
-  exploitation en fin d'évolution), et chaque mutation déclenchée applique plusieurs swaps
-  proportionnels au nombre de candidats de la matière (`_MUTATION_INTENSITE`) plutôt qu'un
-  seul swap fixe — négligeable sur un grand chromosome.
 
 ---
 
@@ -105,17 +85,13 @@ Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → sec
 
 | Variable                  | Défaut         | Description                                                             |
 |---------------------------|----------------|---------------------------------------------------------------------------|
-| `ALGO_ENGINE`             | `monte_carlo`  | Moteur de résolution : `monte_carlo` (historique), `cpsat` ou `genetic`   |
+| `ALGO_ENGINE`             | `monte_carlo`  | Moteur de résolution : `monte_carlo` (historique) ou `cpsat`              |
 | `ALGO_N_RUN`              | `1000`         | Nombre de runs parallèles (Monte-Carlo uniquement)                        |
 | `ALGO_ECART_MINI`         | `80` (min)     | Écart minimum entre les deux oraux d'un candidat                         |
 | `ALGO_HEURE_DEBUT`        | `08:10`        | Heure de début des premiers créneaux                                     |
 | `ALGO_CRENEAUX`           | `13`           | Nombre de créneaux disponibles par examinateur                           |
 | `ALGO_CP_TIMEOUT`         | `60` (s)       | Délai max du solveur CP-SAT (CP-SAT uniquement)                          |
-| `ALGO_GA_POPULATION`      | `150`          | Taille de la population (génétique uniquement)                           |
-| `ALGO_GA_GENERATIONS`     | `300`          | Nombre maximum de générations (génétique uniquement)                     |
-| `ALGO_GA_TIMEOUT`         | `60` (s)       | Délai max de l'évolution (génétique uniquement)                          |
-| `ALGO_GA_MUTATION_RATE`   | `0.15`         | Probabilité de mutation par matière et par individu (génétique uniquement)|
-| `ALGO_PETITES_MATIERES_FIN_JOURNEE` | `true` | Repousse les matières peu demandées en fin de journée (les 3 moteurs) |
+| `ALGO_PETITES_MATIERES_FIN_JOURNEE` | `true` | Repousse les matières peu demandées en fin de journée (les 2 moteurs) |
 | `ALGO_SEUIL_PETITE_MATIERE`        | `0.5`  | Ratio candidats/capacité en-dessous duquel une matière est jugée "petite"|
 | `ALGO_MARGE_PETITE_MATIERE`        | `2`    | Créneaux de marge laissés en plus du strict nécessaire pour une petite matière |
 

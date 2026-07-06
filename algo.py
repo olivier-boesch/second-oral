@@ -667,10 +667,10 @@ class AlgoOne:
         (marquant CreneauInterdit) les premiers créneaux de leurs examinateurs.
 
         Réutilise le mécanisme CreneauInterdit déjà en place pour les décalages
-        d'heure_debut : les trois moteurs de résolution (Monte-Carlo, CP-SAT,
-        génétique) le respectent déjà de façon identique, donc ce seul point
-        d'entrée (partagé via AlgoOne.setup_from_files) leur profite à tous les
-        trois sans aucune duplication de logique.
+        d'heure_debut : les moteurs de résolution (Monte-Carlo, CP-SAT) le
+        respectent déjà de façon identique, donc ce seul point d'entrée
+        (partagé via AlgoOne.setup_from_files) leur profite à tous les deux
+        sans aucune duplication de logique.
 
         Une matière est jugée "petite" quand son ratio candidats/capacité
         (nombre de candidats divisé par le nombre total de créneaux disponibles
@@ -1106,7 +1106,7 @@ def selectionner_meilleur_algo(
 if __name__ == '__main__':
     # Repousser les petites matières en fin de journée : opt-in au niveau de
     # l'API (AlgoOne.__init__ défaut à False) mais activé par défaut ici, en
-    # production, pour les trois moteurs (cf. AlgoOne._reserver_petites_matieres).
+    # production, pour les deux moteurs (cf. AlgoOne._reserver_petites_matieres).
     _petites_matieres_kwargs = {
         'optimiser_petites_matieres': PETITES_MATIERES_FIN_JOURNEE,
         'seuil_petite_matiere': SEUIL_PETITE_MATIERE,
@@ -1127,21 +1127,6 @@ if __name__ == '__main__':
                       'numero_run': 0,
                       **_petites_matieres_kwargs}
         results = [algo_cp_run(parameters)]
-    elif ALGO_ENGINE == "genetic":
-        # Moteur génétique : une seule évolution (population -> générations),
-        # pas de tirages Monte-Carlo non plus.
-        log.info("Lancement de l'algorithme (moteur génétique)")
-        from algo_ga import algo_ga_run
-        parameters = {'filename_candidats': ELVS_FILE,
-                      'filename_examinateurs': PROFS_FILE,
-                      'filename_matieres': PREPS_FILE,
-                      'temps_minimum_entre_oraux': ECART_MINI_CANDIDAT,
-                      'max_creneaux_journee': CRENEAUX,
-                      'heure_debut': HEURE_DEBUT,
-                      'traiter_matiere_principales_en_premier': True,
-                      'numero_run': 0,
-                      **_petites_matieres_kwargs}
-        results = [algo_ga_run(parameters)]
     else:
         log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
 
@@ -1170,10 +1155,9 @@ if __name__ == '__main__':
         results, ecart_mini_minutes,
     )
     if ALGO_ENGINE == "monte_carlo":
-        # Non pertinent en CP-SAT/génétique : une seule résolution est tentée
-        # (pas de tirages Monte-Carlo), donc "n_err / N_run" n'a pas de sens
-        # ici — l'échec éventuel est déjà couvert par le message critique
-        # ci-dessous.
+        # Non pertinent en CP-SAT : une seule résolution est tentée (pas de
+        # tirages Monte-Carlo), donc "n_err / N_run" n'a pas de sens ici —
+        # l'échec éventuel est déjà couvert par le message critique ci-dessous.
         log.info(f"erreurs: {n_err} / {N_run} soit {n_err / N_run * 100:.2f}%")
     if best_alg is None:
         log.critical(
@@ -1186,10 +1170,8 @@ if __name__ == '__main__':
         sys.exit(1)
     if aucun_run_conforme:
         # En CP-SAT, l'écart minimum est une contrainte dure : ce cas ne
-        # devrait jamais se produire (sauf solution de repli). En génétique,
-        # une seule évolution est tentée (pas de tirages Monte-Carlo). Dans
-        # les deux cas, pas de mention de "tentatives" (notion propre au
-        # Monte-Carlo) ici.
+        # devrait jamais se produire (sauf solution de repli) — donc pas de
+        # mention de "tentatives" (notion propre au Monte-Carlo) ici.
         tentatives = f" trouvé sur {N_run} tentatives" if ALGO_ENGINE == "monte_carlo" else ""
         log.critical(
             f"Aucun run conforme à l'écart minimum candidat "

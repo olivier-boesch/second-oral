@@ -2592,10 +2592,6 @@ _ALGO_PARAMS_DEFAULTS = {
     "debug":            False,
     "engine":           "monte_carlo",
     "cp_timeout":       60,
-    "ga_population":    150,
-    "ga_generations":   300,
-    "ga_timeout":       60,
-    "ga_mutation_rate": 0.15,
 }
 
 def _load_algo_params() -> dict:
@@ -2811,13 +2807,9 @@ def algo_save_params() -> ResponseReturnValue:
         params["ecart_mini"]  = max(10, min(240, int(data.get("ecart_mini", 80))))
         params["debug"]       = bool(data.get("debug", False))
         engine = str(data.get("engine", "monte_carlo")).strip().lower()
-        engines_valides = ("monte_carlo", "cpsat", "genetic")
-        params["engine"]           = engine if engine in engines_valides else "monte_carlo"
-        params["cp_timeout"]       = max(5, min(600, int(data.get("cp_timeout", 60))))
-        params["ga_population"]    = max(10, min(2000, int(data.get("ga_population", 150))))
-        params["ga_generations"]   = max(1, min(5000, int(data.get("ga_generations", 300))))
-        params["ga_timeout"]       = max(5, min(600, int(data.get("ga_timeout", 60))))
-        params["ga_mutation_rate"] = max(0.0, min(1.0, float(data.get("ga_mutation_rate", 0.15))))
+        engines_valides = ("monte_carlo", "cpsat")
+        params["engine"]     = engine if engine in engines_valides else "monte_carlo"
+        params["cp_timeout"] = max(5, min(600, int(data.get("cp_timeout", 60))))
     except (ValueError, KeyError):
         return jsonify({"ok": False, "reason": "invalid_params"}), 400
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
