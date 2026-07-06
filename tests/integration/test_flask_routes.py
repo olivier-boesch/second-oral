@@ -59,6 +59,7 @@ class TestAuthRedirects:
         "/gestion/algo/validate",
         "/gestion/liste-examinateurs",
         "/gestion/edit-oral",
+        "/gestion/jour-j",
     ])
     def test_admin_route_redirects_without_session(self, client, url):
         r = client.get(url)
@@ -299,6 +300,7 @@ class TestAdminRoutes:
         r = admin_client.get("/gestion")
         assert r.status_code == 200
 
+
     def test_algo_status_reflects_is_running(self, admin_client, monkeypatch):
         import algo_bg
         monkeypatch.setattr(algo_bg, "is_running", lambda: True)
@@ -490,6 +492,79 @@ class TestAdminRoutes:
             content_type="multipart/form-data",
         )
         assert r.status_code in (302, 403)
+
+
+class TestJourJ:
+    """Hub de pilotage en direct (/gestion/jour-j) : état ambiant (algo,
+    pause méridienne) + accès rapide aux actions de rééquilibrage."""
+
+    EXAMINATEURS = [
+        {"id": 1, "nom": "ProfA", "etablissements": "", "salle": "A1", "loge": "L1",
+         "matiere": "Maths", "nb_oraux": 5},
+    ]
+    CANDIDATS = [
+        {"id": 100, "nom": "Dupont Jean", "numero": "0123456789A", "tiers_temps": 0},
+    ]
+
+    @pytest.fixture(autouse=True)
+    def _isolation(self, monkeypatch, tmp_path):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE", tmp_path / "algo_params.json")
+
+    def test_ok_et_contient_les_deux_actions_rapides(self, admin_client, db_mock):
+        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
+        r = admin_client.get("/gestion/jour-j")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "ProfA (Maths)" in body
+        assert "Dupont Jean (0123456789A)" in body
+        assert "au repos" in body
+        assert "non configurée" in body  # aucune pause méridienne par défaut
+
+    def test_algo_en_cours_affiche(self, admin_client, db_mock, monkeypatch):
+        import algo_bg
+        monkeypatch.setattr(algo_bg, "is_running", lambda: True)
+        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
+        r = admin_client.get("/gestion/jour-j")
+        assert r.status_code == 200
+        assert "en cours…" in r.data.decode()
+
+    def test_pause_meridienne_en_cours(self, admin_client, db_mock, tmp_path, monkeypatch):
+        import app as app_module
+        import datetime as _dt_module
+        (tmp_path / "algo_params.json").write_text(json.dumps({
+            "pause_meridienne_debut": "12:00", "pause_meridienne_duree": 30,
+        }))
+
+        class _FakeDatetime:
+            @staticmethod
+            def now(tz=None):
+                return _dt_module.datetime(2026, 7, 6, 12, 10)
+
+        monkeypatch.setattr(app_module, "datetime", _FakeDatetime)
+        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
+        r = admin_client.get("/gestion/jour-j")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "en cours (12:00" in body
+
+    def test_pause_meridienne_a_venir(self, admin_client, db_mock, tmp_path, monkeypatch):
+        import app as app_module
+        import datetime as _dt_module
+        (tmp_path / "algo_params.json").write_text(json.dumps({
+            "pause_meridienne_debut": "12:00", "pause_meridienne_duree": 30,
+        }))
+
+        class _FakeDatetime:
+            @staticmethod
+            def now(tz=None):
+                return _dt_module.datetime(2026, 7, 6, 9, 0)
+
+        monkeypatch.setattr(app_module, "datetime", _FakeDatetime)
+        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
+        r = admin_client.get("/gestion/jour-j")
+        assert r.status_code == 200
+        assert "à venir (12:00" in r.data.decode()
 
 
 # ── Intégration ODS complète ─────────────────────────────────────────────────

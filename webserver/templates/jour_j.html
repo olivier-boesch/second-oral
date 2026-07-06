@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>2ndOral — {{ centre }} — Jour J</title>
+    {% include 'style.html' %}
+    <style>
+        .jj-section { margin: 1.5em 0; padding: 1em; border-radius: 8px; background: #f5f0ff; }
+        .jj-section h2 { margin-top: 0; font-size: 1.1em; }
+        .badge { display: inline-block; padding: .2em .6em; border-radius: 4px;
+                 font-size: .85em; font-weight: 600; }
+        .badge-ok      { background: #d4edda; color: #155724; }
+        .badge-running { background: #fff3cd; color: #856404; }
+        .badge-idle    { background: #e2e3e5; color: #383d41; }
+        .badge-pause-active { background: #fde2c8; color: #92400e; }
+        .badge-pause-a-venir { background: #e2e3e5; color: #383d41; }
+        .jj-quick-action { display: flex; flex-wrap: wrap; align-items: center; gap: .6em; margin: .8em 0; }
+        .jj-quick-action select { max-width: 320px; }
+        .jj-hint { font-size: .85em; color: var(--text-sm); margin-top: .3em; }
+    </style>
+</head>
+<body class="body-for-sticky body-admin">
+{% include 'auth_icon.html' %}
+{% include 'admin_nav.html' %}
+<h1>Jour J — pilotage en direct</h1>
+
+<div class="jj-section">
+    <h2>État</h2>
+    <p>
+        Algorithme :
+        <span class="badge {{ 'badge-running' if algo_running else 'badge-idle' }}">
+            {{ 'en cours…' if algo_running else 'au repos' }}
+        </span>
+    </p>
+    <p>
+        Pause méridienne :
+        {% if pause_info is none %}
+        <span class="badge badge-idle">non configurée</span>
+        {% elif pause_info.statut == 'en_cours' %}
+        <span class="badge badge-pause-active">en cours ({{ pause_info.debut }} – {{ pause_info.fin }})</span>
+        {% elif pause_info.statut == 'a_venir' %}
+        <span class="badge badge-pause-a-venir">à venir ({{ pause_info.debut }} – {{ pause_info.fin }})</span>
+        {% else %}
+        <span class="badge badge-idle">terminée ({{ pause_info.debut }} – {{ pause_info.fin }})</span>
+        {% endif %}
+        <span class="jj-hint">— réglable depuis <a href="{{ url_for('gestion_algo') }}">Algorithme</a></span>
+    </p>
+</div>
+
+<div class="jj-section">
+    <h2>🕒 Disponibilité d'un examinateur</h2>
+    <p class="jj-hint">Absence, retard ou renfort en cours de journée — accède directement au formulaire sans repasser par la liste complète.</p>
+    <div class="jj-quick-action">
+        <select id="jj-examinateur">
+            {% for e in examinateurs %}
+            <option value="{{ e['id'] }}">{{ e['nom'] }} ({{ e['matiere'] }})</option>
+            {% endfor %}
+        </select>
+        <button type="button" onclick="jjOuvrirDisponibilite()">🕒 Disponibilité</button>
+        <a href="{{ url_for('liste_examinateurs') }}">Voir tous les examinateurs</a>
+    </div>
+</div>
+
+<div class="jj-section">
+    <h2>🔄 Changement de matière d'un candidat</h2>
+    <p class="jj-hint">Un candidat change de matière après le placement initial — accède directement au formulaire sans repasser par la liste complète.</p>
+    <div class="jj-quick-action">
+        <select id="jj-candidat">
+            {% for c in candidats %}
+            <option value="{{ c['id'] }}">{{ c['nom'] }} ({{ c['numero'] }})</option>
+            {% endfor %}
+        </select>
+        <button type="button" onclick="jjOuvrirChangementMatiere()">🔄 Changer de matière</button>
+        <a href="{{ url_for('liste_candidats') }}">Voir tous les candidats</a>
+    </div>
+</div>
+
+<script>
+function jjOuvrirDisponibilite() {
+    const id = document.getElementById('jj-examinateur').value;
+    if (!id) return;
+    document.location = "{{ url_for('disponibilite_examinateur') }}?id_examinateur=" + encodeURIComponent(id);
+}
+function jjOuvrirChangementMatiere() {
+    const id = document.getElementById('jj-candidat').value;
+    if (!id) return;
+    document.location = "{{ url_for('changer_matiere_candidat') }}?id_candidat=" + encodeURIComponent(id);
+}
+</script>
+
+{% include 'footer.html' %}
+</body>
+</html>

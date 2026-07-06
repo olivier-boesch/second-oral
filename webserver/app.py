@@ -1380,6 +1380,56 @@ def index_gestion() -> ResponseReturnValue:
     )
 
 
+@app.route('/gestion/jour-j')
+@admin_required
+@nocache
+def jour_j() -> ResponseReturnValue:
+    """
+    Hub de pilotage en direct pendant les épreuves : état ambiant (algo en
+    cours, pause méridienne) + accès rapide aux deux actions de
+    rééquilibrage en cours de journée (disponibilité examinateur, changement
+    de matière d'un candidat), sans repasser par les listes complètes.
+
+    Limite actuelle : ne fait pas le suivi des oraux non replacés
+    automatiquement (paliers 2/3) — cet état est propre à chaque écran de
+    prévisualisation et n'est pas persisté ; cf. docs/workflow_admin.md.
+    """
+    from algo_bg import is_running as _is_running
+
+    examinateurs = db_get(db_facility_web.SELECT_LISTE_EXAMINATEURS, no_list_auto=False)
+    candidats = db_get(db_facility_web.SELECT_ALL_CANDIDATS, no_list_auto=False)
+
+    heure_pause_meridienne, duree_pause_meridienne = _pause_meridienne_params()
+    pause_info = None
+    if heure_pause_meridienne is not None and duree_pause_meridienne > timedelta(0):
+        maintenant = datetime.now(TIMEZONE)
+        td_maintenant = timedelta(hours=maintenant.hour, minutes=maintenant.minute)
+        pause_fin = heure_pause_meridienne + duree_pause_meridienne
+        if td_maintenant < heure_pause_meridienne:
+            statut = "a_venir"
+        elif td_maintenant < pause_fin:
+            statut = "en_cours"
+        else:
+            statut = "terminee"
+        pause_info = {
+            "debut": _td_to_time_str(heure_pause_meridienne),
+            "fin": _td_to_time_str(pause_fin),
+            "statut": statut,
+        }
+
+    return render_template(
+        "jour_j.html",
+        centre=CENTRE_EXAMEN,
+        examinateurs=examinateurs,
+        candidats=candidats,
+        algo_running=_is_running(),
+        pause_info=pause_info,
+        url_of_page=request.url,
+        username=get_username(),
+        authenticated=is_authenticated(),
+    )
+
+
 @app.route('/gestion/liste-examinateurs-json', methods=['GET'])
 @admin_required
 @nocache

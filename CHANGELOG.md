@@ -17,6 +17,13 @@
 - `tests/unit/test_algo_cp.py::TestAlgoCPModeOptimal` : désactivé par défaut, délai appliqué normalement quand désactivé, aucune limite (`max_time_in_seconds` reste à `inf`) quand activé
 - `tests/integration/test_flask_routes.py` : sauvegarde/valeur par défaut de `cp_optimal` via `/gestion/algo/params`
 
+**UX — hub "Jour J"**
+- Nouvelle page `/gestion/jour-j` (icône ⚡ en tête de la barre latérale admin) : centralise le pilotage en direct pendant les épreuves — état ambiant (algorithme en cours, statut de la pause méridienne : à venir/en cours/terminée) et accès rapide (liste déroulante) aux formulaires de disponibilité examinateur et de changement de matière candidat, sans repasser par les listes complètes
+- Objectif : réduire le nombre de clics/pages pour réagir à un imprévu (retard d'examinateur, changement de matière) en cours de journée
+
+**Tests (suite 11)**
+- `tests/integration/test_flask_routes.py::TestJourJ` : contenu de la page (listes déroulantes, lien retour), statut algorithme (en cours/au repos), statut pause méridienne (non configurée/à venir/en cours), redirection si non authentifié
+
 **Gestion en cours de journée (suite 3) — suggestion de renfort inédit**
 - Après l'ajout d'un nouvel examinateur avec une matière (`/gestion/add-examinateur`), un bandeau apparaît sur `/gestion/credentials` proposant de rééquilibrer dès maintenant vers lui les oraux déjà en cours pour cette matière
 - Le lien mène au formulaire existant de disponibilité (`/gestion/examinateur/disponibilite?renfort=1`), avec le champ « Disponible de nouveau à partir de » pré-rempli sur l'heure courante (arrondie aux 5 minutes suivantes) — modifiable avant de prévisualiser
