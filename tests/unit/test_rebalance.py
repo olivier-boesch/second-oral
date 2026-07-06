@@ -147,6 +147,39 @@ class TestPlanifierAbsenceEcartMini:
         assert plan.changements[0].nouvelle_heure_sujet == _td(10, 10)
 
 
+class TestPlacerPrivilegieCreneauAvantOralExistant:
+    """En repli (heure d'origine impossible), un créneau qui se termine juste
+    avant un oral déjà planifié de l'examinateur ciblé est préféré à un
+    créneau simplement plus proche de l'heure d'origine mais isolé."""
+
+    def test_privilegie_le_trou_avant_un_oral_existant(self):
+        oral = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA", heure_sujet=_td(9))
+        examinateurs = [
+            ExaminateurCible(id=2, nom="ProfB", etablissements=['']),
+            ExaminateurCible(id=3, nom="ProfC", etablissements=['']),
+        ]
+        plan = planifier_absence(
+            oraux_a_reaffecter=[oral],
+            examinateurs_disponibles=examinateurs,
+            occupations_initiales={
+                # ProfB : libre à 9h20 mais a déjà un oral à 10h -> 9h20 comble
+                # le trou juste avant (25 min d'écart).
+                2: [(_td(9, 15), _td(9, 30)), (_td(10, 15), _td(10, 30))],
+                # ProfC : aussi libre à 9h20, mais sans oral existant à
+                # proximité -> 9h20 lui serait pourtant plus proche de 9h.
+                3: [(_td(9, 15), _td(9, 30))],
+            },
+            grille_horaires=[_td(9), _td(9, 20), _td(10)],
+            autres_heures_sujet={100: None},
+            ecart_mini_minutes=0,
+            profs_a_eviter={},
+        )
+        assert not plan.non_replaces
+        changement = plan.changements[0]
+        assert changement.nouvel_examinateur_id == 2
+        assert changement.nouvelle_heure_sujet == _td(9, 20)
+
+
 class TestPlanifierRenfort:
     def test_decharge_examinateur_le_plus_charge(self):
         oral_a = _oral(1, 100, "N100", id_examinateur=1, examinateur_nom="ProfA", heure_sujet=_td(9))

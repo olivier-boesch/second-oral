@@ -79,9 +79,10 @@
 - Suggestion optionnelle (case à cocher) : compacter le planning de l'ancien examinateur en déplaçant son oral le plus tardif vers le créneau qui vient de se libérer
 - Portée volontairement limitée à un seul candidat à la fois
 - Nouvelles requêtes `SELECT_CANDIDAT_CHANGEMENT_MATIERE`, `SELECT_ORAL_POUR_CHANGEMENT_MATIERE`, `UPDATE_CANDIDAT_CHOIX1`, `UPDATE_CANDIDAT_CHOIX2` dans `db_facility_web.py` ; nouvelles fonctions `rebalance.planifier_changement_matiere()` et `rebalance.proposer_compaction()`
+- En repli (heure d'origine impossible), le placement glouton (`rebalance._placer`, partagé par la disponibilité examinateur, le renfort et le changement de matière) privilégie désormais un créneau qui se termine juste avant un oral déjà planifié de l'examinateur ciblé — comble un trou dans son planning plutôt que d'isoler le nouvel oral loin de ses autres oraux ; à défaut, retombe sur la proximité avec l'heure d'origine comme avant
 
 **Tests (suite 7)**
-- `tests/unit/test_rebalance.py` : `planifier_changement_matiere` (priorité même heure, repli avec écart minimum respecté, exclusions respectées, aucune option disponible), `proposer_compaction` (proposition de l'oral le plus tardif, absence d'oral déplaçable, écart minimum non respecté, liste vide)
+- `tests/unit/test_rebalance.py` : `planifier_changement_matiere` (priorité même heure, repli avec écart minimum respecté, exclusions respectées, aucune option disponible), `proposer_compaction` (proposition de l'oral le plus tardif, absence d'oral déplaçable, écart minimum non respecté, liste vide), préférence pour un créneau comblant un trou avant un oral existant de l'examinateur ciblé
 - `tests/integration/test_changer_matiere_candidat.py` : câblage de la route (formulaire, refus d'une matière déjà choisie, aucune écriture en base pendant la prévisualisation, confirmation avec double notification ancien/nouvel examinateur)
 
 ### Fixed

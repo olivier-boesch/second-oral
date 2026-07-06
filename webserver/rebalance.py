@@ -119,43 +119,77 @@ def _placer(
     """
     Cherche un (examinateur, heure_sujet) pour reloger `oral`.
 
-    Priorité stricte : le créneau HORAIRE d'origine d'abord (disruption
-    minimale — seul l'examinateur change, le candidat garde son heure), puis
-    les autres heures déjà utilisées aujourd'hui pour cette matière, triées
-    par proximité avec l'heure d'origine.
+    Priorité 1 : le créneau HORAIRE d'origine (disruption minimale — seul
+    l'examinateur change, le candidat garde son heure).
+
+    Priorité 2 (si l'heure d'origine est impossible) : parmi les autres
+    heures déjà utilisées aujourd'hui, on privilégie un créneau qui se
+    termine juste avant un oral déjà planifié de l'examinateur ciblé — comble
+    un trou dans son planning plutôt que d'isoler le nouvel oral loin de ses
+    autres oraux. À défaut d'un tel créneau pour un examinateur donné, on
+    retombe sur la proximité avec l'heure d'origine de `oral`.
     """
     duree_prep = oral.heure_oral - oral.heure_sujet
     duree_oral = oral.heure_fin - oral.heure_oral
+
+    heure_sujet = oral.heure_sujet
+    heure_oral = heure_sujet + duree_prep
+    heure_fin = heure_oral + duree_oral
+    for examinateur in examinateurs:
+        if examinateur.id == oral.id_examinateur:
+            continue  # ne serait pas un déplacement
+        if not _examinateur_autorise(examinateur, oral, profs_a_eviter):
+            continue
+        if not _intervalle_libre(occupations.get(examinateur.id, []), heure_oral, heure_fin):
+            continue
+        occupations.setdefault(examinateur.id, []).append((heure_oral, heure_fin))
+        return Changement(
+            id_oral=oral.id, id_candidat=oral.id_candidat, numero=oral.numero,
+            ancien_examinateur_nom=oral.examinateur_nom,
+            nouvel_examinateur_id=examinateur.id, nouvel_examinateur_nom=examinateur.nom,
+            ancienne_heure_sujet=oral.heure_sujet, nouvelle_heure_sujet=heure_sujet,
+            nouvelle_heure_oral=heure_oral, nouvelle_heure_fin=heure_fin,
+        )
 
     autres_heures = sorted(
         (h for h in set(grille_horaires) if h != oral.heure_sujet),
         key=lambda h: abs((h - oral.heure_sujet).total_seconds()),
     )
-    candidats_horaires = [oral.heure_sujet] + autres_heures
 
-    for heure_sujet in candidats_horaires:
+    candidats: list[tuple[int, float, timedelta, timedelta, timedelta, ExaminateurCible]] = []
+    for heure_sujet in autres_heures:
+        if not _ecart_suffisant(heure_sujet, autre_heure_sujet, ecart_mini_minutes):
+            continue
         heure_oral = heure_sujet + duree_prep
         heure_fin = heure_oral + duree_oral
-        if heure_sujet != oral.heure_sujet and not _ecart_suffisant(
-            heure_sujet, autre_heure_sujet, ecart_mini_minutes,
-        ):
-            continue
         for examinateur in examinateurs:
-            if examinateur.id == oral.id_examinateur and heure_sujet == oral.heure_sujet:
-                continue  # ne serait pas un déplacement
             if not _examinateur_autorise(examinateur, oral, profs_a_eviter):
                 continue
             if not _intervalle_libre(occupations.get(examinateur.id, []), heure_oral, heure_fin):
                 continue
-            occupations.setdefault(examinateur.id, []).append((heure_oral, heure_fin))
-            return Changement(
-                id_oral=oral.id, id_candidat=oral.id_candidat, numero=oral.numero,
-                ancien_examinateur_nom=oral.examinateur_nom,
-                nouvel_examinateur_id=examinateur.id, nouvel_examinateur_nom=examinateur.nom,
-                ancienne_heure_sujet=oral.heure_sujet, nouvelle_heure_sujet=heure_sujet,
-                nouvelle_heure_oral=heure_oral, nouvelle_heure_fin=heure_fin,
-            )
-    return None
+            trous_avant = [
+                o_debut - heure_fin
+                for o_debut, _o_fin in occupations.get(examinateur.id, [])
+                if o_debut >= heure_fin
+            ]
+            if trous_avant:
+                rang, cle = 0, min(trous_avant).total_seconds()
+            else:
+                rang, cle = 1, abs((heure_sujet - oral.heure_sujet).total_seconds())
+            candidats.append((rang, cle, heure_sujet, heure_oral, heure_fin, examinateur))
+
+    if not candidats:
+        return None
+    candidats.sort(key=lambda c: (c[0], c[1]))
+    _, _, heure_sujet, heure_oral, heure_fin, examinateur = candidats[0]
+    occupations.setdefault(examinateur.id, []).append((heure_oral, heure_fin))
+    return Changement(
+        id_oral=oral.id, id_candidat=oral.id_candidat, numero=oral.numero,
+        ancien_examinateur_nom=oral.examinateur_nom,
+        nouvel_examinateur_id=examinateur.id, nouvel_examinateur_nom=examinateur.nom,
+        ancienne_heure_sujet=oral.heure_sujet, nouvelle_heure_sujet=heure_sujet,
+        nouvelle_heure_oral=heure_oral, nouvelle_heure_fin=heure_fin,
+    )
 
 
 def planifier_absence(
