@@ -217,6 +217,78 @@ class TestDisponibiliteExaminateurPauseMeridienne:
         assert appels[0]["duree_pause_meridienne"] == timedelta(minutes=30)
 
 
+RENFORT_EXAMINATEUR_MATIERE = {"id": 2, "nom": "ProfB", "id_matiere": 5, "matiere": "Maths"}
+
+RENFORT_EXAMINATEURS_MATIERE = [
+    {"id": 1, "nom": "ProfA", "etablissements": "", "salle": "A1"},
+    {"id": 2, "nom": "ProfB", "etablissements": "", "salle": "A2"},
+    {"id": 3, "nom": "ProfC", "etablissements": "", "salle": "A3"},
+]
+
+RENFORT_ORAUX_DU_JOUR = [
+    # Bien avant la disponibilité du renfort (11h00) : ne doit JAMAIS être
+    # proposé comme repli, même si c'est la seule autre heure de la grille.
+    {"id": 10, "id_candidat": 100, "numero": "N100", "etablissement": "",
+     "id_examinateur": 1, "examinateur": "ProfA",
+     "heure_sujet": timedelta(hours=8, minutes=30), "heure_oral": timedelta(hours=8, minutes=45),
+     "heure_fin": timedelta(hours=9)},
+    # Deux oraux au MÊME horaire (14h00), chez deux collègues différents :
+    # le premier obtient « même heure » chez le renfort : le second doit
+    # retomber sur une autre heure déjà utilisée AUJOURD'HUI APRÈS 11h00 —
+    # ici, il n'y en a aucune -> il doit rester chez son examinateur actuel,
+    # jamais être proposé à 08h30.
+    {"id": 11, "id_candidat": 101, "numero": "N101", "etablissement": "",
+     "id_examinateur": 1, "examinateur": "ProfA",
+     "heure_sujet": timedelta(hours=14), "heure_oral": timedelta(hours=14, minutes=15),
+     "heure_fin": timedelta(hours=14, minutes=30)},
+    {"id": 12, "id_candidat": 103, "numero": "N103", "etablissement": "",
+     "id_examinateur": 3, "examinateur": "ProfC",
+     "heure_sujet": timedelta(hours=14), "heure_oral": timedelta(hours=14, minutes=15),
+     "heure_fin": timedelta(hours=14, minutes=30)},
+]
+
+
+def _side_effect_renfort_inedit(sql, *args):
+    import db_facility_web as dfw
+    if sql is dfw.SELECT_EXAMINATEUR_MATIERE:
+        return [RENFORT_EXAMINATEUR_MATIERE]
+    if sql is dfw.SELECT_ORAUX_MATIERE_DU_JOUR:
+        return RENFORT_ORAUX_DU_JOUR
+    if sql is dfw.SELECT_LISTE_EXAMINATEURS_PAR_MATIERE:
+        return RENFORT_EXAMINATEURS_MATIERE
+    if sql is dfw.SELECT_LISTE_EDITION_ORAL:
+        return []  # aucun autre oral pertinent pour l'écart minimum dans ce test
+    return []
+
+
+class TestDisponibiliteExaminateurRenfortNeDepasseParSonHeureDeDebut:
+    """Bug : un renfort déclaré disponible à partir d'une heure H ne doit
+    jamais recevoir un oral à une heure antérieure à H, même en repli
+    (cf. `_calculer_plan_disponibilite` — la grille passée à
+    `planifier_renfort` doit être restreinte aux heures >= H)."""
+
+    def test_aucune_heure_proposee_avant_la_disponibilite_du_renfort(self, admin_client, db_mock):
+        db_mock.make_sql_select.side_effect = _side_effect_renfort_inedit
+        r = admin_client.post("/gestion/examinateur/disponibilite", data={
+            "id_examinateur": "2", "etape": "previsualisation",
+            "indisponible_a_partir_de": "", "disponible_a_nouveau_a_partir_de": "11:00",
+        })
+        assert r.status_code == 200
+        body = r.data.decode()
+
+        import re
+        heures_proposees = re.findall(r'<td>(\d{2}:\d{2})(?: ⚠)?</td>\s*</tr>', body)
+        assert heures_proposees, "aucune ligne de changement trouvée dans la réponse"
+        assert all(h >= "11:00" for h in heures_proposees), heures_proposees
+        assert "08:30" not in heures_proposees
+
+        # Le second oral à 14h00 (N103) ne peut pas être replacé (aucune autre
+        # heure disponible >= 11h00 dans cette grille) : il ne doit apparaître
+        # dans aucune liste de changements, ni être signalé comme bloquant
+        # (planifier_renfort n'alimente jamais non_replaces).
+        assert "N103" not in body
+
+
 class TestDisponibiliteExaminateurConfirmation:
     def test_confirmer_applique_et_notifie(self, admin_client, db_mock, monkeypatch):
         import app as app_module

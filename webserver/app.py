@@ -1920,8 +1920,16 @@ def _calculer_plan_disponibilite(
                 charge_par_examinateur.get(o.id_examinateur, 0) + 1
             )
 
+        # Bug corrigé : la grille passée à _placer (via planifier_renfort) doit
+        # être restreinte aux heures >= dispo_retour, sinon son repli sur
+        # « une autre heure déjà utilisée aujourd'hui » peut proposer un
+        # horaire antérieur à l'arrivée du renfort (ex. 08h30 pour quelqu'un
+        # disponible seulement à partir de 11h00).
+        grille_horaires_renfort = [h for h in grille_horaires if h >= dispo_retour]
+
         plan.etendre(rebalance.planifier_renfort(
-            oraux_deplacables, examinateurs_par_id[id_examinateur], occupations2, grille_horaires,
+            oraux_deplacables, examinateurs_par_id[id_examinateur], occupations2,
+            grille_horaires_renfort,
             autres_heures_sujet, ecart_mini_minutes, profs_a_eviter, charge_par_examinateur,
             heure_pause_meridienne, duree_pause_meridienne,
         ))

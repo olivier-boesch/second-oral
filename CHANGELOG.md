@@ -109,6 +109,7 @@
 ### Fixed
 
 - `/gestion/examinateur/disponibilite` : les oraux replacés uniquement grâce à la résolution poussée (palier 2 « mêmes horaires » ou palier 3 « extension d'horaire ») n'étaient jamais écrits en base à la confirmation — celle-ci recalculait le plan à partir de zéro (glouton seul), perdant silencieusement le résultat des paliers précédents. Le niveau de résolution atteint est désormais reporté d'une requête à l'autre (champ caché `niveau_resolution`) et rejoué avant application, pour que « Confirmer et notifier » persiste exactement ce qui a été prévisualisé.
+- `/gestion/examinateur/disponibilite` (renfort) : un examinateur déclaré disponible seulement à partir d'une heure H pouvait se voir proposer un oral à une heure **antérieure** à H (repli de `_placer` sur « une autre heure déjà utilisée aujourd'hui », sans tenir compte de l'heure de disponibilité du renfort). La grille transmise à `planifier_renfort()` est désormais restreinte aux heures `>= H` ; un oral qui ne peut plus être replacé dans cette fenêtre reste simplement chez son examinateur actuel (comportement déjà non bloquant de `planifier_renfort`).
 
 ### Removed
 
