@@ -320,12 +320,11 @@ class TestAlgoCPEquiteEntreExaminateurs:
 
 
 class TestCutoffCreneauFinJournee:
-    """AlgoCP._cutoff_creneau_fin_journee : conversion de l'heure de fin
-    cible en index de créneau approximatif (durée d'oral moyenne pondérée
-    par la demande réelle de chaque matière) — testée directement, sans
-    passer par le solveur CP-SAT."""
+    """AlgoCP._cutoff_creneau_fin_journee : borne creneau_cible_fin_journee
+    à [0, max_creneau] — testée directement, sans passer par le solveur
+    CP-SAT. Aucune conversion (le réglage est déjà un index de créneau)."""
 
-    def test_none_si_heure_fin_cible_non_definie(self, tmp_path):
+    def test_none_si_creneau_cible_non_defini(self, tmp_path):
         alg = _build_algo_cp(
             tmp_path,
             candidats=[_cand(f"Cand{i}", f"400000000{i}") for i in range(3)],
@@ -333,79 +332,41 @@ class TestCutoffCreneauFinJournee:
         )
         assert alg._cutoff_creneau_fin_journee(max_creneau=14) is None
 
-    def test_none_si_aucun_candidat(self, tmp_path):
+    def test_valeur_inchangee_si_dans_les_bornes(self, tmp_path):
         alg = _build_algo_cp(
             tmp_path,
-            candidats=[],
+            candidats=[_cand(f"Cand{i}", f"410000000{i}") for i in range(3)],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
-            heure_fin_journee_cible=time(hour=9, minute=0),
+            creneau_cible_fin_journee=5,
         )
-        assert alg._cutoff_creneau_fin_journee(max_creneau=14) is None
+        assert alg._cutoff_creneau_fin_journee(max_creneau=14) == 5
 
-    def test_conversion_simple_duree_uniforme(self, tmp_path):
-        # Maths et Philo (défaut _PREPS_BASE) : 20 min d'oral chacune, autant
-        # de candidats des deux côtés (chaque candidat choisit les deux) ->
-        # durée moyenne pondérée = 20 min. Cible 09:00, début 08:00 -> delta
-        # 60 min = 3 créneaux de 20 min -> cutoff = 3 - 1 = 2.
-        alg = _build_algo_cp(
-            tmp_path,
-            candidats=[_cand(f"Cand{i}", f"410000000{i}") for i in range(4)],
-            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
-            heure_debut=time(hour=8, minute=0),
-            heure_fin_journee_cible=time(hour=9, minute=0),
-        )
-        assert alg._cutoff_creneau_fin_journee(max_creneau=14) == 2
-
-    def test_conversion_ponderee_par_la_demande(self, tmp_path):
-        # Maths (10 min) choisie par tous (8 candidats) ; Philo (40 min) par
-        # 6 d'entre eux, SVT (40 min) par les 2 autres. Durée moyenne
-        # pondérée = (600*8 + 2400*6 + 2400*2) / 16 = 1500 s = 25 min.
-        # Cible 09:00, début 08:00 -> delta 60 min -> cutoff = 60//25 - 1 = 1.
-        preps = ["Maths;Maths;10;10", "Philo;Philo;10;40", "SVT;SVT;10;40"]
-        candidats = (
-            [_cand(f"CandP{i}", f"4200000{i:03d}", m1="Maths", m2="Philo") for i in range(6)]
-            + [_cand(f"CandS{i}", f"4210000{i:03d}", m1="Maths", m2="SVT") for i in range(2)]
-        )
-        exams = [
-            _exam("ProfMaths", "Maths", "A101"),
-            _exam("ProfPhilo", "Philo", "B101"),
-            _exam("ProfSVT", "SVT", "C101"),
-        ]
-        alg = _build_algo_cp(
-            tmp_path, candidats=candidats, exams=exams, preps=preps,
-            heure_debut=time(hour=8, minute=0),
-            heure_fin_journee_cible=time(hour=9, minute=0),
-        )
-        assert alg._cutoff_creneau_fin_journee(max_creneau=14) == 1
-
-    def test_borne_a_zero_si_cible_avant_heure_debut(self, tmp_path):
+    def test_borne_a_zero_si_cible_negative(self, tmp_path):
         alg = _build_algo_cp(
             tmp_path,
             candidats=[_cand(f"Cand{i}", f"430000000{i}") for i in range(3)],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
-            heure_debut=time(hour=8, minute=0),
-            heure_fin_journee_cible=time(hour=7, minute=0),
+            creneau_cible_fin_journee=-3,
         )
         assert alg._cutoff_creneau_fin_journee(max_creneau=14) == 0
 
-    def test_borne_a_max_creneau_si_cible_tres_tardive(self, tmp_path):
+    def test_borne_a_max_creneau_si_cible_trop_grande(self, tmp_path):
         alg = _build_algo_cp(
             tmp_path,
             candidats=[_cand(f"Cand{i}", f"440000000{i}") for i in range(3)],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
-            heure_debut=time(hour=8, minute=0),
-            heure_fin_journee_cible=time(hour=23, minute=0),
+            creneau_cible_fin_journee=999,
         )
         assert alg._cutoff_creneau_fin_journee(max_creneau=14) == 14
 
 
-class TestAlgoCPHeureFinJournee:
-    """Résolution complète avec heure_fin_journee_cible : objectif souple,
+class TestAlgoCPCreneauCibleFinJournee:
+    """Résolution complète avec creneau_cible_fin_journee : objectif souple,
     ne doit jamais empêcher un placement par ailleurs faisable."""
 
     def test_poids_defaut(self):
         import algo_cp
-        assert algo_cp.ALGO_POIDS_HEURE_FIN_JOURNEE == 200
+        assert algo_cp.ALGO_POIDS_CRENEAU_FIN_JOURNEE == 200
 
     def test_placement_toujours_complet_avec_cible_active(self, tmp_path):
         alg = _build_algo_cp(
@@ -413,7 +374,7 @@ class TestAlgoCPHeureFinJournee:
             candidats=[_cand(f"Cand{i}", f"450000000{i}") for i in range(6)],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
             heure_debut=time(hour=8, minute=0),
-            heure_fin_journee_cible=time(hour=8, minute=30),
+            creneau_cible_fin_journee=1,
         )
         alg.resoudre()
 

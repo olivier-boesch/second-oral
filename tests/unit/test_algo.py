@@ -407,19 +407,19 @@ class TestSelectionMeilleurAlgo:
         assert aucun_run_conforme is False
 
 
-class TestSelectionMeilleurAlgoHeureFinCible:
-    """Quand heure_fin_cible est fourni, la sélection parmi les runs conformes
-    à l'écart minimum privilégie celui qui finit le plus tôt (au lieu du
-    meilleur taux d'occupation) — objectif souple lié à
-    AlgoOne.heure_fin_journee_cible."""
+class TestSelectionMeilleurAlgoCreneauCible:
+    """Quand creneau_cible est fourni, la sélection parmi les runs conformes
+    à l'écart minimum privilégie celui dont le dernier créneau utilisé est le
+    plus petit (au lieu du meilleur taux d'occupation) — objectif souple lié
+    à AlgoOne.creneau_cible_fin_journee."""
 
-    def test_prefere_le_run_qui_finit_le_plus_tot(self):
+    def test_prefere_le_run_dont_le_dernier_creneau_est_le_plus_petit(self):
         from algo import selectionner_meilleur_algo
 
         alg_tot = MagicMock(name="alg_tot")
-        alg_tot.heure_fin_journee.return_value = time(hour=13, minute=0)
+        alg_tot.dernier_creneau_journee.return_value = 6
         alg_tard = MagicMock(name="alg_tard")
-        alg_tard.heure_fin_journee.return_value = time(hour=15, minute=0)
+        alg_tard.dernier_creneau_journee.return_value = 10
 
         results = [
             # Meilleure occupation (95%) mais finit plus tard : doit être écarté.
@@ -428,19 +428,19 @@ class TestSelectionMeilleurAlgoHeureFinCible:
         ]
 
         best_alg, best_stats, *_ = selectionner_meilleur_algo(
-            results, ecart_mini_minutes=80, heure_fin_cible=time(hour=13, minute=0),
+            results, ecart_mini_minutes=80, creneau_cible=6,
         )
 
         assert best_alg is alg_tot
         assert best_stats == {"profs": 80.0, "candidats": 90}
 
-    def test_egalite_heure_fin_departagee_par_occupation(self):
+    def test_egalite_creneau_departagee_par_occupation(self):
         from algo import selectionner_meilleur_algo
 
         alg_faible = MagicMock(name="alg_faible")
-        alg_faible.heure_fin_journee.return_value = time(hour=13, minute=0)
+        alg_faible.dernier_creneau_journee.return_value = 6
         alg_fort = MagicMock(name="alg_fort")
-        alg_fort.heure_fin_journee.return_value = time(hour=13, minute=0)
+        alg_fort.dernier_creneau_journee.return_value = 6
 
         results = [
             (alg_faible, {"profs": 70.0, "candidats": 90}),
@@ -448,20 +448,20 @@ class TestSelectionMeilleurAlgoHeureFinCible:
         ]
 
         best_alg, *_ = selectionner_meilleur_algo(
-            results, ecart_mini_minutes=80, heure_fin_cible=time(hour=13, minute=0),
+            results, ecart_mini_minutes=80, creneau_cible=6,
         )
 
         assert best_alg is alg_fort
 
     def test_ignore_par_defaut(self):
-        """Sans heure_fin_cible, comportement inchangé : meilleure occupation élue
+        """Sans creneau_cible, comportement inchangé : meilleure occupation élue
         même si elle finit plus tard qu'une alternative conforme."""
         from algo import selectionner_meilleur_algo
 
         alg_tard_mais_plein = MagicMock(name="alg_tard_mais_plein")
-        alg_tard_mais_plein.heure_fin_journee.return_value = time(hour=15, minute=0)
+        alg_tard_mais_plein.dernier_creneau_journee.return_value = 10
         alg_tot_mais_creux = MagicMock(name="alg_tot_mais_creux")
-        alg_tot_mais_creux.heure_fin_journee.return_value = time(hour=13, minute=0)
+        alg_tot_mais_creux.dernier_creneau_journee.return_value = 6
 
         results = [
             (alg_tard_mais_plein, {"profs": 95.0, "candidats": 90}),
@@ -472,15 +472,16 @@ class TestSelectionMeilleurAlgoHeureFinCible:
 
         assert best_alg is alg_tard_mais_plein
 
-    def test_heure_fin_none_traitee_comme_pire_cas(self):
-        """Un run dont heure_fin_journee() est None (aucun oral placé, cas
-        pathologique) ne doit jamais être préféré à un run avec une vraie heure."""
+    def test_creneau_none_traite_comme_pire_cas(self):
+        """Un run dont dernier_creneau_journee() est None (aucun oral placé,
+        cas pathologique) ne doit jamais être préféré à un run avec une vraie
+        valeur."""
         from algo import selectionner_meilleur_algo
 
         alg_sans_oral = MagicMock(name="alg_sans_oral")
-        alg_sans_oral.heure_fin_journee.return_value = None
+        alg_sans_oral.dernier_creneau_journee.return_value = None
         alg_normal = MagicMock(name="alg_normal")
-        alg_normal.heure_fin_journee.return_value = time(hour=13, minute=0)
+        alg_normal.dernier_creneau_journee.return_value = 6
 
         results = [
             (alg_sans_oral, {"profs": 0.0, "candidats": 90}),
@@ -488,7 +489,7 @@ class TestSelectionMeilleurAlgoHeureFinCible:
         ]
 
         best_alg, *_ = selectionner_meilleur_algo(
-            results, ecart_mini_minutes=80, heure_fin_cible=time(hour=13, minute=0),
+            results, ecart_mini_minutes=80, creneau_cible=6,
         )
 
         assert best_alg is alg_normal
@@ -746,6 +747,40 @@ class TestHeureFinJournee:
         alg.calcul_horaires()
         attendu = max(o.heure_fin for o in alg.liste_oraux if o.heure_fin is not None)
         assert alg.heure_fin_journee() == attendu
+
+
+class TestDernierCreneauJournee:
+    """AlgoOne.dernier_creneau_journee() : index du dernier créneau utilisé,
+    tous examinateurs confondus — exact, disponible dès resoudre() (pas
+    besoin de calcul_horaires())."""
+
+    def test_none_sans_aucun_oral_place(self, tmp_path):
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"990000000{i}") for i in range(0)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        assert alg.dernier_creneau_journee() is None
+
+    def test_egale_au_max_des_creneaux_individuels(self, tmp_path):
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"991000000{i}") for i in range(6)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        alg.resoudre()
+        attendu = max(o.creneau for o in alg.liste_oraux)
+        assert alg.dernier_creneau_journee() == attendu
+
+    def test_disponible_avant_calcul_horaires(self, tmp_path):
+        """Contrairement à heure_fin_journee(), pas besoin de calcul_horaires()."""
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"992000000{i}") for i in range(3)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        alg.resoudre()
+        assert alg.dernier_creneau_journee() is not None
 
 
 class TestEquiteEntreExaminateurs:

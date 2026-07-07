@@ -474,8 +474,8 @@ class TestAdminRoutes:
         assert r.status_code == 200
         assert json.loads(r.data)["params"]["seuil_petite_matiere"] == 500
 
-    def test_save_params_heure_fin_journee_defaut_desactivee(self, admin_client, tmp_path,
-                                                              flask_app, monkeypatch):
+    def test_save_params_creneau_cible_defaut_desactive(self, admin_client, tmp_path,
+                                                         flask_app, monkeypatch):
         import app as app_module
         monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
                             tmp_path / "algo_params.json")
@@ -488,11 +488,11 @@ class TestAdminRoutes:
         )
         assert r.status_code == 200
         params = json.loads(r.data)["params"]
-        assert params["heure_fin_journee_cible"] == ""
-        assert params["poids_heure_fin_journee"] == 200
+        assert params["creneau_cible_fin_journee"] == ""
+        assert params["poids_creneau_fin_journee"] == 200
 
-    def test_save_params_heure_fin_journee_activee(self, admin_client, tmp_path,
-                                                    flask_app, monkeypatch):
+    def test_save_params_creneau_cible_active(self, admin_client, tmp_path,
+                                              flask_app, monkeypatch):
         import app as app_module
         monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
                             tmp_path / "algo_params.json")
@@ -501,17 +501,17 @@ class TestAdminRoutes:
             "/gestion/algo/params",
             data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
                              "n_run": 500, "ecart_mini": 70,
-                             "heure_fin_journee_cible": "14:5",
-                             "poids_heure_fin_journee": 500}),
+                             "creneau_cible_fin_journee": 6,
+                             "poids_creneau_fin_journee": 500}),
             content_type="application/json",
         )
         assert r.status_code == 200
         params = json.loads(r.data)["params"]
-        assert params["heure_fin_journee_cible"] == "14:05"
-        assert params["poids_heure_fin_journee"] == 500
+        assert params["creneau_cible_fin_journee"] == 6
+        assert params["poids_creneau_fin_journee"] == 500
 
-    def test_save_params_poids_heure_fin_journee_borne(self, admin_client, tmp_path,
-                                                        flask_app, monkeypatch):
+    def test_save_params_creneau_cible_borne(self, admin_client, tmp_path,
+                                             flask_app, monkeypatch):
         import app as app_module
         monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
                             tmp_path / "algo_params.json")
@@ -520,11 +520,27 @@ class TestAdminRoutes:
             "/gestion/algo/params",
             data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
                              "n_run": 500, "ecart_mini": 70,
-                             "poids_heure_fin_journee": 999999}),
+                             "creneau_cible_fin_journee": 999}),
             content_type="application/json",
         )
         assert r.status_code == 200
-        assert json.loads(r.data)["params"]["poids_heure_fin_journee"] == 100_000
+        assert json.loads(r.data)["params"]["creneau_cible_fin_journee"] == 30
+
+    def test_save_params_poids_creneau_fin_journee_borne(self, admin_client, tmp_path,
+                                                          flask_app, monkeypatch):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70,
+                             "poids_creneau_fin_journee": 999999}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["poids_creneau_fin_journee"] == 100_000
 
     def test_save_params_invalid(self, admin_client):
         r = admin_client.post(

@@ -96,16 +96,16 @@ class TestRunAlgoEnvVars:
         )
         assert "8" in lines
 
-    def test_heure_fin_journee_cible_transmise(self, monkeypatch):
+    def test_creneau_cible_fin_journee_transmis(self, monkeypatch):
         lines = self._capture_env(
-            monkeypatch, {"heure_fin_journee_cible": "14:05"},
-            "ALGO_HEURE_FIN_JOURNEE_CIBLE",
+            monkeypatch, {"creneau_cible_fin_journee": 6},
+            "ALGO_CRENEAU_CIBLE_FIN_JOURNEE",
         )
-        assert "14:05" in lines
+        assert "6" in lines
 
-    def test_poids_heure_fin_journee_transmis(self, monkeypatch):
+    def test_poids_creneau_fin_journee_transmis(self, monkeypatch):
         lines = self._capture_env(
-            monkeypatch, {"poids_heure_fin_journee": 500}, "ALGO_POIDS_HEURE_FIN_JOURNEE",
+            monkeypatch, {"poids_creneau_fin_journee": 500}, "ALGO_POIDS_CRENEAU_FIN_JOURNEE",
         )
         assert "500" in lines
 

@@ -28,17 +28,19 @@
 **Tests (suite 8)**
 - `tests/unit/test_algo.py::TestHeureFinJournee` : `None` avant `calcul_horaires()`, `None` sans oral placé, valeur correcte égale au max des `heure_fin` individuelles
 
-**Algorithme de placement (suite 6) — heure de fin de journée cible**
-- Nouveau réglage **objectif souple** (jamais bloquant) sur `/gestion/algo` → section Paramètres : case **Activer** + heure cible + poids CP-SAT, groupés avec la pause méridienne et les petites matières dans un bloc compact (deux champs côte à côte par réglage) ; `ALGO_HEURE_FIN_JOURNEE_CIBLE` / `ALGO_POIDS_HEURE_FIN_JOURNEE` en variables d'environnement, désactivé par défaut
-- Nouveau paramètre `AlgoOne.__init__(heure_fin_journee_cible=None)`, partagé par les deux moteurs (`AlgoCP` en hérite)
-- **Monte-Carlo** : `selectionner_meilleur_algo()` accepte un paramètre `heure_fin_cible` — parmi les runs déjà conformes à l'écart minimum candidat, le run élu est celui qui finit le plus tôt (`AlgoOne.heure_fin_journee()`), le taux d'occupation ne servant plus qu'à départager une égalité ; sans effet sur le repli (aucun run conforme) ni si `heure_fin_cible` est `None` (comportement historique inchangé)
-- **CP-SAT** : nouvelle méthode `AlgoCP._cutoff_creneau_fin_journee()` convertissant l'heure cible en index de créneau approximatif (durée d'oral moyenne pondérée par la demande réelle de chaque matière — le modèle raisonne en index abstrait, pas en heure réelle) ; nouveau terme d'objectif pénalisant (poids `ALGO_POIDS_HEURE_FIN_JOURNEE`, défaut `200`, nettement sous `POIDS_EQUITE`) chaque créneau utilisé au-delà de cet index, sans jamais l'interdire — reste toujours faisable même si la cible est irréaliste
+**Algorithme de placement (suite 6) — créneau cible de fin de journée**
+- Nouveau réglage **objectif souple** (jamais bloquant) sur `/gestion/algo` → section Paramètres : case **Activer** + créneau cible (nombre) + poids CP-SAT, groupés avec la pause méridienne et les petites matières dans un bloc compact (deux/trois champs côte à côte par réglage) ; `ALGO_CRENEAU_CIBLE_FIN_JOURNEE` / `ALGO_POIDS_CRENEAU_FIN_JOURNEE` en variables d'environnement, désactivé par défaut
+- Nouveau paramètre `AlgoOne.__init__(creneau_cible_fin_journee=None)`, partagé par les deux moteurs (`AlgoCP` en hérite) — exprimé directement en **nombre de créneaux**, pas en heure, pour que les deux moteurs comparent exactement la même grandeur sans conversion (une première version, exprimée en heure et convertie en index de créneau via une durée d'oral moyenne approchée côté CP-SAT, a été remplacée avant toute mise en production)
+- Nouvelle méthode `AlgoOne.dernier_creneau_journee()` (max des `.creneau` sur `liste_oraux`, exacte, disponible immédiatement après `resoudre()` sans attendre `calcul_horaires()`)
+- **Monte-Carlo** : `selectionner_meilleur_algo()` accepte un paramètre `creneau_cible` — parmi les runs déjà conformes à l'écart minimum candidat, le run élu est celui dont le dernier créneau utilisé est le plus petit (`AlgoOne.dernier_creneau_journee()`), le taux d'occupation ne servant plus qu'à départager une égalité ; sans effet sur le repli (aucun run conforme) ni si `creneau_cible` est `None` (comportement historique inchangé)
+- **CP-SAT** : `AlgoCP._cutoff_creneau_fin_journee()` borne la valeur fournie à `[0, max_creneau]` ; terme d'objectif pénalisant (poids `ALGO_POIDS_CRENEAU_FIN_JOURNEE`, défaut `200`, nettement sous `POIDS_EQUITE`) chaque créneau utilisé au-delà de cet index, sans jamais l'interdire — reste toujours faisable même si la cible est irréaliste
 - `webserver/algo_bg.py::run_algo()` traduit désormais aussi ces deux paramètres en variables d'environnement (comme les autres réglages `/gestion/algo`)
 
 **Tests (suite 9)**
-- `tests/unit/test_algo.py::TestSelectionMeilleurAlgoHeureFinCible` : préférence pour le run qui finit le plus tôt, égalité départagée par occupation, ignoré par défaut, `heure_fin_journee() is None` traité comme pire cas
-- `tests/unit/test_algo_cp.py::TestCutoffCreneauFinJournee` : `None` si non défini ou aucun candidat, conversion correcte (durée uniforme et pondérée), bornes [0, max_creneau]
-- `tests/unit/test_algo_cp.py::TestAlgoCPHeureFinJournee` : poids par défaut, placement toujours complet et écart minimum toujours respecté même avec une cible irréaliste
+- `tests/unit/test_algo.py::TestDernierCreneauJournee` : `None` sans oral placé, valeur correcte égale au max des `.creneau`
+- `tests/unit/test_algo.py::TestSelectionMeilleurAlgoCreneauCible` : préférence pour le run dont le dernier créneau utilisé est le plus petit, égalité départagée par occupation, ignoré par défaut, `dernier_creneau_journee() is None` traité comme pire cas
+- `tests/unit/test_algo_cp.py::TestCutoffCreneauFinJournee` : `None` si non défini, clamp aux bornes `[0, max_creneau]`, valeur inchangée si dans les bornes
+- `tests/unit/test_algo_cp.py::TestAlgoCPCreneauCibleFinJournee` : poids par défaut, placement toujours complet et écart minimum toujours respecté même avec une cible irréaliste
 - `tests/unit/test_algo_bg.py`, `tests/integration/test_flask_routes.py` : câblage des deux nouveaux paramètres (variables d'environnement, persistance et bornes via `/gestion/algo/params`)
 
 **Gestion en cours de journée (suite 4) — déclaration et retrait de tiers-temps d'un candidat**

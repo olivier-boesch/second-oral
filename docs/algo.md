@@ -110,8 +110,8 @@ Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → sec
 | `ALGO_MARGE_PETITE_MATIERE`        | `2`    | Créneaux de marge laissés en plus du strict nécessaire pour une petite matière |
 | `ALGO_PAUSE_MERIDIENNE_DEBUT`      | *(vide)* | Heure à partir de laquelle aucun oral ne doit être en cours pour un examinateur ; vide = désactivée |
 | `ALGO_PAUSE_MERIDIENNE_DUREE`      | `0` (min) | Durée de la pause méridienne ; ignorée si `ALGO_PAUSE_MERIDIENNE_DEBUT` est vide |
-| `ALGO_HEURE_FIN_JOURNEE_CIBLE`     | *(vide)* | Heure à laquelle on souhaite que le dernier oral de la journée soit terminé ; vide = désactivée. Objectif souple (les 2 moteurs), jamais bloquant |
-| `ALGO_POIDS_HEURE_FIN_JOURNEE`     | `200`  | Poids de la pénalité "heure de fin" dans l'objectif CP-SAT (ignoré par Monte-Carlo, cf. ci-dessous) |
+| `ALGO_CRENEAU_CIBLE_FIN_JOURNEE`   | *(vide)* | Dernier créneau souhaité pour le dernier oral de la journée ; vide = désactivée. Objectif souple (les 2 moteurs), jamais bloquant |
+| `ALGO_POIDS_CRENEAU_FIN_JOURNEE`   | `200`  | Poids de la pénalité "créneau cible de fin de journée" dans l'objectif CP-SAT (ignoré par Monte-Carlo, cf. ci-dessous) |
 
 Chaque variable spécifique à un moteur est ignorée quand un autre moteur est sélectionné.
 
@@ -193,32 +193,32 @@ La pause méridienne configurée est aussi respectée par la replanification en 
 examinateur pendant la pause — celle-ci est lue depuis `/gestion/algo` à chaque calcul de plan
 (`app.py::_pause_meridienne_params`), donc toujours à jour même sans relancer l'algorithme.
 
-### Heure de fin de journée cible
+### Créneau cible de fin de journée
 
 Objectif **souple** (jamais bloquant) : contrairement aux petites matières ou à l'écart minimum
 candidat, ce réglage ne peut jamais rendre le placement infaisable — il influence seulement lequel,
 parmi les placements par ailleurs valides, est retenu. Désactivé par défaut ; réglable depuis
-`/gestion/algo` → section Paramètres (case **Activer** + heure cible + poids CP-SAT), ou via
-`ALGO_HEURE_FIN_JOURNEE_CIBLE`/`ALGO_POIDS_HEURE_FIN_JOURNEE`.
+`/gestion/algo` → section Paramètres (case **Activer** + créneau cible + poids CP-SAT), ou via
+`ALGO_CRENEAU_CIBLE_FIN_JOURNEE`/`ALGO_POIDS_CRENEAU_FIN_JOURNEE`.
+
+Le réglage est un **nombre de créneaux**, pas une heure — les deux moteurs comparent donc
+exactement la même grandeur, sans aucune conversion :
 
 - **Monte-Carlo** (`selectionner_meilleur_algo`) : parmi les runs déjà conformes à l'écart minimum
   candidat, le run élu n'est plus celui au meilleur taux d'occupation examinateurs, mais celui dont
-  le dernier oral (`AlgoOne.heure_fin_journee()`) finit le plus tôt — le taux d'occupation ne sert
-  plus qu'à départager une égalité d'heure de fin. Sans effet sur le repli (aucun run conforme).
-- **CP-SAT** (`AlgoCP.resoudre`) : le modèle raisonne en index de créneau abstrait, pas en heure
-  réelle (chaque matière a sa propre durée d'oral, mélangées sur un même index par le terme de
-  tassement existant) — `AlgoCP._cutoff_creneau_fin_journee()` convertit donc l'heure cible en index
-  de créneau approximatif via la durée d'oral moyenne, pondérée par la demande réelle (nombre de
-  candidats) de chaque matière. Un terme d'objectif pénalise ensuite (poids
-  `ALGO_POIDS_HEURE_FIN_JOURNEE`, défaut `200` — nettement sous `POIDS_EQUITE` : l'équité de charge
-  reste toujours prioritaire) chaque créneau utilisé au-delà de cet index, sans jamais interdire ces
-  créneaux (contrainte dure) : le solveur les utilise quand même si c'est nécessaire pour rester
-  faisable, il paie juste une pénalité pour le faire.
+  le dernier créneau utilisé (`AlgoOne.dernier_creneau_journee()`) est le plus petit — le taux
+  d'occupation ne sert plus qu'à départager une égalité. Sans effet sur le repli (aucun run
+  conforme). Exact et disponible immédiatement après `resoudre()`, sans attendre `calcul_horaires()`.
+- **CP-SAT** (`AlgoCP.resoudre`) : `AlgoCP._cutoff_creneau_fin_journee()` borne simplement la valeur
+  fournie à `[0, max_creneau]`. Un terme d'objectif pénalise ensuite (poids
+  `ALGO_POIDS_CRENEAU_FIN_JOURNEE`, défaut `200` — nettement sous `POIDS_EQUITE` : l'équité de
+  charge reste toujours prioritaire) chaque créneau utilisé au-delà de cet index, sans jamais
+  interdire ces créneaux (contrainte dure) : le solveur les utilise quand même si c'est nécessaire
+  pour rester faisable, il paie juste une pénalité pour le faire.
 
-La conversion heure → créneau étant une approximation (durée moyenne, pas la durée réelle de
-chaque oral), l'heure de fin effective (`AlgoOne.heure_fin_journee()`, affichée en fin de log et
-sur `/gestion/liste-examinateurs`) peut différer légèrement de la cible — c'est un objectif indicatif
-à ajuster empiriquement, pas une heure de fin garantie.
+Une version antérieure de ce réglage était exprimée en heure et convertie en index de créneau via
+une durée d'oral moyenne approchée côté CP-SAT — remplacé par un réglage direct en créneaux pour
+éviter cette approximation et unifier les deux moteurs sur la même grandeur exacte.
 
 ---
 

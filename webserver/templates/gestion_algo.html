@@ -279,25 +279,25 @@
             <span class="param-hint">Activé par défaut, seuil 5 candidats — désactivez en cas d'échec du placement</span>
         </div>
         <div class="param-row">
-            <label class="param-label" for="p-heure-fin-active">
-                Heure de fin de journée cible
-                <span class="info-icon" title="Heure à laquelle on souhaite que le dernier oral de la journée soit terminé. Objectif souple, jamais bloquant : Monte-Carlo préfère, parmi les tirages déjà conformes à l'écart minimum candidat, celui qui finit le plus tôt ; CP-SAT pénalise (selon le poids réglé ci-dessous) les créneaux utilisés au-delà d'un index de créneau approximatif correspondant à cette heure — jamais au point de rendre le placement impossible.">?</span>
+            <label class="param-label" for="p-creneau-cible-active">
+                Créneau cible max (fin de journée)
+                <span class="info-icon" title="Dernier créneau souhaité pour le dernier oral de la journée (index parmi le nombre de créneaux réglé ci-dessus). Objectif souple, jamais bloquant : Monte-Carlo préfère, parmi les tirages déjà conformes à l'écart minimum candidat, celui dont le dernier créneau utilisé est le plus petit ; CP-SAT pénalise (selon le poids réglé ci-dessous) les créneaux utilisés au-delà de cette valeur — jamais au point de rendre le placement impossible. Les deux moteurs comparent exactement la même grandeur, sans conversion.">?</span>
             </label>
             <div class="param-group">
                 <div class="param-subrow param-subrow-toggle">
-                    <input type="checkbox" id="p-heure-fin-active" onchange="onHeureFinJourneeChange()"
-                           {% if algo_params.heure_fin_journee_cible %}checked{% endif %}>
-                    <label for="p-heure-fin-active">Activer</label>
+                    <input type="checkbox" id="p-creneau-cible-active" onchange="onCreneauCibleChange()"
+                           {% if algo_params.creneau_cible_fin_journee %}checked{% endif %}>
+                    <label for="p-creneau-cible-active">Activer</label>
                 </div>
-                <div class="param-subrow" id="p-heure-fin-heure-row">
-                    <label for="p-heure-fin-journee">Heure cible</label>
-                    <input class="param-input param-input-sm" type="time" id="p-heure-fin-journee"
-                           value="{{ algo_params.heure_fin_journee_cible }}">
+                <div class="param-subrow" id="p-creneau-cible-valeur-row">
+                    <label for="p-creneau-cible-fin-journee">Créneau cible</label>
+                    <input class="param-input param-input-sm" type="number" id="p-creneau-cible-fin-journee"
+                           min="1" max="30" value="{{ algo_params.creneau_cible_fin_journee }}">
                 </div>
-                <div class="param-subrow" id="p-heure-fin-poids-row">
-                    <label for="p-poids-heure-fin">Poids (CP-SAT)</label>
-                    <input class="param-input param-input-sm" type="number" id="p-poids-heure-fin"
-                           min="0" max="100000" value="{{ algo_params.poids_heure_fin_journee }}">
+                <div class="param-subrow" id="p-creneau-cible-poids-row">
+                    <label for="p-poids-creneau-fin">Poids (CP-SAT)</label>
+                    <input class="param-input param-input-sm" type="number" id="p-poids-creneau-fin"
+                           min="0" max="100000" value="{{ algo_params.poids_creneau_fin_journee }}">
                 </div>
             </div>
             <span class="param-hint">Désactivé par défaut — le poids ne s'applique qu'au moteur CP-SAT</span>
@@ -677,11 +677,11 @@ function onPetitesMatieresChange() {
     document.getElementById('p-seuil-petite-matiere-row').style.opacity = actif ? 1 : .4;
 }
 
-// ── Bascule visuelle de l'heure/poids selon l'activation de l'heure de fin ──
-function onHeureFinJourneeChange() {
-    const actif = document.getElementById('p-heure-fin-active').checked;
-    document.getElementById('p-heure-fin-heure-row').style.opacity = actif ? 1 : .4;
-    document.getElementById('p-heure-fin-poids-row').style.opacity = actif ? 1 : .4;
+// ── Bascule visuelle du créneau/poids selon l'activation du créneau cible ────
+function onCreneauCibleChange() {
+    const actif = document.getElementById('p-creneau-cible-active').checked;
+    document.getElementById('p-creneau-cible-valeur-row').style.opacity = actif ? 1 : .4;
+    document.getElementById('p-creneau-cible-poids-row').style.opacity = actif ? 1 : .4;
 }
 
 // ── Confirmation avant activation du mode optimal (aucune limite de temps) ──
@@ -712,10 +712,10 @@ function sauvegarderParams() {
         pause_meridienne_duree: parseInt(document.getElementById('p-pause-meridienne-duree').value, 10),
         petites_matieres_fin_journee: document.getElementById('p-petites-matieres').checked,
         seuil_petite_matiere: parseInt(document.getElementById('p-seuil-petite-matiere').value, 10),
-        heure_fin_journee_cible: document.getElementById('p-heure-fin-active').checked
-            ? document.getElementById('p-heure-fin-journee').value
+        creneau_cible_fin_journee: document.getElementById('p-creneau-cible-active').checked
+            ? parseInt(document.getElementById('p-creneau-cible-fin-journee').value, 10)
             : '',
-        poids_heure_fin_journee: parseInt(document.getElementById('p-poids-heure-fin').value, 10),
+        poids_creneau_fin_journee: parseInt(document.getElementById('p-poids-creneau-fin').value, 10),
     };
     fb.textContent = 'Sauvegarde…';
     fb.style.color = '#555';
@@ -741,7 +741,7 @@ function sauvegarderParams() {
 validerAvantLancement(() => {});
 onEngineChange();
 onPetitesMatieresChange();
-onHeureFinJourneeChange();
+onCreneauCibleChange();
 
 {% if is_running %}
 connectAlgoSSE();
