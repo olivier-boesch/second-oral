@@ -69,6 +69,12 @@
         .param-subrow-toggle { flex-direction: row; align-items: center; gap: .4em; flex: 0 0 auto; }
         .param-subrow-toggle label { font-size: .85em; color: inherit; }
         .param-input-sm { padding: .3em .5em; font-size: .85em; }
+        .param-slider-group { display: flex; align-items: center; gap: .5em; }
+        .param-slider { flex: 1 1 auto; min-width: 60px; accent-color: var(--primary); }
+        input.param-slider-value {
+            width: 6.5em; flex: 0 0 auto; text-align: right; font-variant-numeric: tabular-nums;
+        }
+        .param-subrow-wide { flex-basis: 200px; }
         .info-icon   { display: inline-flex; align-items: center; justify-content: center;
                        width: 1.1em; height: 1.1em; border-radius: 50%;
                        background: #c9b8f5; color: #3d2fa0; font-size: .75em;
@@ -225,8 +231,12 @@
                 Nombre de créneaux
                 <span class="info-icon" title="Nombre de créneaux horaires dans la journée. Chaque créneau accueille un candidat par salle. Augmenter ce nombre allonge la journée.">?</span>
             </label>
-            <input class="param-input" type="number" id="p-creneaux" name="creneaux"
-                   min="1" max="30" value="{{ algo_params.creneaux }}">
+            <div class="param-slider-group">
+                <input type="range" class="param-slider" id="p-creneaux-slider"
+                       min="1" max="30" step="1" value="{{ algo_params.creneaux }}">
+                <input class="param-input param-slider-value" type="text" inputmode="numeric"
+                       id="p-creneaux" name="creneaux" value="{{ algo_params.creneaux }}">
+            </div>
             <span class="param-hint">Nombre de passages par salle dans la journée (1 à 30)</span>
         </div>
         <div class="param-row">
@@ -253,10 +263,15 @@
                            id="p-pause-meridienne-debut" name="pause_meridienne_debut"
                            value="{{ algo_params.pause_meridienne_debut }}">
                 </div>
-                <div class="param-subrow">
+                <div class="param-subrow param-subrow-wide">
                     <label for="p-pause-meridienne-duree">Durée (min)</label>
-                    <input class="param-input param-input-sm" type="number" id="p-pause-meridienne-duree" name="pause_meridienne_duree"
-                           min="0" max="240" value="{{ algo_params.pause_meridienne_duree }}">
+                    <div class="param-slider-group">
+                        <input type="range" class="param-slider" id="p-pause-meridienne-duree-slider"
+                               min="0" max="240" step="1" value="{{ algo_params.pause_meridienne_duree }}">
+                        <input class="param-input param-input-sm param-slider-value" type="text" inputmode="numeric"
+                               id="p-pause-meridienne-duree" name="pause_meridienne_duree"
+                               value="{{ algo_params.pause_meridienne_duree }}">
+                    </div>
                 </div>
             </div>
             <span class="param-hint">Heure vide = pas de pause méridienne — durée : 0 à 240 min</span>
@@ -273,10 +288,15 @@
                            onchange="onPetitesMatieresChange()">
                     <label for="p-petites-matieres">Activer</label>
                 </div>
-                <div class="param-subrow" id="p-seuil-petite-matiere-row">
+                <div class="param-subrow param-subrow-wide" id="p-seuil-petite-matiere-row">
                     <label for="p-seuil-petite-matiere">Seuil (nb candidats)</label>
-                    <input class="param-input param-input-sm" type="number" id="p-seuil-petite-matiere" name="seuil_petite_matiere"
-                           min="1" max="500" value="{{ algo_params.seuil_petite_matiere }}">
+                    <div class="param-slider-group">
+                        <input type="range" class="param-slider" id="p-seuil-petite-matiere-slider"
+                               min="1" max="500" step="1" value="{{ algo_params.seuil_petite_matiere }}">
+                        <input class="param-input param-input-sm param-slider-value" type="text" inputmode="numeric"
+                               id="p-seuil-petite-matiere" name="seuil_petite_matiere"
+                               value="{{ algo_params.seuil_petite_matiere }}">
+                    </div>
                 </div>
             </div>
             <span class="param-hint">Activé par défaut, seuil 5 candidats (1 à 500) — désactivez en cas d'échec du placement</span>
@@ -292,10 +312,15 @@
                            {% if algo_params.creneau_cible_fin_journee %}checked{% endif %}>
                     <label for="p-creneau-cible-active">Activer</label>
                 </div>
-                <div class="param-subrow" id="p-creneau-cible-valeur-row">
+                <div class="param-subrow param-subrow-wide" id="p-creneau-cible-valeur-row">
                     <label for="p-creneau-cible-fin-journee">Créneau cible</label>
-                    <input class="param-input param-input-sm" type="number" id="p-creneau-cible-fin-journee"
-                           min="1" max="30" value="{{ algo_params.creneau_cible_fin_journee }}">
+                    <div class="param-slider-group">
+                        <input type="range" class="param-slider" id="p-creneau-cible-fin-journee-slider"
+                               min="1" max="30" step="1" value="{{ algo_params.creneau_cible_fin_journee or 13 }}">
+                        <input class="param-input param-input-sm param-slider-value" type="text" inputmode="numeric"
+                               id="p-creneau-cible-fin-journee"
+                               value="{{ algo_params.creneau_cible_fin_journee }}">
+                    </div>
                 </div>
             </div>
             <span class="param-hint">Désactivé par défaut — créneau cible : 1 à 30 ; le poids CP-SAT associé se règle dans les paramètres avancés</span>
@@ -315,8 +340,12 @@
                     Nombre d'essais (N_run)
                     <span class="info-icon" title="Nombre de tentatives de placement effectuées. L'algorithme conserve le meilleur résultat. Plus cette valeur est élevée, meilleur est le placement — mais le calcul est plus long. Valeur recommandée : 1000. Ignoré si l'algorithme CP-SAT est sélectionné.">?</span>
                 </label>
-                <input class="param-input" type="number" id="p-n-run" name="n_run"
-                       min="1" max="100000" value="{{ algo_params.n_run }}">
+                <div class="param-slider-group">
+                    <input type="range" class="param-slider" id="p-n-run-slider"
+                           min="1" max="100000" step="1" value="{{ algo_params.n_run }}">
+                    <input class="param-input param-slider-value" type="text" inputmode="numeric"
+                           id="p-n-run" name="n_run" value="{{ algo_params.n_run }}">
+                </div>
                 <span class="param-hint">Recommandé : 1000 (1 à 100 000) — au-delà, le gain est faible (ignoré en mode CP-SAT)</span>
             </div>
             <div class="param-row" id="p-cp-timeout-row">
@@ -324,8 +353,12 @@
                     Délai max solveur CP-SAT (s)
                     <span class="info-icon" title="Temps maximum accordé au solveur CP-SAT pour trouver le meilleur placement possible. Au-delà, le meilleur résultat trouvé jusque-là est utilisé. Ignoré si l'algorithme Monte-Carlo est sélectionné.">?</span>
                 </label>
-                <input class="param-input" type="number" id="p-cp-timeout" name="cp_timeout"
-                       min="5" max="1200" value="{{ algo_params.cp_timeout }}">
+                <div class="param-slider-group">
+                    <input type="range" class="param-slider" id="p-cp-timeout-slider"
+                           min="5" max="1200" step="1" value="{{ algo_params.cp_timeout }}">
+                    <input class="param-input param-slider-value" type="text" inputmode="numeric"
+                           id="p-cp-timeout" name="cp_timeout" value="{{ algo_params.cp_timeout }}">
+                </div>
                 <span class="param-hint">En secondes — par défaut 60s (5 à 1200) (ignoré hors mode CP-SAT, ou si le mode optimal ci-dessous est activé)</span>
             </div>
             <div class="param-row" id="p-cp-optimal-row">
@@ -348,8 +381,12 @@
                     Poids équité de charge (CP-SAT)
                     <span class="info-icon" title="Poids du terme d'équité de charge entre examinateurs d'une même matière (écart entre l'examinateur le plus chargé et le moins chargé). Délibérément énorme par défaut pour que le solveur sacrifie toujours un meilleur tassement ou une meilleure heure de fin pour une meilleure répartition de charge, jamais l'inverse. Ignoré si l'algorithme Monte-Carlo est sélectionné.">?</span>
                 </label>
-                <input class="param-input" type="number" id="p-poids-equite" name="poids_equite"
-                       min="0" max="100000000" value="{{ algo_params.poids_equite }}">
+                <div class="param-slider-group">
+                    <input type="range" class="param-slider" id="p-poids-equite-slider"
+                           min="0" max="100000000" step="1" value="{{ algo_params.poids_equite }}">
+                    <input class="param-input param-slider-value" type="text" inputmode="numeric"
+                           id="p-poids-equite" name="poids_equite" value="{{ algo_params.poids_equite }}">
+                </div>
                 <span class="param-hint">Par défaut 1 000 000 (0 à 100 000 000) — doit rester très supérieur aux autres poids CP-SAT ci-dessous</span>
             </div>
             <div class="param-row" id="p-bruit-tassement-row">
@@ -357,8 +394,12 @@
                     Bruit de tassement (CP-SAT)
                     <span class="info-icon" title="Amplitude du bruit aléatoire ajouté au terme de tassement (place les oraux tôt dans la journée) pour éviter que le solveur choisisse systématiquement la même solution parmi celles à égalité de score. Reste toujours dominé par le poids d'un créneau entier. Ignoré si l'algorithme Monte-Carlo est sélectionné.">?</span>
                 </label>
-                <input class="param-input" type="number" id="p-bruit-tassement" name="bruit_tassement"
-                       min="1" max="10000" value="{{ algo_params.bruit_tassement }}">
+                <div class="param-slider-group">
+                    <input type="range" class="param-slider" id="p-bruit-tassement-slider"
+                           min="1" max="10000" step="1" value="{{ algo_params.bruit_tassement }}">
+                    <input class="param-input param-slider-value" type="text" inputmode="numeric"
+                           id="p-bruit-tassement" name="bruit_tassement" value="{{ algo_params.bruit_tassement }}">
+                </div>
                 <span class="param-hint">Par défaut 25 (1 à 10 000) — variabilité entre deux runs à qualité égale, sans impact sur le tassement lui-même</span>
             </div>
             <div class="param-row" id="p-poids-creneau-fin-row">
@@ -366,8 +407,13 @@
                     Poids créneau cible de fin de journée (CP-SAT)
                     <span class="info-icon" title="Poids de la pénalité de dépassement du créneau cible de fin de journée (réglé plus haut dans les paramètres principaux). Nettement inférieur au poids d'équité : l'équité de charge reste toujours prioritaire. Ignoré si le créneau cible n'est pas activé, ou si l'algorithme Monte-Carlo est sélectionné.">?</span>
                 </label>
-                <input class="param-input" type="number" id="p-poids-creneau-fin" name="poids_creneau_fin_journee"
-                       min="0" max="100000" value="{{ algo_params.poids_creneau_fin_journee }}">
+                <div class="param-slider-group">
+                    <input type="range" class="param-slider" id="p-poids-creneau-fin-slider"
+                           min="0" max="100000" step="1" value="{{ algo_params.poids_creneau_fin_journee }}">
+                    <input class="param-input param-slider-value" type="text" inputmode="numeric"
+                           id="p-poids-creneau-fin" name="poids_creneau_fin_journee"
+                           value="{{ algo_params.poids_creneau_fin_journee }}">
+                </div>
                 <span class="param-hint">Par défaut 200 (0 à 100 000) — ignoré si le créneau cible ci-dessus n'est pas activé</span>
             </div>
             <div class="param-row">
@@ -375,8 +421,12 @@
                     Écart minimum entre 2 passages (min)
                     <span class="info-icon" title="Durée minimale (en minutes) entre deux oraux d'un même candidat (dans deux matières différentes). Évite qu'un candidat passe deux fois d'affilée sans temps de récupération. Valeur par défaut : 80 min.">?</span>
                 </label>
-                <input class="param-input" type="number" id="p-ecart-mini" name="ecart_mini"
-                       min="10" max="240" value="{{ algo_params.ecart_mini }}">
+                <div class="param-slider-group">
+                    <input type="range" class="param-slider" id="p-ecart-mini-slider"
+                           min="10" max="240" step="1" value="{{ algo_params.ecart_mini }}">
+                    <input class="param-input param-slider-value" type="text" inputmode="numeric"
+                           id="p-ecart-mini" name="ecart_mini" value="{{ algo_params.ecart_mini }}">
+                </div>
                 <span class="param-hint">En minutes — par défaut 80 min (1 h 20), de 10 à 240</span>
             </div>
             <div class="param-row">
@@ -719,6 +769,55 @@ function updatePoidsCreneauFinOpacity() {
     const cibleActive = document.getElementById('p-creneau-cible-active').checked;
     document.getElementById('p-poids-creneau-fin-row').style.opacity = (engineCpsat && cibleActive) ? 1 : .4;
 }
+
+// ── Slider + entrée texte vérifiée, synchronisés dans les deux sens ─────────
+// Remplace les <input type="number"> (flèches natives peu ergonomiques) par
+// un curseur pour l'ajustement rapide, couplé à un champ texte sans contrôles
+// natifs pour une saisie exacte — bornés aux mêmes min/max que le slider.
+function attachSlider(sliderId, textId) {
+    const slider = document.getElementById(sliderId);
+    const text = document.getElementById(textId);
+    const min = parseInt(slider.min, 10);
+    const max = parseInt(slider.max, 10);
+
+    slider.addEventListener('input', () => {
+        text.value = slider.value;
+    });
+    text.addEventListener('input', () => {
+        const cursor = text.selectionStart;
+        const filtered = text.value.replace(/[^0-9]/g, '');
+        if (filtered !== text.value) {
+            text.value = filtered;
+            text.setSelectionRange(cursor - 1, cursor - 1);
+        }
+        if (filtered !== '') {
+            const v = Math.min(max, Math.max(min, parseInt(filtered, 10)));
+            slider.value = String(v);
+        }
+    });
+    function valider() {
+        let v = parseInt(text.value, 10);
+        if (Number.isNaN(v)) v = min;
+        v = Math.min(max, Math.max(min, v));
+        text.value = String(v);
+        slider.value = String(v);
+    }
+    text.addEventListener('blur', valider);
+    text.addEventListener('change', valider);
+}
+
+[
+    ['p-creneaux-slider', 'p-creneaux'],
+    ['p-pause-meridienne-duree-slider', 'p-pause-meridienne-duree'],
+    ['p-seuil-petite-matiere-slider', 'p-seuil-petite-matiere'],
+    ['p-creneau-cible-fin-journee-slider', 'p-creneau-cible-fin-journee'],
+    ['p-n-run-slider', 'p-n-run'],
+    ['p-cp-timeout-slider', 'p-cp-timeout'],
+    ['p-poids-equite-slider', 'p-poids-equite'],
+    ['p-bruit-tassement-slider', 'p-bruit-tassement'],
+    ['p-poids-creneau-fin-slider', 'p-poids-creneau-fin'],
+    ['p-ecart-mini-slider', 'p-ecart-mini'],
+].forEach(([sliderId, textId]) => attachSlider(sliderId, textId));
 
 // ── Confirmation avant activation du mode optimal (aucune limite de temps) ──
 function onCpOptimalChange(checkbox) {
