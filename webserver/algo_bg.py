@@ -128,6 +128,10 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
                 env["ALGO_CRENEAU_CIBLE_FIN_JOURNEE"] = str(params["creneau_cible_fin_journee"])
             if "poids_creneau_fin_journee" in params:
                 env["ALGO_POIDS_CRENEAU_FIN_JOURNEE"] = str(params["poids_creneau_fin_journee"])
+            if "poids_equite" in params:
+                env["ALGO_POIDS_EQUITE"] = str(params["poids_equite"])
+            if "bruit_tassement" in params:
+                env["ALGO_BRUIT_TASSEMENT"] = str(params["bruit_tassement"])
         # Force le mode non-bufférisé : chaque ligne est envoyée immédiatement
         # sans attendre le remplissage du buffer stdout Python (crucial pour le
         # streaming temps-réel vers le log console).

@@ -3146,6 +3146,8 @@ _ALGO_PARAMS_DEFAULTS = {
     "seuil_petite_matiere": 5,
     "creneau_cible_fin_journee": "",
     "poids_creneau_fin_journee": 200,
+    "poids_equite": 1_000_000,
+    "bruit_tassement": 25,
 }
 
 def _load_algo_params() -> dict:
@@ -3387,6 +3389,12 @@ def algo_save_params() -> ResponseReturnValue:
             params["creneau_cible_fin_journee"] = ""
         params["poids_creneau_fin_journee"] = max(
             0, min(100_000, int(data.get("poids_creneau_fin_journee", 200))),
+        )
+        params["poids_equite"] = max(
+            0, min(100_000_000, int(data.get("poids_equite", 1_000_000))),
+        )
+        params["bruit_tassement"] = max(
+            1, min(10_000, int(data.get("bruit_tassement", 25))),
         )
     except (ValueError, KeyError):
         return jsonify({"ok": False, "reason": "invalid_params"}), 400

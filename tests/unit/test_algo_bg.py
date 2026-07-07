@@ -109,6 +109,18 @@ class TestRunAlgoEnvVars:
         )
         assert "500" in lines
 
+    def test_poids_equite_transmis(self, monkeypatch):
+        lines = self._capture_env(
+            monkeypatch, {"poids_equite": 2_000_000}, "ALGO_POIDS_EQUITE",
+        )
+        assert "2000000" in lines
+
+    def test_bruit_tassement_transmis(self, monkeypatch):
+        lines = self._capture_env(
+            monkeypatch, {"bruit_tassement": 50}, "ALGO_BRUIT_TASSEMENT",
+        )
+        assert "50" in lines
+
 
 class TestStopAlgo:
     def test_returns_false_when_nothing_running(self):

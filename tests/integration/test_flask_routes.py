@@ -542,6 +542,56 @@ class TestAdminRoutes:
         assert r.status_code == 200
         assert json.loads(r.data)["params"]["poids_creneau_fin_journee"] == 100_000
 
+    def test_save_params_poids_equite_defaut_et_borne(self, admin_client, tmp_path,
+                                                       flask_app, monkeypatch):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["poids_equite"] == 1_000_000
+
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70,
+                             "poids_equite": 999_999_999}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["poids_equite"] == 100_000_000
+
+    def test_save_params_bruit_tassement_defaut_et_borne(self, admin_client, tmp_path,
+                                                          flask_app, monkeypatch):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["bruit_tassement"] == 25
+
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70,
+                             "bruit_tassement": 0}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["bruit_tassement"] == 1
+
     def test_save_params_invalid(self, admin_client):
         r = admin_client.post(
             "/gestion/algo/params",

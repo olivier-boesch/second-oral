@@ -33,7 +33,7 @@
 - Nouveau paramètre `AlgoOne.__init__(creneau_cible_fin_journee=None)`, partagé par les deux moteurs (`AlgoCP` en hérite) — exprimé directement en **nombre de créneaux**, pas en heure, pour que les deux moteurs comparent exactement la même grandeur sans conversion (une première version, exprimée en heure et convertie en index de créneau via une durée d'oral moyenne approchée côté CP-SAT, a été remplacée avant toute mise en production)
 - Nouvelle méthode `AlgoOne.dernier_creneau_journee()` (max des `.creneau` sur `liste_oraux`, exacte, disponible immédiatement après `resoudre()` sans attendre `calcul_horaires()`)
 - **Monte-Carlo** : `selectionner_meilleur_algo()` accepte un paramètre `creneau_cible` — parmi les runs déjà conformes à l'écart minimum candidat, le run élu est celui dont le dernier créneau utilisé est le plus petit (`AlgoOne.dernier_creneau_journee()`), le taux d'occupation ne servant plus qu'à départager une égalité ; sans effet sur le repli (aucun run conforme) ni si `creneau_cible` est `None` (comportement historique inchangé)
-- **CP-SAT** : `AlgoCP._cutoff_creneau_fin_journee()` borne la valeur fournie à `[0, max_creneau]` ; terme d'objectif pénalisant (poids `ALGO_POIDS_CRENEAU_FIN_JOURNEE`, défaut `200`, nettement sous `POIDS_EQUITE`) le dépassement de cet index, **calculé par examinateur** (max de son propre dépassement le plus profond via `model.AddMaxEquality`, même construction que `charge_max`/`charge_min` pour l'équité) plutôt que sommé sur tous ses oraux en retard — empêche qu'un seul examinateur absorbe tout le dépassement pendant que ses collègues finissent nettement plus tôt ; jamais bloquant, reste toujours faisable même si la cible est irréaliste
+- **CP-SAT** : `AlgoCP._cutoff_creneau_fin_journee()` borne la valeur fournie à `[0, max_creneau]` ; terme d'objectif pénalisant (poids `ALGO_POIDS_CRENEAU_FIN_JOURNEE`, défaut `200`, nettement sous `ALGO_POIDS_EQUITE`) le dépassement de cet index, **calculé par examinateur** (max de son propre dépassement le plus profond via `model.AddMaxEquality`, même construction que `charge_max`/`charge_min` pour l'équité) plutôt que sommé sur tous ses oraux en retard — empêche qu'un seul examinateur absorbe tout le dépassement pendant que ses collègues finissent nettement plus tôt ; jamais bloquant, reste toujours faisable même si la cible est irréaliste
 - `webserver/algo_bg.py::run_algo()` traduit désormais aussi ces deux paramètres en variables d'environnement (comme les autres réglages `/gestion/algo`)
 
 **Tests (suite 9)**
@@ -42,6 +42,16 @@
 - `tests/unit/test_algo_cp.py::TestCutoffCreneauFinJournee` : `None` si non défini, clamp aux bornes `[0, max_creneau]`, valeur inchangée si dans les bornes
 - `tests/unit/test_algo_cp.py::TestAlgoCPCreneauCibleFinJournee` : poids par défaut, placement toujours complet et écart minimum toujours respecté même avec une cible irréaliste
 - `tests/unit/test_algo_cp.py::TestAlgoCPEquiteEntreExaminateurs::test_depassement_creneau_cible_reparti_pas_concentre` : le dépassement de la cible reste équilibré entre examinateurs d'une même matière (écart maximum d'1 créneau), jamais concentré sur un seul
+- `tests/unit/test_algo_bg.py`, `tests/integration/test_flask_routes.py` : câblage des deux nouveaux paramètres (variables d'environnement, persistance et bornes via `/gestion/algo/params`)
+
+**Algorithme de placement (suite 7) — tous les poids CP-SAT exposés, bornes affichées**
+- `POIDS_EQUITE` (équité de charge) et `BRUIT_ECHELLE` (bruit de désambiguïsation du tassement), jusqu'ici des constantes en dur dans `algo_cp.py`, deviennent configurables : `ALGO_POIDS_EQUITE` (défaut `1 000 000`) et `ALGO_BRUIT_TASSEMENT` (défaut `25`, garde-fou `max(1, ...)` dans `resoudre()` pour éviter `random.randint(0, -1)` si réglé à 0)
+- Les 3 poids CP-SAT (`poids_equite`, `bruit_tassement`, `poids_creneau_fin_journee`) sont désormais regroupés dans `/gestion/algo` → **Paramètres avancés**, pour être visibles et comparables au même endroit ; le champ « Poids (CP-SAT) » quitte le bloc compact « Créneau cible max » (qui ne garde que Activer + Créneau cible), sa case à cocher/valeur restant dans les paramètres principaux
+- Bornes min/max indiquées dans le texte d'aide de **tous** les champs numériques de `/gestion/algo` (déjà présentes comme attributs HTML `min`/`max`, mais invisibles sans les inspecter)
+- `webserver/algo_bg.py::run_algo()` traduit `poids_equite` → `ALGO_POIDS_EQUITE` et `bruit_tassement` → `ALGO_BRUIT_TASSEMENT`
+
+**Tests (suite 10)**
+- `tests/unit/test_algo_cp.py` : valeurs par défaut de `ALGO_POIDS_EQUITE`/`ALGO_BRUIT_TASSEMENT`, garde-fou `ALGO_BRUIT_TASSEMENT=0` ne plante pas
 - `tests/unit/test_algo_bg.py`, `tests/integration/test_flask_routes.py` : câblage des deux nouveaux paramètres (variables d'environnement, persistance et bornes via `/gestion/algo/params`)
 
 **Gestion en cours de journée (suite 4) — déclaration et retrait de tiers-temps d'un candidat**

@@ -112,6 +112,8 @@ Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → sec
 | `ALGO_PAUSE_MERIDIENNE_DUREE`      | `0` (min) | Durée de la pause méridienne ; ignorée si `ALGO_PAUSE_MERIDIENNE_DEBUT` est vide |
 | `ALGO_CRENEAU_CIBLE_FIN_JOURNEE`   | *(vide)* | Dernier créneau souhaité pour le dernier oral de la journée ; vide = désactivée. Objectif souple (les 2 moteurs), jamais bloquant |
 | `ALGO_POIDS_CRENEAU_FIN_JOURNEE`   | `200`  | Poids de la pénalité "créneau cible de fin de journée" dans l'objectif CP-SAT (ignoré par Monte-Carlo, cf. ci-dessous) |
+| `ALGO_POIDS_EQUITE`       | `1 000 000`    | Poids de l'équité de charge entre examinateurs d'une même matière (CP-SAT uniquement) — doit rester très supérieur aux autres poids |
+| `ALGO_BRUIT_TASSEMENT`    | `25`           | Amplitude du bruit aléatoire de désambiguïsation du tassement (CP-SAT uniquement) — doit rester >= 1 |
 
 Chaque variable spécifique à un moteur est ignorée quand un autre moteur est sélectionné.
 
@@ -218,10 +220,15 @@ exactement la même grandeur, sans aucune conversion :
   donc pénalisé qu'une fois pour son pire cas, mais **chaque** examinateur est individuellement
   poussé à respecter la cible, ce qui empêche le solveur de laisser un seul examinateur absorber
   tout le dépassement pendant que ses collègues finissent nettement plus tôt. Poids
-  `ALGO_POIDS_CRENEAU_FIN_JOURNEE` (défaut `200`, nettement sous `POIDS_EQUITE` : l'équité de charge
-  reste toujours prioritaire), sans jamais interdire ces créneaux (contrainte dure) : le solveur les
-  utilise quand même si c'est nécessaire pour rester faisable, il paie juste une pénalité pour le
-  faire.
+  `ALGO_POIDS_CRENEAU_FIN_JOURNEE` (défaut `200`, nettement sous `ALGO_POIDS_EQUITE` : l'équité de
+  charge reste toujours prioritaire), sans jamais interdire ces créneaux (contrainte dure) : le
+  solveur les utilise quand même si c'est nécessaire pour rester faisable, il paie juste une
+  pénalité pour le faire.
+
+Les trois poids CP-SAT (`ALGO_POIDS_EQUITE`, `ALGO_BRUIT_TASSEMENT`, `ALGO_POIDS_CRENEAU_FIN_JOURNEE`)
+sont réglables depuis `/gestion/algo` → section Paramètres → **Paramètres avancés**, regroupés au
+même endroit pour faciliter leur comparaison — le créneau cible lui-même (activation + valeur) reste
+dans les paramètres principaux, à côté de la pause méridienne et des petites matières.
 
 Une version antérieure de ce réglage était exprimée en heure et convertie en index de créneau via
 une durée d'oral moyenne approchée côté CP-SAT — remplacé par un réglage direct en créneaux pour

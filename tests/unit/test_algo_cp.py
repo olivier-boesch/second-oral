@@ -396,6 +396,27 @@ class TestAlgoCPCreneauCibleFinJournee:
         import algo_cp
         assert algo_cp.ALGO_POIDS_CRENEAU_FIN_JOURNEE == 200
 
+    def test_poids_equite_defaut(self):
+        import algo_cp
+        assert algo_cp.ALGO_POIDS_EQUITE == 1_000_000
+
+    def test_bruit_tassement_defaut(self):
+        import algo_cp
+        assert algo_cp.ALGO_BRUIT_TASSEMENT == 25
+
+    def test_bruit_tassement_zero_ne_plante_pas(self, tmp_path, monkeypatch):
+        """Garde-fou : ALGO_BRUIT_TASSEMENT=0 casserait random.randint(0, -1)
+        sans le clamp defensif dans resoudre()."""
+        import algo_cp
+        monkeypatch.setattr(algo_cp, "ALGO_BRUIT_TASSEMENT", 0)
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"470000000{i}") for i in range(3)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        alg.resoudre()
+        assert len(alg.liste_oraux) == 6
+
     def test_placement_toujours_complet_avec_cible_active(self, tmp_path):
         alg = _build_algo_cp(
             tmp_path,

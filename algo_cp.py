@@ -36,6 +36,15 @@ ALGO_CP_OPTIMAL = _env_bool("ALGO_CP_OPTIMAL", False)
 # objectif — cf. AlgoOne.creneau_cible_fin_journee et le commentaire dans
 # AlgoCP.resoudre().
 ALGO_POIDS_CRENEAU_FIN_JOURNEE = _env_int("ALGO_POIDS_CRENEAU_FIN_JOURNEE", 200)
+# Poids de l'équité de charge entre examinateurs d'une même matière —
+# délibérément énorme par défaut (cf. commentaire dans AlgoCP.resoudre()) :
+# le solveur sacrifie toujours un meilleur tassement/créneau cible pour une
+# meilleure répartition de charge, jamais l'inverse.
+ALGO_POIDS_EQUITE = _env_int("ALGO_POIDS_EQUITE", 1_000_000)
+# Échelle du bruit aléatoire de désambiguïsation du tassement (cf.
+# commentaire dans AlgoCP.resoudre()) — doit rester >= 1 (utilisé comme borne
+# haute exclusive de random.randint).
+ALGO_BRUIT_TASSEMENT = _env_int("ALGO_BRUIT_TASSEMENT", 25)
 
 
 class _ProgressLogger(cp_model.CpSolverSolutionCallback):
@@ -206,11 +215,10 @@ class AlgoCP(AlgoOne):
         # matière ayant plusieurs examinateurs, on pénalise l'écart entre
         # l'examinateur le plus chargé et le moins chargé (nombre d'oraux
         # reçus). Poids délibérément énorme par rapport à la contribution
-        # maximale possible du terme de tassement ci-dessous (POIDS_EQUITE >>
-        # max_creneau * BRUIT_ECHELLE * nombre de variables) : le solveur
-        # sacrifie toujours un meilleur tassement pour une meilleure
+        # maximale possible du terme de tassement ci-dessous (ALGO_POIDS_EQUITE
+        # >> max_creneau * ALGO_BRUIT_TASSEMENT * nombre de variables) : le
+        # solveur sacrifie toujours un meilleur tassement pour une meilleure
         # répartition de charge, jamais l'inverse.
-        POIDS_EQUITE = 1_000_000
         ecarts_charge = []
         for matiere in self.liste_matieres:
             examinateurs = examinateurs_par_matiere[id(matiere)]
@@ -234,17 +242,17 @@ class AlgoCP(AlgoOne):
         # Objectif : tasser les oraux tôt dans la journée (réduit les trous
         # avant le dernier créneau utilisé par examinateur -> meilleur taux
         # d'occupation, cf. AlgoOne.statistiques()), MAIS avec un bruit
-        # aléatoire de désambiguïsation par variable (0..BRUIT_ECHELLE-1,
+        # aléatoire de désambiguïsation par variable (0..bruit_tassement-1,
         # toujours strictement inférieur au poids d'un seul créneau) : sans
         # lui, le solveur choisirait systématiquement la même solution parmi
         # toutes celles à égalité de score (fréquent ici — de nombreux
         # examinateurs d'une même matière sont interchangeables). Le terme
-        # `creneau * BRUIT_ECHELLE` reste dominant sur le tassement, donc la
+        # `creneau * bruit_tassement` reste dominant sur le tassement, donc la
         # solution reste proche de l'optimum du tassement ; seul le choix
         # entre solutions quasi équivalentes change à chaque run.
-        BRUIT_ECHELLE = 25
+        bruit_tassement = max(1, ALGO_BRUIT_TASSEMENT)
         objectif_tassement = sum(
-            (creneau * BRUIT_ECHELLE + random.randint(0, BRUIT_ECHELLE - 1)) * var
+            (creneau * bruit_tassement + random.randint(0, bruit_tassement - 1)) * var
             for (_c, _m, _e, creneau), var in x.items()
         )
 
@@ -257,7 +265,7 @@ class AlgoCP(AlgoOne):
         # CHAQUE examinateur est individuellement poussé à respecter la
         # cible, plutôt qu'une seule pénalité globale que le solveur pourrait
         # laisser peser sur un seul examinateur sans qu'aucun autre terme ne
-        # s'y oppose spécifiquement. Poids nettement inférieur à POIDS_EQUITE :
+        # s'y oppose spécifiquement. Poids nettement inférieur à ALGO_POIDS_EQUITE :
         # l'équité de charge reste toujours prioritaire.
         penalite_fin_journee = 0
         cutoff_creneau = self._cutoff_creneau_fin_journee(max_creneau)
@@ -280,7 +288,7 @@ class AlgoCP(AlgoOne):
             penalite_fin_journee = sum(penalites_examinateurs)
 
         model.Minimize(
-            POIDS_EQUITE * sum(ecarts_charge)
+            ALGO_POIDS_EQUITE * sum(ecarts_charge)
             + ALGO_POIDS_CRENEAU_FIN_JOURNEE * penalite_fin_journee
             + objectif_tassement
         )
