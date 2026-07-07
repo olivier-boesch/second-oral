@@ -96,6 +96,19 @@ class TestRunAlgoEnvVars:
         )
         assert "8" in lines
 
+    def test_heure_fin_journee_cible_transmise(self, monkeypatch):
+        lines = self._capture_env(
+            monkeypatch, {"heure_fin_journee_cible": "14:05"},
+            "ALGO_HEURE_FIN_JOURNEE_CIBLE",
+        )
+        assert "14:05" in lines
+
+    def test_poids_heure_fin_journee_transmis(self, monkeypatch):
+        lines = self._capture_env(
+            monkeypatch, {"poids_heure_fin_journee": 500}, "ALGO_POIDS_HEURE_FIN_JOURNEE",
+        )
+        assert "500" in lines
+
 
 class TestStopAlgo:
     def test_returns_false_when_nothing_running(self):

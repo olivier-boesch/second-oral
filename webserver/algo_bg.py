@@ -124,6 +124,10 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
                 )
             if "seuil_petite_matiere" in params:
                 env["ALGO_SEUIL_PETITE_MATIERE"] = str(params["seuil_petite_matiere"])
+            if "heure_fin_journee_cible" in params:
+                env["ALGO_HEURE_FIN_JOURNEE_CIBLE"] = str(params["heure_fin_journee_cible"])
+            if "poids_heure_fin_journee" in params:
+                env["ALGO_POIDS_HEURE_FIN_JOURNEE"] = str(params["poids_heure_fin_journee"])
         # Force le mode non-bufférisé : chaque ligne est envoyée immédiatement
         # sans attendre le remplissage du buffer stdout Python (crucial pour le
         # streaming temps-réel vers le log console).

@@ -10,6 +10,7 @@ aléatoires. L'écart minimum entre les deux oraux d'un candidat devient une
 contrainte garantie (et non un critère de sélection a posteriori).
 """
 import random
+from datetime import date, datetime
 from os import cpu_count
 
 from ortools.sat.python import cp_model
@@ -32,6 +33,9 @@ ALGO_CP_TIMEOUT = _env_int("ALGO_CP_TIMEOUT", 60)
 # d'optimalité — peut prendre des heures sur un jeu de données réel.
 # Désactivé par défaut ; ALGO_CP_TIMEOUT est ignoré quand actif.
 ALGO_CP_OPTIMAL = _env_bool("ALGO_CP_OPTIMAL", False)
+# Poids de la pénalité "heure de fin de journée" dans la fonction objectif —
+# cf. AlgoOne.heure_fin_journee_cible et le commentaire dans AlgoCP.resoudre().
+ALGO_POIDS_HEURE_FIN_JOURNEE = _env_int("ALGO_POIDS_HEURE_FIN_JOURNEE", 200)
 
 
 class _ProgressLogger(cp_model.CpSolverSolutionCallback):
@@ -107,6 +111,33 @@ class AlgoCP(AlgoOne):
             t for t, oral in enumerate(examinateur.oraux)
             if not isinstance(oral, CreneauInterdit)
         ]
+
+    def _cutoff_creneau_fin_journee(self, max_creneau: int) -> int | None:
+        """Convertit `heure_fin_journee_cible` en index de créneau approximatif.
+
+        Le modèle CP-SAT raisonne en index de créneau abstrait, pas en heure
+        réelle (chaque matière a sa propre durée d'oral, mélangées sur un même
+        index par `objectif_tassement`) — la conversion utilise donc la durée
+        d'oral moyenne, pondérée par la demande réelle (nombre de candidats)
+        de chaque matière, plutôt qu'une moyenne arithmétique simple.
+
+        :return: index de créneau (borné à [0, max_creneau]), ou None si
+                 `heure_fin_journee_cible` n'est pas défini ou si aucun
+                 candidat n'est chargé (division par zéro évitée).
+        """
+        if self.heure_fin_journee_cible is None:
+            return None
+        demande_totale = sum(len(m.candidats) for m in self.liste_matieres)
+        if demande_totale == 0:
+            return None
+        duree_oral_moyenne = sum(
+            m.temps_oral.total_seconds() * len(m.candidats) for m in self.liste_matieres
+        ) / demande_totale
+        delta_cible = (
+            datetime.combine(date(1, 1, 1), self.heure_fin_journee_cible)
+            - datetime.combine(date(1, 1, 1), self.heure_debut)
+        ).total_seconds()
+        return max(0, min(max_creneau, int(delta_cible // duree_oral_moyenne) - 1))
 
     def resoudre(self) -> None:
         """Résout l'appairage des oraux via un modèle CP-SAT.
@@ -226,7 +257,29 @@ class AlgoCP(AlgoOne):
             (creneau * BRUIT_ECHELLE + random.randint(0, BRUIT_ECHELLE - 1)) * var
             for (_c, _m, _e, creneau), var in x.items()
         )
-        model.Minimize(POIDS_EQUITE * sum(ecarts_charge) + objectif_tassement)
+
+        # Heure de fin de journée cible (objectif souple, jamais bloquant) —
+        # pénalise les créneaux utilisés au-delà d'un index approximatif
+        # (cf. _cutoff_creneau_fin_journee) correspondant à l'heure cible.
+        # Poids nettement inférieur à POIDS_EQUITE : l'équité de charge reste
+        # toujours prioritaire.
+        penalite_fin_journee = 0
+        cutoff_creneau = self._cutoff_creneau_fin_journee(max_creneau)
+        if cutoff_creneau is not None:
+            log.debug(
+                f"Run {self.numero_run} : CP-SAT — heure de fin cible "
+                f"{self.heure_fin_journee_cible.strftime('%H:%M')} ≈ créneau {cutoff_creneau}"
+            )
+            penalite_fin_journee = sum(
+                max(0, creneau - cutoff_creneau) * var
+                for (_c, _m, _e, creneau), var in x.items()
+            )
+
+        model.Minimize(
+            POIDS_EQUITE * sum(ecarts_charge)
+            + ALGO_POIDS_HEURE_FIN_JOURNEE * penalite_fin_journee
+            + objectif_tassement
+        )
 
         solver = cp_model.CpSolver()
         if ALGO_CP_OPTIMAL:

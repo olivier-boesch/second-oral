@@ -63,6 +63,12 @@
         .param-input { padding: .35em .6em; border: 1px solid #c9b8f5;
                        border-radius: 4px; font-size: .95em; width: 100%; box-sizing: border-box; }
         .param-hint  { font-size: .78em; color: #666; }
+        .param-group { display: flex; gap: .8em; flex-wrap: wrap; }
+        .param-subrow { display: flex; flex-direction: column; gap: .2em; flex: 1 1 90px; min-width: 90px; }
+        .param-subrow label { font-size: .78em; color: #555; }
+        .param-subrow-toggle { flex-direction: row; align-items: center; gap: .4em; flex: 0 0 auto; }
+        .param-subrow-toggle label { font-size: .85em; color: inherit; }
+        .param-input-sm { padding: .3em .5em; font-size: .85em; }
         .info-icon   { display: inline-flex; align-items: center; justify-content: center;
                        width: 1.1em; height: 1.1em; border-radius: 50%;
                        background: #c9b8f5; color: #3d2fa0; font-size: .75em;
@@ -235,40 +241,66 @@
         </div>
         <div class="param-row">
             <label class="param-label" for="p-pause-meridienne-debut">
-                Pause méridienne — début
-                <span class="info-icon" title="Heure à partir de laquelle aucun oral ne doit être en cours pour un examinateur. Laisser vide pour désactiver la pause méridienne. Un oral qui empièterait sur cette heure est repoussé après la pause.">?</span>
+                Pause méridienne
+                <span class="info-icon" title="Heure à partir de laquelle aucun oral ne doit être en cours pour un examinateur, et durée de la pause. Laisser l'heure vide pour désactiver la pause méridienne. Un oral qui empièterait sur cette heure est repoussé après la pause.">?</span>
             </label>
-            <input class="param-input" type="time" id="p-pause-meridienne-debut" name="pause_meridienne_debut"
-                   value="{{ algo_params.pause_meridienne_debut }}">
-            <span class="param-hint">Vide = pas de pause méridienne</span>
-        </div>
-        <div class="param-row">
-            <label class="param-label" for="p-pause-meridienne-duree">
-                Pause méridienne — durée (min)
-                <span class="info-icon" title="Durée de la pause méridienne, en minutes. Ignorée si aucune heure de début n'est renseignée.">?</span>
-            </label>
-            <input class="param-input" type="number" id="p-pause-meridienne-duree" name="pause_meridienne_duree"
-                   min="0" max="240" value="{{ algo_params.pause_meridienne_duree }}">
-            <span class="param-hint">En minutes — ignoré si aucune heure de début n'est renseignée</span>
+            <div class="param-group">
+                <div class="param-subrow">
+                    <label for="p-pause-meridienne-debut">Début</label>
+                    <input class="param-input param-input-sm" type="time" id="p-pause-meridienne-debut" name="pause_meridienne_debut"
+                           value="{{ algo_params.pause_meridienne_debut }}">
+                </div>
+                <div class="param-subrow">
+                    <label for="p-pause-meridienne-duree">Durée (min)</label>
+                    <input class="param-input param-input-sm" type="number" id="p-pause-meridienne-duree" name="pause_meridienne_duree"
+                           min="0" max="240" value="{{ algo_params.pause_meridienne_duree }}">
+                </div>
+            </div>
+            <span class="param-hint">Heure vide = pas de pause méridienne</span>
         </div>
         <div class="param-row">
             <label class="param-label" for="p-petites-matieres">
                 Petites matières en fin de journée
-                <span class="info-icon" title="Repousse les matières peu demandées (moins de candidats que le seuil ci-dessous) vers la fin de journée, pour laisser les meilleurs créneaux aux matières principales. Peut rendre le placement impossible si un candidat a choisi deux matières toutes deux jugées « petites » (leurs fenêtres de fin de journée se chevauchent) — désactivez cette option si l'algorithme échoue avec « Aucun placement valide trouvé ».">?</span>
+                <span class="info-icon" title="Repousse les matières peu demandées (moins de candidats que le seuil) vers la fin de journée, pour laisser les meilleurs créneaux aux matières principales. Peut rendre le placement impossible si un candidat a choisi deux matières toutes deux jugées « petites » (leurs fenêtres de fin de journée se chevauchent) — désactivez cette option si l'algorithme échoue avec « Aucun placement valide trouvé ».">?</span>
             </label>
-            <input type="checkbox" id="p-petites-matieres" name="petites_matieres_fin_journee"
-                   {% if algo_params.petites_matieres_fin_journee %}checked{% endif %}
-                   onchange="onPetitesMatieresChange()">
-            <span class="param-hint">Activé par défaut — désactivez en cas d'échec du placement</span>
+            <div class="param-group">
+                <div class="param-subrow param-subrow-toggle">
+                    <input type="checkbox" id="p-petites-matieres" name="petites_matieres_fin_journee"
+                           {% if algo_params.petites_matieres_fin_journee %}checked{% endif %}
+                           onchange="onPetitesMatieresChange()">
+                    <label for="p-petites-matieres">Activer</label>
+                </div>
+                <div class="param-subrow" id="p-seuil-petite-matiere-row">
+                    <label for="p-seuil-petite-matiere">Seuil (nb candidats)</label>
+                    <input class="param-input param-input-sm" type="number" id="p-seuil-petite-matiere" name="seuil_petite_matiere"
+                           min="1" max="500" value="{{ algo_params.seuil_petite_matiere }}">
+                </div>
+            </div>
+            <span class="param-hint">Activé par défaut, seuil 5 candidats — désactivez en cas d'échec du placement</span>
         </div>
-        <div class="param-row" id="p-seuil-petite-matiere-row">
-            <label class="param-label" for="p-seuil-petite-matiere">
-                Seuil petite matière (nombre de candidats)
-                <span class="info-icon" title="Une matière est jugée « petite » quand son nombre de candidats est strictement inférieur à ce seuil. Ignoré si l'option ci-dessus est désactivée.">?</span>
+        <div class="param-row">
+            <label class="param-label" for="p-heure-fin-active">
+                Heure de fin de journée cible
+                <span class="info-icon" title="Heure à laquelle on souhaite que le dernier oral de la journée soit terminé. Objectif souple, jamais bloquant : Monte-Carlo préfère, parmi les tirages déjà conformes à l'écart minimum candidat, celui qui finit le plus tôt ; CP-SAT pénalise (selon le poids réglé ci-dessous) les créneaux utilisés au-delà d'un index de créneau approximatif correspondant à cette heure — jamais au point de rendre le placement impossible.">?</span>
             </label>
-            <input class="param-input" type="number" id="p-seuil-petite-matiere" name="seuil_petite_matiere"
-                   min="1" max="500" value="{{ algo_params.seuil_petite_matiere }}">
-            <span class="param-hint">Par défaut 5 candidats — ignoré si l'option ci-dessus est désactivée</span>
+            <div class="param-group">
+                <div class="param-subrow param-subrow-toggle">
+                    <input type="checkbox" id="p-heure-fin-active" onchange="onHeureFinJourneeChange()"
+                           {% if algo_params.heure_fin_journee_cible %}checked{% endif %}>
+                    <label for="p-heure-fin-active">Activer</label>
+                </div>
+                <div class="param-subrow" id="p-heure-fin-heure-row">
+                    <label for="p-heure-fin-journee">Heure cible</label>
+                    <input class="param-input param-input-sm" type="time" id="p-heure-fin-journee"
+                           value="{{ algo_params.heure_fin_journee_cible }}">
+                </div>
+                <div class="param-subrow" id="p-heure-fin-poids-row">
+                    <label for="p-poids-heure-fin">Poids (CP-SAT)</label>
+                    <input class="param-input param-input-sm" type="number" id="p-poids-heure-fin"
+                           min="0" max="100000" value="{{ algo_params.poids_heure_fin_journee }}">
+                </div>
+            </div>
+            <span class="param-hint">Désactivé par défaut — le poids ne s'applique qu'au moteur CP-SAT</span>
         </div>
     </div>
 
@@ -645,6 +677,13 @@ function onPetitesMatieresChange() {
     document.getElementById('p-seuil-petite-matiere-row').style.opacity = actif ? 1 : .4;
 }
 
+// ── Bascule visuelle de l'heure/poids selon l'activation de l'heure de fin ──
+function onHeureFinJourneeChange() {
+    const actif = document.getElementById('p-heure-fin-active').checked;
+    document.getElementById('p-heure-fin-heure-row').style.opacity = actif ? 1 : .4;
+    document.getElementById('p-heure-fin-poids-row').style.opacity = actif ? 1 : .4;
+}
+
 // ── Confirmation avant activation du mode optimal (aucune limite de temps) ──
 function onCpOptimalChange(checkbox) {
     if (checkbox.checked && !confirm(
@@ -673,6 +712,10 @@ function sauvegarderParams() {
         pause_meridienne_duree: parseInt(document.getElementById('p-pause-meridienne-duree').value, 10),
         petites_matieres_fin_journee: document.getElementById('p-petites-matieres').checked,
         seuil_petite_matiere: parseInt(document.getElementById('p-seuil-petite-matiere').value, 10),
+        heure_fin_journee_cible: document.getElementById('p-heure-fin-active').checked
+            ? document.getElementById('p-heure-fin-journee').value
+            : '',
+        poids_heure_fin_journee: parseInt(document.getElementById('p-poids-heure-fin').value, 10),
     };
     fb.textContent = 'Sauvegarde…';
     fb.style.color = '#555';
@@ -698,6 +741,7 @@ function sauvegarderParams() {
 validerAvantLancement(() => {});
 onEngineChange();
 onPetitesMatieresChange();
+onHeureFinJourneeChange();
 
 {% if is_running %}
 connectAlgoSSE();

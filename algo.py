@@ -89,6 +89,8 @@ MARGE_PETITE_MATIERE         = _env_int("ALGO_MARGE_PETITE_MATIERE", 2)
 # heure de début et durée réglables depuis /gestion/algo.
 PAUSE_MERIDIENNE_DEBUT = _env_time_optional("ALGO_PAUSE_MERIDIENNE_DEBUT")
 PAUSE_MERIDIENNE_DUREE = timedelta(minutes=_env_int("ALGO_PAUSE_MERIDIENNE_DUREE", 0))
+# Objectif souple (jamais bloquant) d'heure de fin du dernier oral — cf. AlgoOne.__init__.
+HEURE_FIN_JOURNEE_CIBLE = _env_time_optional("ALGO_HEURE_FIN_JOURNEE_CIBLE")
 
 # données
 DATA_DIR = 'data'
@@ -550,7 +552,8 @@ class AlgoOne:
                  optimiser_petites_matieres: bool = False, seuil_petite_matiere: int = 5,
                  marge_flexibilite_petite_matiere: int = 2,
                  heure_pause_meridienne: time | None = None,
-                 duree_pause_meridienne: timedelta = timedelta(minutes=0)):
+                 duree_pause_meridienne: timedelta = timedelta(minutes=0),
+                 heure_fin_journee_cible: time | None = None):
         """
         :param filename_candidats: nom du fichier des candidats
         :type filename_candidats: str
@@ -589,6 +592,14 @@ class AlgoOne:
         :type heure_pause_meridienne: time | None
         :param duree_pause_meridienne: durée de la pause méridienne
         :type duree_pause_meridienne: timedelta
+        :param heure_fin_journee_cible: heure à laquelle on souhaite que le dernier oral de la
+            journée soit terminé (None désactive la fonctionnalité). Objectif souple, jamais
+            bloquant : Monte-Carlo (cf. selectionner_meilleur_algo) préfère, parmi les runs déjà
+            conformes à l'écart minimum candidat, celui qui finit le plus tôt ; CP-SAT (cf.
+            AlgoCP.resoudre) pénalise dans sa fonction objectif (poids ALGO_POIDS_HEURE_FIN_JOURNEE)
+            les créneaux utilisés au-delà d'un index approximatif de cette heure, sans jamais
+            rendre le modèle infaisable à cause de ce seul réglage.
+        :type heure_fin_journee_cible: time | None
         """
         self.filename_candidats: str = filename_candidats
         self.filename_examinateurs: str = filename_examinateurs
@@ -611,6 +622,7 @@ class AlgoOne:
         self.marge_flexibilite_petite_matiere = marge_flexibilite_petite_matiere
         self.heure_pause_meridienne = heure_pause_meridienne
         self.duree_pause_meridienne = duree_pause_meridienne
+        self.heure_fin_journee_cible = heure_fin_journee_cible
 
     def setup_from_files(self) -> None:
         """Charge les données depuis les fichiers et crée les objets"""
@@ -1079,6 +1091,7 @@ def algo_run(parameters):
 def selectionner_meilleur_algo(
     results: list,
     ecart_mini_minutes: float,
+    heure_fin_cible: time | None = None,
 ) -> tuple:
     """
     Sélectionne le meilleur run parmi les résultats de algo_run().
@@ -1088,6 +1101,13 @@ def selectionner_meilleur_algo(
     le minimum configuré. Parmi les runs conformes, on choisit celui avec le
     meilleur taux d'occupation examinateurs (stats['profs']) — sans jamais
     élire un run non conforme tant qu'un run conforme existe dans le batch.
+
+    Si `heure_fin_cible` est fourni, ce critère change parmi les runs
+    conformes : on préfère celui dont le dernier oral finit le plus tôt
+    (`alg.heure_fin_journee()`), le taux d'occupation ne servant plus qu'à
+    départager une égalité d'heure de fin. Objectif souple : le repli sur le
+    meilleur run tout court (aucun run conforme) reste inchangé, sans égard
+    à l'heure de fin.
 
     Si AUCUN run n'est conforme (cas limite, données très contraintes), on
     retombe sur le meilleur run tout court (par profs) pour ne pas bloquer
@@ -1099,11 +1119,13 @@ def selectionner_meilleur_algo(
                      contient alors le message d'erreur), sinon info est le
                      dict de stats retourné par statistiques().
     :param ecart_mini_minutes: écart minimum candidat requis, en minutes.
+    :param heure_fin_cible: heure de fin de journée souhaitée (None = ignorée).
     :return: (best_alg, best_stats, n_err, run_errors, aucun_run_conforme)
     """
     n_err = 0
     run_errors: list[str] = []
     best_percentage_compliant = -1.0
+    best_cle_fin_compliant = None
     best_alg_compliant = None
     best_stats_compliant = None
     best_percentage_any = -1.0
@@ -1121,7 +1143,16 @@ def selectionner_meilleur_algo(
             best_percentage_any = stats['profs']
             best_alg_any = alg
             best_stats_any = stats
-        if stats['candidats'] >= ecart_mini_minutes and best_percentage_compliant < stats['profs']:
+        if stats['candidats'] < ecart_mini_minutes:
+            continue
+        if heure_fin_cible is not None:
+            heure_fin = alg.heure_fin_journee() or time.max
+            cle = (heure_fin, -stats['profs'])
+            if best_cle_fin_compliant is None or cle < best_cle_fin_compliant:
+                best_cle_fin_compliant = cle
+                best_alg_compliant = alg
+                best_stats_compliant = stats
+        elif best_percentage_compliant < stats['profs']:
             best_percentage_compliant = stats['profs']
             best_alg_compliant = alg
             best_stats_compliant = stats
@@ -1144,6 +1175,9 @@ if __name__ == '__main__':
         'heure_pause_meridienne': PAUSE_MERIDIENNE_DEBUT,
         'duree_pause_meridienne': PAUSE_MERIDIENNE_DUREE,
     }
+    _heure_fin_journee_kwargs = {
+        'heure_fin_journee_cible': HEURE_FIN_JOURNEE_CIBLE,
+    }
     if ALGO_ENGINE == "cpsat":
         # Moteur CP-SAT : une seule résolution (pas de tirages Monte-Carlo),
         # avec écart minimum candidat garanti par construction du modèle.
@@ -1158,7 +1192,8 @@ if __name__ == '__main__':
                       'traiter_matiere_principales_en_premier': True,
                       'numero_run': 0,
                       **_petites_matieres_kwargs,
-                      **_pause_meridienne_kwargs}
+                      **_pause_meridienne_kwargs,
+                      **_heure_fin_journee_kwargs}
         results = [algo_cp_run(parameters)]
     else:
         log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
@@ -1173,6 +1208,7 @@ if __name__ == '__main__':
                                'heure_debut': HEURE_DEBUT,
                                **_petites_matieres_kwargs,
                                **_pause_meridienne_kwargs,
+                               **_heure_fin_journee_kwargs,
                                'traiter_matiere_principales_en_premier': True,
                                'numero_run': i}
                                 for i in range(N_run)]
@@ -1189,7 +1225,7 @@ if __name__ == '__main__':
     # aucun run du batch ne le respecte.
     ecart_mini_minutes = ECART_MINI_CANDIDAT.total_seconds() / 60
     best_alg, final_stats, n_err, run_errors, aucun_run_conforme = selectionner_meilleur_algo(
-        results, ecart_mini_minutes,
+        results, ecart_mini_minutes, heure_fin_cible=HEURE_FIN_JOURNEE_CIBLE,
     )
     if ALGO_ENGINE == "monte_carlo":
         # Non pertinent en CP-SAT : une seule résolution est tentée (pas de

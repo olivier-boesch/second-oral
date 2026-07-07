@@ -28,6 +28,19 @@
 **Tests (suite 8)**
 - `tests/unit/test_algo.py::TestHeureFinJournee` : `None` avant `calcul_horaires()`, `None` sans oral placé, valeur correcte égale au max des `heure_fin` individuelles
 
+**Algorithme de placement (suite 6) — heure de fin de journée cible**
+- Nouveau réglage **objectif souple** (jamais bloquant) sur `/gestion/algo` → section Paramètres : case **Activer** + heure cible + poids CP-SAT, groupés avec la pause méridienne et les petites matières dans un bloc compact (deux champs côte à côte par réglage) ; `ALGO_HEURE_FIN_JOURNEE_CIBLE` / `ALGO_POIDS_HEURE_FIN_JOURNEE` en variables d'environnement, désactivé par défaut
+- Nouveau paramètre `AlgoOne.__init__(heure_fin_journee_cible=None)`, partagé par les deux moteurs (`AlgoCP` en hérite)
+- **Monte-Carlo** : `selectionner_meilleur_algo()` accepte un paramètre `heure_fin_cible` — parmi les runs déjà conformes à l'écart minimum candidat, le run élu est celui qui finit le plus tôt (`AlgoOne.heure_fin_journee()`), le taux d'occupation ne servant plus qu'à départager une égalité ; sans effet sur le repli (aucun run conforme) ni si `heure_fin_cible` est `None` (comportement historique inchangé)
+- **CP-SAT** : nouvelle méthode `AlgoCP._cutoff_creneau_fin_journee()` convertissant l'heure cible en index de créneau approximatif (durée d'oral moyenne pondérée par la demande réelle de chaque matière — le modèle raisonne en index abstrait, pas en heure réelle) ; nouveau terme d'objectif pénalisant (poids `ALGO_POIDS_HEURE_FIN_JOURNEE`, défaut `200`, nettement sous `POIDS_EQUITE`) chaque créneau utilisé au-delà de cet index, sans jamais l'interdire — reste toujours faisable même si la cible est irréaliste
+- `webserver/algo_bg.py::run_algo()` traduit désormais aussi ces deux paramètres en variables d'environnement (comme les autres réglages `/gestion/algo`)
+
+**Tests (suite 9)**
+- `tests/unit/test_algo.py::TestSelectionMeilleurAlgoHeureFinCible` : préférence pour le run qui finit le plus tôt, égalité départagée par occupation, ignoré par défaut, `heure_fin_journee() is None` traité comme pire cas
+- `tests/unit/test_algo_cp.py::TestCutoffCreneauFinJournee` : `None` si non défini ou aucun candidat, conversion correcte (durée uniforme et pondérée), bornes [0, max_creneau]
+- `tests/unit/test_algo_cp.py::TestAlgoCPHeureFinJournee` : poids par défaut, placement toujours complet et écart minimum toujours respecté même avec une cible irréaliste
+- `tests/unit/test_algo_bg.py`, `tests/integration/test_flask_routes.py` : câblage des deux nouveaux paramètres (variables d'environnement, persistance et bornes via `/gestion/algo/params`)
+
 **Gestion en cours de journée (suite 4) — déclaration et retrait de tiers-temps d'un candidat**
 - Nouveau bouton **⏱️ Déclarer** (ou **⏱️ Retirer** si déjà posé) sur `/gestion/liste-candidats` : un candidat déclare — ou fait retirer, si posé par erreur — un tiers-temps le jour J, après le placement initial ; le sens se déduit automatiquement de son état actuel
 - Déclaration : étend la préparation de ses deux oraux d'1/3 (même règle que `AlgoOne.calcul_horaires` pour un tiers-temps connu à la construction du planning — heure de sujet inchangée, heure d'oral/fin décalées). Retrait : réduit la préparation actuelle (déjà étendue, donc 4/3 de la base) d'1/4 pour retrouver la durée d'origine — symétrique, mêmes fonctions ; nouvelle fonction `rebalance.planifier_tiers_temps(..., activer=True/False)`

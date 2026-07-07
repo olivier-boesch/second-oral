@@ -407,6 +407,93 @@ class TestSelectionMeilleurAlgo:
         assert aucun_run_conforme is False
 
 
+class TestSelectionMeilleurAlgoHeureFinCible:
+    """Quand heure_fin_cible est fourni, la sélection parmi les runs conformes
+    à l'écart minimum privilégie celui qui finit le plus tôt (au lieu du
+    meilleur taux d'occupation) — objectif souple lié à
+    AlgoOne.heure_fin_journee_cible."""
+
+    def test_prefere_le_run_qui_finit_le_plus_tot(self):
+        from algo import selectionner_meilleur_algo
+
+        alg_tot = MagicMock(name="alg_tot")
+        alg_tot.heure_fin_journee.return_value = time(hour=13, minute=0)
+        alg_tard = MagicMock(name="alg_tard")
+        alg_tard.heure_fin_journee.return_value = time(hour=15, minute=0)
+
+        results = [
+            # Meilleure occupation (95%) mais finit plus tard : doit être écarté.
+            (alg_tard, {"profs": 95.0, "candidats": 90}),
+            (alg_tot, {"profs": 80.0, "candidats": 90}),
+        ]
+
+        best_alg, best_stats, *_ = selectionner_meilleur_algo(
+            results, ecart_mini_minutes=80, heure_fin_cible=time(hour=13, minute=0),
+        )
+
+        assert best_alg is alg_tot
+        assert best_stats == {"profs": 80.0, "candidats": 90}
+
+    def test_egalite_heure_fin_departagee_par_occupation(self):
+        from algo import selectionner_meilleur_algo
+
+        alg_faible = MagicMock(name="alg_faible")
+        alg_faible.heure_fin_journee.return_value = time(hour=13, minute=0)
+        alg_fort = MagicMock(name="alg_fort")
+        alg_fort.heure_fin_journee.return_value = time(hour=13, minute=0)
+
+        results = [
+            (alg_faible, {"profs": 70.0, "candidats": 90}),
+            (alg_fort, {"profs": 92.0, "candidats": 90}),
+        ]
+
+        best_alg, *_ = selectionner_meilleur_algo(
+            results, ecart_mini_minutes=80, heure_fin_cible=time(hour=13, minute=0),
+        )
+
+        assert best_alg is alg_fort
+
+    def test_ignore_par_defaut(self):
+        """Sans heure_fin_cible, comportement inchangé : meilleure occupation élue
+        même si elle finit plus tard qu'une alternative conforme."""
+        from algo import selectionner_meilleur_algo
+
+        alg_tard_mais_plein = MagicMock(name="alg_tard_mais_plein")
+        alg_tard_mais_plein.heure_fin_journee.return_value = time(hour=15, minute=0)
+        alg_tot_mais_creux = MagicMock(name="alg_tot_mais_creux")
+        alg_tot_mais_creux.heure_fin_journee.return_value = time(hour=13, minute=0)
+
+        results = [
+            (alg_tard_mais_plein, {"profs": 95.0, "candidats": 90}),
+            (alg_tot_mais_creux, {"profs": 80.0, "candidats": 90}),
+        ]
+
+        best_alg, *_ = selectionner_meilleur_algo(results, ecart_mini_minutes=80)
+
+        assert best_alg is alg_tard_mais_plein
+
+    def test_heure_fin_none_traitee_comme_pire_cas(self):
+        """Un run dont heure_fin_journee() est None (aucun oral placé, cas
+        pathologique) ne doit jamais être préféré à un run avec une vraie heure."""
+        from algo import selectionner_meilleur_algo
+
+        alg_sans_oral = MagicMock(name="alg_sans_oral")
+        alg_sans_oral.heure_fin_journee.return_value = None
+        alg_normal = MagicMock(name="alg_normal")
+        alg_normal.heure_fin_journee.return_value = time(hour=13, minute=0)
+
+        results = [
+            (alg_sans_oral, {"profs": 0.0, "candidats": 90}),
+            (alg_normal, {"profs": 80.0, "candidats": 90}),
+        ]
+
+        best_alg, *_ = selectionner_meilleur_algo(
+            results, ecart_mini_minutes=80, heure_fin_cible=time(hour=13, minute=0),
+        )
+
+        assert best_alg is alg_normal
+
+
 class TestTiersTempsNoOverlap:
     """Un candidat tiers-temps prolonge sa propre préparation de
     temps_preparation/3, ce qui retarde d'autant l'oral suivant dans la

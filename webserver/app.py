@@ -3144,6 +3144,8 @@ _ALGO_PARAMS_DEFAULTS = {
     "pause_meridienne_duree": 60,
     "petites_matieres_fin_journee": True,
     "seuil_petite_matiere": 5,
+    "heure_fin_journee_cible": "",
+    "poids_heure_fin_journee": 200,
 }
 
 def _load_algo_params() -> dict:
@@ -3377,6 +3379,15 @@ def algo_save_params() -> ResponseReturnValue:
             params["pause_meridienne_debut"] = ""
         params["pause_meridienne_duree"] = max(
             0, min(240, int(data.get("pause_meridienne_duree", 60))),
+        )
+        heure_fin_cible = str(data.get("heure_fin_journee_cible", "")).strip()
+        if heure_fin_cible:
+            h, m = heure_fin_cible.split(":")
+            params["heure_fin_journee_cible"] = f"{int(h):02d}:{int(m):02d}"
+        else:
+            params["heure_fin_journee_cible"] = ""
+        params["poids_heure_fin_journee"] = max(
+            0, min(100_000, int(data.get("poids_heure_fin_journee", 200))),
         )
     except (ValueError, KeyError):
         return jsonify({"ok": False, "reason": "invalid_params"}), 400
