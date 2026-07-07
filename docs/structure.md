@@ -91,7 +91,7 @@ second_oral/
         ├── gestion_algo.html    Upload + paramètres + lancement algo
         ├── gestion_documents.html  Téléchargement centralisé des PDFs
         ├── credentials.html     Renouvellement des identifiants
-        ├── monitoring.html      Tableau de bord admin
+        ├── jour_j.html          Hub de pilotage (Jour J + supervision technique)
         ├── archive.html         Archive de fin de session
         ├── verify_logs.html     Vérification de l'intégrité des logs
         └── mentions_legales.html

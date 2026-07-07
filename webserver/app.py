@@ -1417,6 +1417,9 @@ def jour_j() -> ResponseReturnValue:
             "statut": statut,
         }
 
+    redis_ok, stats = _monitoring_redis_stats()
+    recent_failures = _monitoring_recent_failures()
+
     return render_template(
         "jour_j.html",
         centre=CENTRE_EXAMEN,
@@ -1427,6 +1430,13 @@ def jour_j() -> ResponseReturnValue:
         url_of_page=request.url,
         username=get_username(),
         authenticated=is_authenticated(),
+        redis_ok=redis_ok,
+        total=stats.get('total'),
+        by_status=stats.get('by_status'),
+        hourly=stats.get('hourly'),
+        online=stats.get('online'),
+        online_detail=stats.get('online_detail'),
+        recent_failures=recent_failures,
     )
 
 
@@ -2810,28 +2820,6 @@ def monitoring_data() -> ResponseReturnValue:
     redis_ok, stats = _monitoring_redis_stats()
     recent_failures = _monitoring_recent_failures()
     return jsonify(
-        redis_ok=redis_ok,
-        total=stats.get('total'),
-        by_status=stats.get('by_status'),
-        hourly=stats.get('hourly'),
-        online=stats.get('online'),
-        online_detail=stats.get('online_detail'),
-        recent_failures=recent_failures,
-    )
-
-
-@app.route('/gestion/monitoring')
-@admin_required
-@nocache
-def monitoring() -> ResponseReturnValue:
-    """Tableau de bord de monitoring — admin uniquement."""
-    redis_ok, stats = _monitoring_redis_stats()
-    recent_failures = _monitoring_recent_failures()
-    return render_template(
-        'monitoring.html',
-        centre=CENTRE_EXAMEN,
-        username=get_username(),
-        url_of_page=request.url,
         redis_ok=redis_ok,
         total=stats.get('total'),
         by_status=stats.get('by_status'),

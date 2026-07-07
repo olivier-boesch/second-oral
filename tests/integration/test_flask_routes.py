@@ -566,6 +566,17 @@ class TestJourJ:
         assert r.status_code == 200
         assert "à venir (12:00" in r.data.decode()
 
+    def test_section_monitoring_affichee_meme_si_redis_indisponible(self, admin_client, db_mock, monkeypatch):
+        """La section supervision technique (ex-page /gestion/monitoring) s'affiche
+        même si Redis est indisponible."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_redis",
+                            lambda: (_ for _ in ()).throw(OSError("Redis KO")))
+        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
+        r = admin_client.get("/gestion/jour-j")
+        assert r.status_code == 200
+        assert "Redis indisponible" in r.data.decode()
+
 
 # ── Intégration ODS complète ─────────────────────────────────────────────────
 
@@ -1180,22 +1191,9 @@ class TestListeExaminateursDelete:
         assert "Supprimer cet examinateur" not in body
 
 
-# ── Monitoring ────────────────────────────────────────────────────────────────
+# ── Timer de loge ─────────────────────────────────────────────────────────────
 
-class TestMonitoring:
-    def test_requires_admin(self, client):
-        r = client.get("/gestion/monitoring", follow_redirects=False)
-        assert r.status_code == 302
-
-    def test_renders_when_redis_unavailable(self, admin_client, monkeypatch):
-        """La page s'affiche même si Redis est indisponible."""
-        import app as app_module
-        monkeypatch.setattr(app_module, "_redis",
-                            lambda: (_ for _ in ()).throw(OSError("Redis KO")))
-        r = admin_client.get("/gestion/monitoring")
-        assert r.status_code == 200
-        assert "Redis indisponible" in r.data.decode()
-
+class TestTimerState:
     def test_timer_state_get_requires_auth(self, client):
         r = client.get("/loge/timer-state?loge=C107", follow_redirects=False)
         assert r.status_code == 403

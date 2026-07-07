@@ -266,11 +266,12 @@ Sur la page `/gestion/documents` (accueil admin → bloc **Préparation** → Do
 
 ### Jour J — hub de pilotage en direct
 
-`/gestion/jour-j` (icône ⚡ en haut de la barre latérale admin) centralise les actions courantes en cours de journée, sans repasser par les listes complètes :
+`/gestion/jour-j` (icône ⚡ en bas de la barre latérale admin, dans le groupe « pilotage live ») centralise les actions courantes en cours de journée, sans repasser par les listes complètes :
 
 - **État** : algorithme en cours d'exécution ou non ; pause méridienne configurée (à venir / en cours / terminée), avec un lien direct vers `/gestion/algo` pour la régler.
 - **🕒 Disponibilité d'un examinateur** : sélectionner directement l'examinateur concerné dans la liste déroulante et accéder au formulaire d'absence/retard/renfort (cf. section suivante) — équivalent au bouton **🕒 Disponibilité** de `/gestion/liste-examinateurs`, mais sans avoir à parcourir la liste.
 - **🔄 Changement de matière d'un candidat** : idem pour le formulaire de changement de matière (cf. plus bas), à partir d'une liste déroulante de candidats.
+- **📊 Supervision technique** (section repliable en bas de page, ex-page `/gestion/monitoring`) : requêtes HTTP, activité des dernières 24 h, sessions actives, échecs d'authentification récents, rappel de purge des PDFs générés. Rafraîchie automatiquement toutes les 10 s.
 
 Un lien « Voir tous les examinateurs/candidats » reste disponible pour retrouver le mode liste complet (recherche visuelle, autres actions d'édition).
 
