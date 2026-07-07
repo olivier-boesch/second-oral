@@ -804,3 +804,93 @@ class TestPremierOralApresCreneauxInterdits:
         prof_maths = next(m for m in alg.liste_matieres if m.nom == "Maths").examinateurs[0]
         heures_sujet = sorted(o.heure_sujet for o in prof_maths.oraux if o is not None)
         assert heures_sujet[0] == time(hour=7, minute=20)
+
+
+class TestCacheDonneesWorker:
+    """Cache par processus worker (Pool Monte-Carlo) — évite de relire/
+    re-parser les CSV à chaque run (cf. algo._initialiser_cache_worker)."""
+
+    def test_initialiser_cache_worker_peuple_le_cache(self, tmp_path):
+        import algo as algo_module
+
+        candidats_path = _write_csv(
+            tmp_path / "candidats.csv", _CAND_HDR, [_cand("Cand0", "1000000000")],
+        )
+        exams_path = _write_csv(
+            tmp_path / "examinateurs.csv", _EXAM_HDR,
+            [_exam("Prof Maths", "Maths", "A101"), _exam("Prof Philo", "Philo", "B101")],
+        )
+        preps_path = _write_csv(tmp_path / "preps.csv", _PREPS_HDR, _PREPS_BASE)
+
+        assert algo_module._cache_donnees_worker is None
+        try:
+            algo_module._initialiser_cache_worker(candidats_path, exams_path, preps_path)
+            cache = algo_module._cache_donnees_worker
+            assert cache is not None
+            assert len(cache["candidats"]) == 1
+            assert len(cache["examinateurs"]) == 2
+            assert len(cache["matieres"]) == 2
+        finally:
+            algo_module._cache_donnees_worker = None
+
+    def test_setup_from_files_utilise_le_cache_sans_toucher_au_disque(self, tmp_path, monkeypatch):
+        """Une fois le cache peuplé, setup_from_files() ne doit plus jamais
+        appeler charger_fichier_comme_liste (donc plus lire le disque) —
+        y compris pour une instance dont les chemins de fichiers sont
+        invalides, preuve que seul le cache est utilisé."""
+        import algo as algo_module
+
+        candidats = [_cand("Cand0", "2000000000")]
+        exams = [_exam("Prof Maths", "Maths", "A101"), _exam("Prof Philo", "Philo", "B101")]
+        cache = {
+            "candidats": [
+                {"CANDIDAT": "Cand0 (2000000000)", "CHOIX DISCIPLINE 1": "Maths",
+                 "CHOIX DISCIPLINE 2": "Philo", "TT": "0", "Etab": "", "Profs": ""},
+            ],
+            "examinateurs": [
+                {"Nom": "Prof Maths", "Disc.poste": "Maths", "Salle": "A101",
+                 "Heure mini": "8", "Etab": "", "Loge": "Loge1"},
+                {"Nom": "Prof Philo", "Disc.poste": "Philo", "Salle": "B101",
+                 "Heure mini": "8", "Etab": "", "Loge": "Loge1"},
+            ],
+            "matieres": [
+                {"Matiere": "Maths", "Matière court": "Maths",
+                 "Temps preparation (min)": "20", "Duree (min)": "20"},
+                {"Matiere": "Philo", "Matière court": "Philo",
+                 "Temps preparation (min)": "20", "Duree (min)": "20"},
+            ],
+        }
+        monkeypatch.setattr(algo_module, "_cache_donnees_worker", cache)
+
+        def _echoue_si_appelee(filename):
+            raise AssertionError(f"charger_fichier_comme_liste appelée avec {filename!r} "
+                                 "alors que le cache worker était disponible")
+        monkeypatch.setattr(algo_module, "charger_fichier_comme_liste", _echoue_si_appelee)
+
+        alg = AlgoOne(
+            filename_candidats="/inexistant/candidats.csv",
+            filename_examinateurs="/inexistant/examinateurs.csv",
+            filename_matieres="/inexistant/preps.csv",
+            temps_minimum_entre_oraux=_ECART_MINI,
+            max_creneaux_journee=_MAX_CRENEAUX,
+            heure_debut=time(hour=8, minute=0),
+        )
+        alg.setup_from_files()
+
+        assert len(alg.liste_candidats) == 1
+        assert len(alg.liste_examinateurs) == 2
+        assert len(alg.liste_matieres) == 2
+
+    def test_setup_from_files_lit_les_fichiers_si_cache_absent(self, tmp_path):
+        """Non-régression : sans cache worker (CP-SAT, tests, script direct),
+        le comportement reste la lecture fichier classique."""
+        import algo as algo_module
+        assert algo_module._cache_donnees_worker is None
+
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand("Cand0", "3000000000")],
+            exams=[_exam("Prof Maths", "Maths", "A101"), _exam("Prof Philo", "Philo", "B101")],
+        )
+        assert len(alg.liste_candidats) == 1
+        assert len(alg.liste_examinateurs) == 2

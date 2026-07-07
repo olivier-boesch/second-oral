@@ -214,6 +214,33 @@ def charger_fichier_comme_liste(filename: str) -> list:
             return [r for r in data]
 
 
+# Cache par processus worker : `multiprocessing.Pool` ne crée que
+# `cpu_count()` processus, qui traitent chacun plusieurs runs Monte-Carlo
+# séquentiellement (jusqu'à N_run=1000) — sans ce cache, `setup_from_files()`
+# relit et re-parse les 3 CSV depuis le disque à *chaque* run, alors que leur
+# contenu ne change jamais pendant tout le batch. Peuplé une seule fois par
+# worker via `Pool(initializer=...)`, jamais par instance `AlgoOne` : reste
+# donc `None` (et sans effet) en dehors de ce contexte précis — CP-SAT (une
+# seule résolution, pas de `Pool`), tests, et usage direct en script
+# continuent de lire les fichiers normalement, comportement inchangé.
+_cache_donnees_worker: dict[str, list[dict]] | None = None
+
+
+def _initialiser_cache_worker(filename_candidats: str, filename_examinateurs: str,
+                              filename_matieres: str) -> None:
+    """Initializer de `multiprocessing.Pool` (Monte-Carlo) : parse les 3 CSV
+    une fois par processus worker plutôt qu'une fois par run — cf.
+    commentaire de `_cache_donnees_worker`. Les dicts obtenus ne sont jamais
+    mutés par `setup_from_files()` (seulement lus), donc partageables sans
+    risque entre tous les runs traités par ce worker."""
+    global _cache_donnees_worker
+    _cache_donnees_worker = {
+        'candidats': charger_fichier_comme_liste(filename_candidats),
+        'examinateurs': charger_fichier_comme_liste(filename_examinateurs),
+        'matieres': charger_fichier_comme_liste(filename_matieres),
+    }
+
+
 def chercher_par_nom(liste: list[Union["Candidat", "Examinateur", "Matiere"]], nom: str) -> Union["Candidat", "Examinateur", "Matiere"]:
     """Cherche dans une liste d'objets par l'attribut nom.
     Pour les Matiere, recherche aussi par nom_court (insensible à la casse)
@@ -593,10 +620,17 @@ class AlgoOne:
 
     def setup_from_files(self) -> None:
         """Charge les données depuis les fichiers et crée les objets"""
-        # chargement des données
-        liste_donnees_candidats: list[dict] = charger_fichier_comme_liste(self.filename_candidats)
-        liste_donnees_matieres: list[dict] = charger_fichier_comme_liste(self.filename_matieres)
-        liste_donnees_examinateurs: list[dict] = charger_fichier_comme_liste(self.filename_examinateurs)
+        # chargement des données — réutilise le cache worker s'il est déjà
+        # peuplé (cf. _cache_donnees_worker), sinon lit les fichiers
+        # directement (CP-SAT, tests, usage hors Pool : comportement inchangé)
+        if _cache_donnees_worker is not None:
+            liste_donnees_candidats: list[dict] = _cache_donnees_worker['candidats']
+            liste_donnees_matieres: list[dict] = _cache_donnees_worker['matieres']
+            liste_donnees_examinateurs: list[dict] = _cache_donnees_worker['examinateurs']
+        else:
+            liste_donnees_candidats = charger_fichier_comme_liste(self.filename_candidats)
+            liste_donnees_matieres = charger_fichier_comme_liste(self.filename_matieres)
+            liste_donnees_examinateurs = charger_fichier_comme_liste(self.filename_examinateurs)
         log.debug(f"Run {self.numero_run} : Données chargées")
         # liste des matières
         log.debug(f"Run {self.numero_run} : Création matières")
@@ -1147,8 +1181,11 @@ if __name__ == '__main__':
                                'numero_run': i}
                                 for i in range(N_run)]
 
-        # Lancement des runs en parallèle avec multiprocessing (1 par CPU)
-        with Pool() as pool:
+        # Lancement des runs en parallèle avec multiprocessing (1 par CPU) —
+        # initializer : chaque worker parse les 3 CSV une seule fois à sa
+        # création plutôt qu'à chaque run (cf. _initialiser_cache_worker)
+        with Pool(initializer=_initialiser_cache_worker,
+                 initargs=(ELVS_FILE, PROFS_FILE, PREPS_FILE)) as pool:
             results = pool.map(algo_run, tuple(parameters_list))
 
     # Sélection du meilleur run — ne retient un run que s'il respecte

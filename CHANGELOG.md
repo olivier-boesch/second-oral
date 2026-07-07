@@ -8,6 +8,9 @@
 - Les PDF générés (papillons de connexion, fiches candidats/salles/loges — noms, numéros, identifiants en clair) sont désormais écrits dans `webserver/generated/`, hors de `webserver/static/`, au lieu de `webserver/static/docs/`. Auparavant, ce dossier restait sous l'arbre servi tel quel par nginx (`location /static/`) **et** par le handler statique intégré de Flask : n'importe qui devinant un nom de fichier (`candidat_Martin_Paul.pdf`, `papillons_candidats.pdf`) y accédait directement, sans passer par les contrôles d'authentification de `/download`. Seule cette route (session active requise) donne désormais accès à ces fichiers. Volume Docker renommé `generated_docs`, retiré du montage du conteneur nginx (`docker-compose.yml`) ; bloc `location /static/docs/` supprimé de `docker/nginx/second_oral.conf` (devenu sans objet).
 - `.gitignore` : `data/examinateurs.csv` traité comme `data/candidats.csv` (données personnelles, jamais versionné) — corrige un oubli lors du renommage historique de `profs_total.csv` en `examinateurs.csv`.
 
+**Performance**
+- `algo.py` (moteur Monte-Carlo) : les 3 CSV (`candidats.csv`, `examinateurs.csv`, `preps.csv`) ne sont plus relus/re-parsés à chaque run — `multiprocessing.Pool()` ne crée que `cpu_count()` processus worker, qui traitent chacun plusieurs runs séquentiellement (jusqu'à `ALGO_N_RUN=1000` par défaut), donc le contenu identique était relu des centaines de fois inutilement. Nouveau cache par processus worker (`_cache_donnees_worker`), peuplé une seule fois via l'`initializer` de `Pool` (`_initialiser_cache_worker`) ; `AlgoOne.setup_from_files()` l'utilise en priorité s'il est disponible, sinon retombe sur la lecture fichier classique (comportement inchangé pour le moteur CP-SAT, les tests, et un usage direct en script). Validé sur un vrai `Pool` (données réelles) : 0 lecture disque pendant les runs, tout provient du cache initialisé une fois par worker.
+
 - `cp_timeout` (délai max du solveur CP-SAT, `/gestion/algo`) : plafond relevé de 600s à 1200s (20 min), backend et champ du formulaire.
 
 ### Added
@@ -171,6 +174,7 @@
 ### Removed
 
 - **Moteur génétique** (`algo_ga.py`, `AlgoGA`) : retiré après évaluation — qualité de placement trop en retrait des moteurs Monte-Carlo et CP-SAT, y compris après plusieurs tentatives d'amélioration de la convergence (réparation locale mémétique, mutation adaptative). Suppression complète : `algo_ga.py`, `tests/unit/test_algo_ga.py`, la branche `ALGO_ENGINE=genetic` dans `algo.py`, les paramètres `ga_population`/`ga_generations`/`ga_timeout`/`ga_mutation_rate` (backend et UI `/gestion/algo`), et l'option « Génétique » du sélecteur de moteur. `monte_carlo` et `cpsat` restent les deux seuls moteurs disponibles.
+- **Code mort** (audit via `vulture`, chaque signalement vérifié individuellement — grep sur code/tests/templates — avant suppression, pour ne retirer que ce qui n'a strictement aucun appelant) : `Candidat.verifie_horaire_oraux()` et `verifie_temps_minimum()` (chaîne orpheline entière, `algo.py`), `Matiere.temps_total` (property, `algo.py`), `AlgoOne.sauvegarder_oraux()` (export CSV manuel jamais appelé, `algo.py` — import `DictWriter` devenu orphelin retiré aussi), import `TA_LEFT` et variable de style `st_value` (`setup_new_site.py`), constante `REDIS_CHANNEL` (`webserver/algo_bg.py`, nom de canal déjà codé en dur ailleurs). Suite complète (439 tests) inchangée après suppression, confirmant l'absence de toute couverture de test sur ce code.
 
 ## [2026.2] — 2026-07-06
 

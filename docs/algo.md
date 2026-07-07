@@ -33,6 +33,19 @@ le moins chargé, quand la répartition parfaite n'est pas un multiple exact) :
   de tassement des créneaux — le solveur ne sacrifie jamais l'équité pour un
   meilleur tassement.
 
+### Performance : cache CSV par worker (Monte-Carlo)
+
+`multiprocessing.Pool()` ne crée que `cpu_count()` processus worker, qui traitent
+chacun plusieurs runs séquentiellement (jusqu'à `ALGO_N_RUN`, 1000 par défaut) — sans
+précaution particulière, chaque run relirait et re-parserait indépendamment les 3 CSV
+depuis le disque alors que leur contenu ne change jamais pendant tout le batch.
+
+`algo._initialiser_cache_worker()` (passé comme `initializer` à `Pool`) parse les 3 CSV
+une seule fois à la création de chaque worker ; `AlgoOne.setup_from_files()` réutilise
+ensuite ce cache s'il est disponible. Sans effet en dehors de ce contexte précis : le
+moteur CP-SAT (une seule résolution, pas de `Pool`), les tests, et un usage direct en
+script continuent de lire les fichiers normalement.
+
 ---
 
 ## Lancement
