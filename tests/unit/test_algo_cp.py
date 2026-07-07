@@ -1,7 +1,7 @@
 """Tests unitaires pour algo_cp.py — moteur CP-SAT de placement des oraux."""
 import sys
 import types
-from datetime import timedelta, time
+from datetime import date, datetime, timedelta, time
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -137,7 +137,11 @@ class TestAlgoCPSimplePlacement:
 
 
 class TestAlgoCPEcartMinimumGaranti:
-    """L'écart minimum candidat est une contrainte dure : toujours respecté."""
+    """L'écart minimum candidat est une contrainte dure : toujours respecté,
+    en minutes réelles (cf. AlgoCP._minutes_creneau) — pas seulement en
+    nombre de créneaux, qui n'est qu'une proxy imprécise dès que plusieurs
+    matières ont des durées d'oral différentes ou qu'une pause méridienne
+    est active."""
 
     def test_ecart_mini_respecte_pour_tous(self, tmp_path):
         alg = _build_algo_cp(
@@ -149,12 +153,163 @@ class TestAlgoCPEcartMinimumGaranti:
             ],
         )
         alg.resoudre()
+        alg.calcul_horaires()
+
+        minutes_mini = alg.temps_minimum_entre_oraux.total_seconds() / 60
+        for candidat in alg.liste_candidats:
+            h1, h2 = candidat.oraux[0].heure_sujet, candidat.oraux[1].heure_sujet
+            ecart_minutes = abs(
+                datetime.combine(date(1, 1, 1), h2) - datetime.combine(date(1, 1, 1), h1)
+            ).total_seconds() / 60
+            assert ecart_minutes >= minutes_mini, (
+                f"{candidat.nom} : écart {ecart_minutes} min < minimum requis {minutes_mini} min"
+            )
+
+
+class TestMinutesCreneau:
+    """AlgoCP._minutes_creneau() : correspondance créneau -> minutes réelles
+    écoulées depuis heure_debut, testée directement (sans solveur)."""
+
+    def test_sans_pause_correspond_a_creneau_fois_duree(self, tmp_path):
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"500000000{i}") for i in range(2)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            heure_debut=time(hour=8, minute=0),
+        )
+        maths = next(m for m in alg.liste_matieres if m.nom == "Maths")
+        examinateur = maths.examinateurs[0]
+        minutes = alg._minutes_creneau(examinateur, maths)
+        # _PREPS_BASE : Maths dure 20 min/créneau, pas de pause périodique ici.
+        assert minutes[0] == 0
+        assert minutes[3] == 60
+
+    def test_pause_periodique_tous_les_n_creneaux(self, tmp_path):
+        """Régression : `_minutes_creneau` doit insérer la pause périodique
+        tous les `intervalle_pause` créneaux, comme `calcul_horaires()`
+        (`n_oraux_avant_pause`) — une régression pendant l'écriture de cette
+        méthode l'avait initialement omise (jamais incrémentée)."""
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"540000000{i}") for i in range(2)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            heure_debut=time(hour=8, minute=0),
+            temps_pause=timedelta(minutes=15),
+            intervalle_pause=4,
+        )
+        maths = next(m for m in alg.liste_matieres if m.nom == "Maths")
+        examinateur = maths.examinateurs[0]
+        minutes = alg._minutes_creneau(examinateur, maths)
+        # Maths : 20 min/créneau. Créneaux 0-3 : 0, 20, 40, 60 (aucune pause
+        # avant le 4e créneau délivré) ; la pause (15 min) s'insère juste
+        # avant le créneau 4 : 60 + 20 + 15 = 95.
+        assert minutes[:5] == [0, 20, 40, 60, 95]
+
+    def test_pause_periodique_coherente_avec_calcul_horaires_reel(self, tmp_path):
+        """Le mapping précalculé doit correspondre exactement à calcul_horaires()
+        une fois résolu, dans un scénario où tous les créneaux sont occupés
+        (aucun écart entre l'approximation pré-résolution et la réalité)."""
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"550000000{i}") for i in range(8)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            heure_debut=time(hour=8, minute=0),
+            max_creneaux_journee=10,
+            temps_pause=timedelta(minutes=15),
+            intervalle_pause=4,
+        )
+        maths = next(m for m in alg.liste_matieres if m.nom == "Maths")
+        examinateur = maths.examinateurs[0]
+        mapping_avant = alg._minutes_creneau(examinateur, maths)
+
+        alg.resoudre()
+        alg.calcul_horaires()
+
+        for oral in examinateur.oraux:
+            if oral is None:
+                continue
+            minutes_reelles = round((
+                datetime.combine(date(1, 1, 1), oral.heure_sujet)
+                - datetime.combine(date(1, 1, 1), alg.heure_debut)
+            ).total_seconds() / 60)
+            assert minutes_reelles == mapping_avant[oral.creneau], (
+                f"créneau {oral.creneau} : précalculé {mapping_avant[oral.creneau]} "
+                f"!= réel {minutes_reelles}"
+            )
+
+    def test_creneaux_interdits_en_tete_ignores(self, tmp_path):
+        # ProfPhilo : "Heure mini" à 9h -> les 3 premiers créneaux (8h/8h20/8h40)
+        # sont interdits avec heure_debut=8h et Philo à 20 min/créneau (_PREPS_BASE) ;
+        # le temps continue quand même à s'écouler à travers eux (comme dans
+        # calcul_horaires()), donc le créneau 3 tombe bien à 9h00 (= 60 min).
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"510000000{i}") for i in range(2)],
+            exams=[
+                _exam("ProfMaths", "Maths", "A101"),
+                _exam("ProfPhilo", "Philo", "B101", heure=9),
+            ],
+            heure_debut=time(hour=8, minute=0),
+        )
+        philo = next(m for m in alg.liste_matieres if m.nom == "Philo")
+        examinateur = philo.examinateurs[0]
+        minutes = alg._minutes_creneau(examinateur, philo)
+        assert minutes[0] is None  # créneau interdit (avant 9h)
+        assert minutes[3] == 60    # 9h00 - 8h00
+
+    def test_pause_meridienne_ajoutee_une_seule_fois(self, tmp_path):
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"520000000{i}") for i in range(2)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            heure_debut=time(hour=8, minute=0),
+            heure_pause_meridienne=time(hour=8, minute=50),
+            duree_pause_meridienne=timedelta(minutes=60),
+        )
+        maths = next(m for m in alg.liste_matieres if m.nom == "Maths")
+        examinateur = maths.examinateurs[0]
+        minutes = alg._minutes_creneau(examinateur, maths)
+        # Maths : 20 min/créneau, préparation 20 min -> le créneau 1 (8h20,
+        # préparation jusqu'à 9h00) chevauche la pause (8h50-9h50) : reporté à
+        # 9h50, soit 110 min après heure_debut. Les créneaux suivants
+        # s'enchaînent normalement à partir de là, la pause n'étant reportée
+        # qu'une seule fois par examinateur.
+        assert minutes[0] == 0
+        assert minutes[1] == 110
+        assert minutes[2] == 130
+        assert minutes[3] == 150
+
+
+class TestAlgoCPPauseMeridienne:
+    """Régression : l'écart minimum candidat (en minutes réelles) reste
+    garanti même avec une pause méridienne active et des matières de durées
+    différentes — cf. investigation ayant motivé _minutes_creneau (un simple
+    écart en nombre de créneaux peut être violé de plusieurs dizaines de
+    minutes dans ce cas)."""
+
+    def test_ecart_reel_respecte_avec_pause_et_durees_differentes(self, tmp_path):
+        preps = ["Maths;Maths;10;10", "Philo;Philo;20;40"]
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"530000000{i}") for i in range(6)],
+            exams=[_exam("ProfA", "Maths", "A101"), _exam("ProfB", "Philo", "B101")],
+            preps=preps,
+            heure_debut=time(hour=8, minute=0),
+            temps_minimum_entre_oraux=timedelta(minutes=80),
+            heure_pause_meridienne=time(hour=8, minute=50),
+            duree_pause_meridienne=timedelta(minutes=60),
+        )
+        alg.resoudre()
+        alg.calcul_horaires()
 
         for candidat in alg.liste_candidats:
-            c1, c2 = candidat.oraux[0].creneau, candidat.oraux[1].creneau
-            assert abs(c1 - c2) >= alg.creneaux_minimum_entre_oraux, (
-                f"{candidat.nom} : écart {abs(c1 - c2)} créneaux "
-                f"< minimum requis {alg.creneaux_minimum_entre_oraux}"
+            h1, h2 = candidat.oraux[0].heure_sujet, candidat.oraux[1].heure_sujet
+            ecart_minutes = abs(
+                datetime.combine(date(1, 1, 1), h2) - datetime.combine(date(1, 1, 1), h1)
+            ).total_seconds() / 60
+            assert ecart_minutes >= 80, (
+                f"{candidat.nom} : écart {ecart_minutes} min < 80 min requis "
+                f"(créneaux {candidat.oraux[0].creneau}/{candidat.oraux[1].creneau})"
             )
 
 
@@ -426,12 +581,17 @@ class TestAlgoCPCreneauCibleFinJournee:
             creneau_cible_fin_journee=1,
         )
         alg.resoudre()
+        alg.calcul_horaires()
 
         assert len(alg.liste_candidats) == 6
+        minutes_mini = alg.temps_minimum_entre_oraux.total_seconds() / 60
         for candidat in alg.liste_candidats:
             assert len(candidat.oraux) == 2
-            ecart = abs(candidat.oraux[0].creneau - candidat.oraux[1].creneau)
-            assert ecart >= alg.creneaux_minimum_entre_oraux
+            h1, h2 = candidat.oraux[0].heure_sujet, candidat.oraux[1].heure_sujet
+            ecart_minutes = abs(
+                datetime.combine(date(1, 1, 1), h2) - datetime.combine(date(1, 1, 1), h1)
+            ).total_seconds() / 60
+            assert ecart_minutes >= minutes_mini
 
 
 class TestAlgoCPModeOptimal:

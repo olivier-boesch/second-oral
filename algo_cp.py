@@ -10,6 +10,7 @@ aléatoires. L'écart minimum entre les deux oraux d'un candidat devient une
 contrainte garantie (et non un critère de sélection a posteriori).
 """
 import random
+from datetime import date, datetime
 from os import cpu_count
 
 from ortools.sat.python import cp_model
@@ -136,6 +137,71 @@ class AlgoCP(AlgoOne):
             return None
         return max(0, min(max_creneau, self.creneau_cible_fin_journee))
 
+    def _minutes_creneau(self, examinateur: Examinateur, matiere: Matiere) -> list[int | None]:
+        """Minutes réelles écoulées depuis `heure_debut` jusqu'au sujet de
+        chaque créneau de cet examinateur — réplique `AlgoOne.calcul_horaires()`
+        (pause méridienne et pauses périodiques incluses), à une différence
+        près : ignore le tiers-temps, qui dépend de quel candidat est assigné
+        et n'est donc pas connu avant résolution (même limite qu'aujourd'hui
+        pour le calcul post-résolution, cf. commentaire dans calcul_horaires()).
+
+        Sert à contraindre l'écart minimum candidat en minutes réelles plutôt
+        qu'en nombre de créneaux : un simple compte de créneaux sous-estime
+        l'écart réel dès qu'un candidat a un oral de chaque côté de la pause
+        méridienne (elle s'ajoute alors "gratuitement" à l'écart réel), et
+        peut au contraire le surestimer si elle n'est appliquée qu'après coup
+        de façon non uniforme d'un examinateur à l'autre (cf. investigation
+        ayant motivé cette méthode).
+
+        :return: liste indexée par créneau ; `None` pour un créneau
+                 `CreneauInterdit` (jamais assignable, donc jamais utilisé
+                 dans la contrainte).
+        """
+        oraux = examinateur.oraux
+        resultats: list[int | None] = [None] * len(oraux)
+        heure_courante = self.heure_debut
+        pause_meridienne_appliquee = False
+        i = 0
+        while i < len(oraux) and isinstance(oraux[i], CreneauInterdit):
+            heure_courante = self.ajouter_temps(heure_courante, matiere.temps_oral)
+            i += 1
+            if i % self.intervalle_pause == 0:
+                heure_courante = self.ajouter_temps(heure_courante, self.temps_pause)
+        n_avant_pause = i % self.intervalle_pause
+        for i_creneau in range(i, len(oraux)):
+            if i_creneau != i:
+                if (
+                    not self.interrompre_oral
+                    and matiere.temps_preparation.total_seconds() % matiere.temps_oral.total_seconds() != 0
+                ):
+                    heure_courante = self.ajouter_temps(heure_courante, matiere.temps_preparation)
+                else:
+                    heure_courante = self.ajouter_temps(heure_courante, matiere.temps_oral)
+                if n_avant_pause >= self.intervalle_pause:
+                    n_avant_pause = 0
+                    heure_courante = self.ajouter_temps(heure_courante, self.temps_pause)
+            if (
+                self.heure_pause_meridienne is not None
+                and not pause_meridienne_appliquee
+                and self._chevauche_pause_meridienne(heure_courante, matiere)
+            ):
+                heure_courante = max(heure_courante, self.heure_pause_meridienne)
+                heure_courante = self.ajouter_temps(heure_courante, self.duree_pause_meridienne)
+                pause_meridienne_appliquee = True
+            resultats[i_creneau] = round((
+                datetime.combine(date(1, 1, 1), heure_courante)
+                - datetime.combine(date(1, 1, 1), self.heure_debut)
+            ).total_seconds() / 60)
+            # calcul_horaires() ne compte que les oraux réellement délivrés
+            # (n_oraux_avant_pause += 1 sous `if oraux_examinateur[i_oral] is
+            # not None`) — ici, avant résolution, on ignore encore quels
+            # créneaux seront occupés : on incrémente donc pour chaque
+            # créneau du mapping, en supposant qu'il sera utilisé (la même
+            # approximation que pour le tiers-temps ci-dessus, nécessaire
+            # pour éviter la dépendance circulaire à la solution).
+            n_avant_pause += 1
+        return resultats
+
     def resoudre(self) -> None:
         """Résout l'appairage des oraux via un modèle CP-SAT.
 
@@ -190,26 +256,43 @@ class AlgoCP(AlgoOne):
         for vars_ in par_examinateur_creneau.values():
             model.AddAtMostOne(vars_)
 
-        # écart minimum garanti entre les deux oraux d'un même candidat
         max_creneau = self.max_creneaux_journee - 1
+
+        # Correspondance créneau -> minutes réelles écoulées depuis
+        # heure_debut, par examinateur (cf. _minutes_creneau) — sert à
+        # contraindre l'écart minimum candidat en minutes réelles plutôt
+        # qu'en nombre de créneaux, qui sous-estime l'écart réel dès qu'un
+        # candidat a un oral de chaque côté de la pause méridienne.
+        minutes_par_examinateur: dict[Examinateur, list] = {
+            examinateur: self._minutes_creneau(examinateur, examinateur.matiere)
+            for examinateur in vars_par_examinateur
+        }
+        max_minutes = max(
+            (m for liste in minutes_par_examinateur.values() for m in liste if m is not None),
+            default=0,
+        )
+
+        # écart minimum garanti (en minutes réelles) entre les deux oraux
+        # d'un même candidat
+        minutes_mini = int(self.temps_minimum_entre_oraux.total_seconds() // 60)
         for candidat in self.liste_candidats:
-            t1 = model.NewIntVar(0, max_creneau, f"t1_{candidat.numero}")
-            t2 = model.NewIntVar(0, max_creneau, f"t2_{candidat.numero}")
+            t1 = model.NewIntVar(0, max_minutes, f"t1_{candidat.numero}")
+            t2 = model.NewIntVar(0, max_minutes, f"t2_{candidat.numero}")
             model.Add(t1 == sum(
-                creneau * var
-                for (c, choix_attr, _e, creneau), var in x.items()
+                minutes_par_examinateur[e][creneau] * var
+                for (c, choix_attr, e, creneau), var in x.items()
                 if c is candidat and choix_attr == 'choix1'
             ))
             model.Add(t2 == sum(
-                creneau * var
-                for (c, choix_attr, _e, creneau), var in x.items()
+                minutes_par_examinateur[e][creneau] * var
+                for (c, choix_attr, e, creneau), var in x.items()
                 if c is candidat and choix_attr == 'choix2'
             ))
-            diff = model.NewIntVar(-max_creneau, max_creneau, f"diff_{candidat.numero}")
+            diff = model.NewIntVar(-max_minutes, max_minutes, f"diff_{candidat.numero}")
             model.Add(diff == t1 - t2)
-            abs_diff = model.NewIntVar(0, max_creneau, f"absdiff_{candidat.numero}")
+            abs_diff = model.NewIntVar(0, max_minutes, f"absdiff_{candidat.numero}")
             model.AddAbsEquality(abs_diff, diff)
-            model.Add(abs_diff >= self.creneaux_minimum_entre_oraux)
+            model.Add(abs_diff >= minutes_mini)
 
         # Équité de charge entre examinateurs d'une même matière : pour chaque
         # matière ayant plusieurs examinateurs, on pénalise l'écart entre

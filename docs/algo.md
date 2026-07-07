@@ -178,12 +178,12 @@ méridienne agit **après** la résolution, dans `AlgoOne.calcul_horaires()` —
 périodique existante (`temps_pause`/`intervalle_pause`, insérée toutes les N oraux), mais
 déclenchée une seule fois par examinateur, dès que l'heure configurée est atteinte plutôt qu'un
 nombre d'oraux. L'assignation candidat/examinateur/créneau n'est donc pas modifiée : seule la
-conversion créneau → horaire réel décale les oraux suivants.
+conversion créneau → horaire réel décale les oraux suivants. Cette logique étant dans la classe de
+base, elle profite automatiquement aux deux moteurs (`AlgoOne` et `AlgoCP`).
 
 Dès qu'un oral entamerait ou chevaucherait la pause (créneau `[heure_sujet, heure_fin]`), il est
 repoussé pour démarrer juste après la fin de la pause — une seule fois par examinateur, ensuite
-les créneaux s'enchaînent normalement. Cette logique étant dans la classe de base, elle profite
-automatiquement aux deux moteurs (`AlgoOne` et `AlgoCP`) sans code spécifique à `algo_cp.py`.
+les créneaux s'enchaînent normalement.
 
 Désactivée par défaut (`ALGO_PAUSE_MERIDIENNE_DEBUT` vide) ; réglable depuis `/gestion/algo` (heure
 de début + durée en minutes) ou via `ALGO_PAUSE_MERIDIENNE_DEBUT`/`ALGO_PAUSE_MERIDIENNE_DUREE`.
@@ -194,6 +194,32 @@ La pause méridienne configurée est aussi respectée par la replanification en 
 (extension d'horaire) n'ont jamais le droit de proposer un créneau qui ferait travailler un
 examinateur pendant la pause — celle-ci est lue depuis `/gestion/algo` à chaque calcul de plan
 (`app.py::_pause_meridienne_params`), donc toujours à jour même sans relancer l'algorithme.
+
+#### Interaction avec l'écart minimum candidat (CP-SAT)
+
+Piège identifié puis corrigé : la contrainte d'écart minimum candidat de `AlgoCP.resoudre()`
+raisonnait à l'origine en **nombre de créneaux** (`abs(t1 - t2) >= creneaux_minimum_entre_oraux`),
+en supposant implicitement une durée uniforme par créneau. Or le décalage de pause méridienne
+ci-dessus est appliqué **par examinateur**, après résolution : deux oraux d'un même candidat (chez
+deux examinateurs différents, donc potentiellement décalés différemment par la pause) pouvaient
+satisfaire la contrainte en nombre de créneaux tout en ayant un écart réel très inférieur au minimum
+demandé — jusqu'à plusieurs dizaines de minutes de moins dans des cas réels, alors que la contrainte
+est censée être **garantie**. Monte-Carlo n'est pas concerné de la même façon : `verif_ecart_horaire()`
+(après `calcul_horaires()`) détecte ce genre d'écart réel insuffisant et alimente
+`stats['candidats']`, qui sert justement à écarter les runs non conformes dans
+`selectionner_meilleur_algo()` — mais CP-SAT ne fait qu'une seule résolution, sans repli possible.
+
+Corrigé en remplaçant l'index de créneau par un **temps réel** dans la contrainte : `AlgoCP._minutes_creneau()`
+précalcule, par examinateur, les minutes écoulées depuis `heure_debut` jusqu'à chaque créneau —
+réplique fidèlement `calcul_horaires()` (pauses périodiques et pause méridienne incluses), à
+l'exception du tiers-temps (dépend du candidat assigné, donc inconnu avant résolution — même
+limite qu'aujourd'hui pour le calcul post-résolution). `t1`/`t2` et la contrainte d'écart utilisent
+ces minutes plutôt que le simple `creneau`, donc l'écart est désormais garanti **en minutes
+réelles**, y compris pour un candidat dont les deux oraux encadrent la pause (l'écart réel est alors
+naturellement majoré par la durée de la pause — plus précis qu'une simple contrainte en créneaux,
+qui l'aurait sous-estimé dans ce cas précis). Le créneau cible de fin de journée et le terme de
+tassement restent en revanche exprimés en index de créneau (approximation déjà acceptée, cf.
+sections dédiées).
 
 ### Créneau cible de fin de journée
 
