@@ -1041,6 +1041,15 @@ class AlgoOne:
         log.debug(f"Run {self.numero_run} : statistiques du run (%, min): {res}")
         return res
 
+    def heure_fin_journee(self) -> time | None:
+        """Heure de fin du dernier oral de la journée, tous examinateurs confondus.
+
+        Nécessite que calcul_horaires() ait déjà été appelé (sinon heure_fin
+        vaut None sur chaque Oral). Renvoie None si aucun oral n'a été placé.
+        """
+        heures_fin = [o.heure_fin for o in self.liste_oraux if o.heure_fin is not None]
+        return max(heures_fin) if heures_fin else None
+
 
 def algo_run(parameters):
     """
@@ -1210,6 +1219,9 @@ if __name__ == '__main__':
     log.info("Meilleur Algo:")
     log.info(f"  Remplissage des créneaux examinateurs : {final_stats['profs']}%")
     log.info(f"  Écart mini entre oraux candidats : {final_stats['candidats']} min")
+    _heure_fin_journee = best_alg.heure_fin_journee()
+    if _heure_fin_journee is not None:
+        log.info(f"  Fin du dernier oral de la journée : {_heure_fin_journee.strftime('%H:%M')}")
     # Dossier de sortie commun (volume Docker, accessible via /download) —
     # hors de webserver/static/ : jamais servi directement par nginx ni par
     # le handler statique de Flask (cf. docs/securite.md).

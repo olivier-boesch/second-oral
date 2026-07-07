@@ -21,6 +21,13 @@
 
 ### Added
 
+**Algorithme de placement (suite 5) — heure de fin de journée**
+- Nouvelle colonne **Fin de journée** sur `/gestion/liste-examinateurs` : heure de fin du dernier oral de chaque examinateur (`MAX(Oral.heure_fin)` ajouté à `SELECT_LISTE_EXAMINATEURS`), `—` si l'examinateur n'a aucun oral
+- En fin de calcul, le log de `algo.py` affiche désormais l'heure de fin du dernier oral de la journée, tous examinateurs confondus, juste après l'écart mini candidat — nouvelle méthode `AlgoOne.heure_fin_journee()` (max des `heure_fin` sur `liste_oraux`), commune aux deux moteurs (Monte-Carlo et CP-SAT, qui appellent tous deux déjà `calcul_horaires()`)
+
+**Tests (suite 8)**
+- `tests/unit/test_algo.py::TestHeureFinJournee` : `None` avant `calcul_horaires()`, `None` sans oral placé, valeur correcte égale au max des `heure_fin` individuelles
+
 **Gestion en cours de journée (suite 4) — déclaration et retrait de tiers-temps d'un candidat**
 - Nouveau bouton **⏱️ Déclarer** (ou **⏱️ Retirer** si déjà posé) sur `/gestion/liste-candidats` : un candidat déclare — ou fait retirer, si posé par erreur — un tiers-temps le jour J, après le placement initial ; le sens se déduit automatiquement de son état actuel
 - Déclaration : étend la préparation de ses deux oraux d'1/3 (même règle que `AlgoOne.calcul_horaires` pour un tiers-temps connu à la construction du planning — heure de sujet inchangée, heure d'oral/fin décalées). Retrait : réduit la préparation actuelle (déjà étendue, donc 4/3 de la base) d'1/4 pour retrouver la durée d'origine — symétrique, mêmes fonctions ; nouvelle fonction `rebalance.planifier_tiers_temps(..., activer=True/False)`

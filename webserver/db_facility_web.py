@@ -331,7 +331,8 @@ SELECT_LISTE_EXAMINATEURS = """
 SELECT Examinateur.id AS id, Examinateur.nom AS nom,
        Examinateur.etablissements AS etablissements,
        Examinateur.salle AS salle, Examinateur.loge AS loge,
-       Matiere.nom AS matiere, COUNT(Oral.id) AS nb_oraux
+       Matiere.nom AS matiere, COUNT(Oral.id) AS nb_oraux,
+       MAX(Oral.heure_fin) AS heure_fin_journee
 FROM Examinateur
     JOIN Matiere ON Matiere.id = Examinateur.matiere
     LEFT OUTER JOIN Oral ON Oral.examinateur = Examinateur.id

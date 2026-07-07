@@ -627,6 +627,40 @@ class TestPetitesMatieresFinJournee:
         assert not any(isinstance(o, CreneauInterdit) for o in prof_musique.oraux)
 
 
+class TestHeureFinJournee:
+    """AlgoOne.heure_fin_journee() : heure de fin du dernier oral placé,
+    tous examinateurs confondus."""
+
+    def test_none_avant_calcul_horaires(self, tmp_path):
+        """Sans calcul_horaires(), les Oral n'ont pas encore de heure_fin."""
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"960000000{i}") for i in range(3)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        alg.resoudre()
+        assert alg.heure_fin_journee() is None
+
+    def test_none_sans_aucun_oral_place(self, tmp_path):
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"970000000{i}") for i in range(0)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        assert alg.heure_fin_journee() is None
+
+    def test_egale_au_max_des_heure_fin_individuelles(self, tmp_path):
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"980000000{i}") for i in range(6)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        alg.resoudre()
+        alg.calcul_horaires()
+        attendu = max(o.heure_fin for o in alg.liste_oraux if o.heure_fin is not None)
+        assert alg.heure_fin_journee() == attendu
+
+
 class TestEquiteEntreExaminateurs:
     """recherche_creneau doit répartir la charge équitablement entre les
     examinateurs d'une même matière (priorité au moins chargé)."""

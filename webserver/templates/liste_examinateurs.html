@@ -46,6 +46,9 @@
                 Nombre d'oraux
             </th>
             <th>
+                Fin de journée
+            </th>
+            <th>
                 Disponibilité
             </th>
             <th>
@@ -85,6 +88,9 @@
                 </td>
                 <td>
                     {{ ex['nb_oraux'] }}
+                </td>
+                <td>
+                    {{ ex['heure_fin_journee'] or '—' }}
                 </td>
                 <td>
                     {% if ex['nb_oraux'] > 0 %}
