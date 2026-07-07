@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>2ndOral — Édition oral : {{ donnees_oral['nom'] }}</title>
     {% include 'style.html' %}
+    <script src="{{ url_for('static', filename='time_picker.js') }}?v={{ sv }}" nonce="{{ csp_nonce }}"></script>
     <script nonce="{{ csp_nonce }}">
         function update_examinateurs() {
             const matiere = document.getElementById('select_matieres').value;
@@ -58,7 +59,8 @@
     </p>
 
     <label for="heure_sujet">Heure de sujet (début préparation)</label>
-    <input type="time" name="heure_sujet" id="heure_sujet"
+    <input type="text" inputmode="none" readonly class="time-picker-field"
+           name="heure_sujet" id="heure_sujet"
            value="{{ donnees_oral['heure_sujet'] }}">
     <p style="margin:0; font-size:.85rem; color:var(--text-sm);">
         L'heure d'oral et l'heure de fin sont recalculées automatiquement
@@ -133,5 +135,6 @@
 </table>
 
 {% include 'footer.html' %}
+<script nonce="{{ csp_nonce }}">initTimePickers();</script>
 </body>
 </html>

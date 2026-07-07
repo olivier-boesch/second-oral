@@ -866,3 +866,36 @@ p.error {
 
 /* ── Sélecteur multiple établissements ───────────────────────────────────── */
 select[multiple] { width: 100%; max-width: 600px; }
+
+/* ── Sélecteur d'heure façon Android (roues défilantes, time_picker.js) ───── */
+.time-picker-field { cursor: pointer; background: var(--bg); caret-color: transparent; }
+.time-picker-backdrop {
+    position: fixed; inset: 0; background: transparent; z-index: 999;
+}
+.time-picker-popup {
+    position: absolute; z-index: 1000; background: var(--bg);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 6px 20px rgba(0,0,0,.18);
+    padding: .6em .6em .5em; display: flex; flex-direction: column; align-items: stretch;
+}
+.time-picker-wheels { display: flex; align-items: stretch; gap: .2em; }
+.time-picker-col {
+    height: 180px; width: 3em; overflow-y: scroll; scroll-snap-type: y mandatory;
+    scrollbar-width: none; position: relative;
+}
+.time-picker-col::-webkit-scrollbar { display: none; }
+.time-picker-col-inner { padding: 72px 0; }
+.time-picker-item {
+    height: 36px; line-height: 36px; text-align: center; font-size: 1.15em;
+    scroll-snap-align: center; color: var(--text-sm); cursor: pointer; user-select: none;
+    border-radius: 6px; font-variant-numeric: tabular-nums;
+}
+.time-picker-item.selected { color: var(--primary-dk); font-weight: bold; background: var(--surface-2); }
+.time-picker-sep { align-self: center; font-size: 1.3em; font-weight: bold; color: var(--primary-dk); padding: 0 .1em; }
+.time-picker-highlight {
+    position: absolute; top: 72px; left: 0; right: 0; height: 36px;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    pointer-events: none;
+}
+.time-picker-actions { display: flex; justify-content: flex-end; gap: .4em; margin-top: .4em; }
+.time-picker-actions button { font-size: .85em; padding: .3em .8em; }

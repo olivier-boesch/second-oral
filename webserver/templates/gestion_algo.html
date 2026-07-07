@@ -81,6 +81,7 @@
         .params-disclaimer { font-size: .8em; color: #856404; margin: .4em 0 .8em 0; }
         #params-feedback { font-size: .85em; min-height: 1.2em; margin-top: .5em; }
     </style>
+    <script src="{{ url_for('static', filename='time_picker.js') }}?v={{ sv }}" nonce="{{ csp_nonce }}"></script>
 </head>
 <body class="body-for-sticky body-admin">
 {% include 'auth_icon.html' %}
@@ -215,9 +216,9 @@
                 Heure de début
                 <span class="info-icon" title="Heure du premier créneau de la journée. Format HH:MM (ex : 08:10).">?</span>
             </label>
-            <input class="param-input" type="time" id="p-heure-debut" name="heure_debut"
-                   value="{{ algo_params.heure_debut }}">
-            <span class="param-hint">Premier créneau de passage de la journée</span>
+            <input class="param-input time-picker-field" type="text" inputmode="none" readonly
+                   id="p-heure-debut" name="heure_debut" value="{{ algo_params.heure_debut }}">
+            <span class="param-hint">Premier créneau de passage de la journée — cliquez pour choisir l'heure</span>
         </div>
         <div class="param-row">
             <label class="param-label" for="p-creneaux">
@@ -247,7 +248,9 @@
             <div class="param-group">
                 <div class="param-subrow">
                     <label for="p-pause-meridienne-debut">Début</label>
-                    <input class="param-input param-input-sm" type="time" id="p-pause-meridienne-debut" name="pause_meridienne_debut"
+                    <input class="param-input param-input-sm time-picker-field" type="text" inputmode="none" readonly
+                           data-effacable="1"
+                           id="p-pause-meridienne-debut" name="pause_meridienne_debut"
                            value="{{ algo_params.pause_meridienne_debut }}">
                 </div>
                 <div class="param-subrow">
@@ -777,6 +780,7 @@ validerAvantLancement(() => {});
 onEngineChange();
 onPetitesMatieresChange();
 onCreneauCibleChange();
+initTimePickers();
 
 {% if is_running %}
 connectAlgoSSE();

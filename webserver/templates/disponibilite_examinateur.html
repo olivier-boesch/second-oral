@@ -12,6 +12,7 @@
         .dispo-hors-grille { background:#fde2c8; }
         .dispo-hint { font-size:.85rem; color:var(--text-sm); margin:.2em 0 .8em 0; }
     </style>
+    <script src="{{ url_for('static', filename='time_picker.js') }}?v={{ sv }}" nonce="{{ csp_nonce }}"></script>
 </head>
 <body class="body-for-sticky">
 {% include 'auth_icon.html' %}
@@ -39,11 +40,13 @@
     <input type="hidden" name="etape" value="previsualisation">
 
     <label for="indisponible_a_partir_de">Indisponible à partir de</label>
-    <input type="time" name="indisponible_a_partir_de" id="indisponible_a_partir_de">
+    <input type="text" inputmode="none" readonly class="time-picker-field" data-effacable="1"
+           name="indisponible_a_partir_de" id="indisponible_a_partir_de">
     <span class="dispo-hint">Laisser vide si l'examinateur n'a pas encore été présent aujourd'hui (retard)</span>
 
     <label for="disponible_a_nouveau_a_partir_de">Disponible de nouveau à partir de</label>
-    <input type="time" name="disponible_a_nouveau_a_partir_de" id="disponible_a_nouveau_a_partir_de"
+    <input type="text" inputmode="none" readonly class="time-picker-field" data-effacable="1"
+           name="disponible_a_nouveau_a_partir_de" id="disponible_a_nouveau_a_partir_de"
            value="{{ disponible_prefill|default('', true) }}">
     <span class="dispo-hint">Laisser vide en cas d'absence pour le reste de la journée</span>
 
@@ -159,5 +162,6 @@
 </div>
 
 {% include 'footer.html' %}
+<script nonce="{{ csp_nonce }}">initTimePickers();</script>
 </body>
 </html>
