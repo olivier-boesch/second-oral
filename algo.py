@@ -6,7 +6,7 @@ Olivier Boesch (c) 2023
 import logging
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from csv import DictReader, DictWriter
+from csv import DictReader
 from datetime import timedelta, datetime, time, date
 from math import ceil, inf
 from os.path import join
@@ -308,32 +308,6 @@ class Candidat:
         """Renvoie les informations de connexion du candidat pour les papillons."""
         return {'nom': self.nom, 'numero': self.numero, 'login_key': self.login_key}
 
-    def verifie_temps_minimum(self, oral: "Oral", intervalle_minimum: int) -> bool:
-        """
-        Vérifie si l'oral respecte le temps minimum entre deux oraux
-        
-        :param oral: Oral à vérifier
-        :type oral: "Oral"
-        :param intervalle_minimum: Intervalle minimum entre les oraux en créneaux
-        :type intervalle_minimum: int
-        :return: True si le temps minimum est respecté, False sinon
-        :rtype: bool
-        """
-        return abs(self.oraux[0].creneau - oral.creneau) >= intervalle_minimum
-
-    def verifie_horaire_oraux(self, intervalle_minimum: int) -> bool:
-        """
-        Vérifie si les oraux respectent l'horaire minimum entre deux oraux
-        
-        :param intervalle_minimum: Intervalle minimum entre les oraux en créneaux
-        :type intervalle_minimum: int
-        :return: True si l'horaire minimum est respecté, False sinon
-        :rtype: bool
-        """
-        if len(self.oraux) == 2:
-            return self.verifie_temps_minimum(self.oraux[1], intervalle_minimum)
-        return True
-
     def __repr__(self) -> str:
         """représentation en chaine"""
         s_tiers_temps = " ( " + WARNING_CHAR + "tiers temps )" if self.tiers_temps else ""
@@ -496,16 +470,6 @@ class Matiere:
             return (self.nom.strip().lower() == other_norm
                     or self.nom_court.strip().lower() == other_norm)
         raise NotImplementedError("Can only be str or Matiere Objects")
-
-    @property
-    def temps_total(self) -> timedelta:
-        """
-        Calcule le temps total de l'oral (préparation + oral)
-
-        :return: Temps total de l'oral
-        :rtype: timedelta
-        """
-        return self.temps_preparation + self.temps_oral
 
 
 class Oral:
@@ -1055,31 +1019,6 @@ class AlgoOne:
         res = {"profs": round(pourcentage_occupe, 2), "candidats": ecart_mini_candidat}
         log.debug(f"Run {self.numero_run} : statistiques du run (%, min): {res}")
         return res
-
-    def sauvegarder_oraux(self, filename) -> None:
-        """
-        Sauvegarde les données des oraux dans un fichier CSV.
-
-        :param filename: Nom du fichier CSV où sauvegarder les données
-        """
-        with open(filename, 'w', newline='') as csvfile:
-            fieldnames = ['Candidat', 'Numéro', 'Tiers temps',
-                          'Examinateur', 'Matière', 'Salle', 'Heure sujet', 'Heure oral', 'Heure fin']
-            writer = DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            for oral in self.liste_oraux:
-                writer.writerow({
-                    'Candidat': oral.candidat.nom,
-                    'Numéro': oral.candidat.numero,
-                    'Tiers temps': "Oui" if oral.candidat.tiers_temps else "Non",
-                    'Examinateur': oral.examinateur.nom,
-                    'Matière': oral.matiere.nom,
-                    'Salle': oral.examinateur.salle,
-                    'Heure sujet': oral.heure_sujet.strftime('%H:%M') if oral.heure_sujet else '',
-                    'Heure oral': oral.heure_oral.strftime('%H:%M') if oral.heure_oral else '',
-                    'Heure fin': oral.heure_fin.strftime('%H:%M') if oral.heure_fin else ''
-                })
-        log.debug(f"Run {self.numero_run} : Données des oraux sauvegardées dans {filename}")
 
 
 def algo_run(parameters):

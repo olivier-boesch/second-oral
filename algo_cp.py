@@ -89,7 +89,7 @@ class AlgoCP(AlgoOne):
     """Variante de AlgoOne qui résout l'appairage via CP-SAT (Google OR-Tools).
 
     Réutilise tel quel setup_from_files / calcul_horaires / statistiques /
-    save / sauvegarder_oraux de AlgoOne — seule resoudre() change de logique.
+    save de AlgoOne — seule resoudre() change de logique.
     """
 
     def _creneaux_autorises(self, examinateur: Examinateur, candidat: Candidat) -> list[int]:

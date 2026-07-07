@@ -320,7 +320,7 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
         from reportlab.lib import colors as _rc, pagesizes as _rp
         from reportlab.lib.units import mm
         from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.enums import TA_CENTER
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
         from reportlab.platypus import (
@@ -391,8 +391,6 @@ def generate_admin_pdf(otp_key: str, fqdn: str, centre: str,
                       fontName=font_b, spaceBefore=6 * mm, spaceAfter=3 * mm)
     st_label     = ps('label',     fontSize=9,  textColor=C_MUTED,
                       spaceBefore=1 * mm)
-    st_value     = ps('value',     fontSize=11, fontName=font_b,
-                      spaceAfter=2 * mm)
     st_key       = ps('key',       fontSize=13, fontName='Courier-Bold',
                       textColor=C_TEXT, alignment=TA_CENTER,
                       spaceBefore=3 * mm, spaceAfter=3 * mm)

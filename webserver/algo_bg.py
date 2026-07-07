@@ -20,7 +20,6 @@ from typing import Callable
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ALGO_SCRIPT  = PROJECT_ROOT / "algo.py"
-REDIS_CHANNEL = "algo_output"
 
 _process: subprocess.Popen | None = None
 _lock = threading.Lock()
