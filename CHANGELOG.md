@@ -54,6 +54,16 @@
 - `tests/unit/test_algo_cp.py` : valeurs par défaut de `ALGO_POIDS_EQUITE`/`ALGO_BRUIT_TASSEMENT`, garde-fou `ALGO_BRUIT_TASSEMENT=0` ne plante pas
 - `tests/unit/test_algo_bg.py`, `tests/integration/test_flask_routes.py` : câblage des deux nouveaux paramètres (variables d'environnement, persistance et bornes via `/gestion/algo/params`)
 
+**Algorithme de placement (suite 8) — pause périodique configurable, prise en compte dans le tassement CP-SAT**
+- Nombre d'oraux avant pause (`intervalle_pause`, défaut `4`, borné 3-6) et durée de la pause (`temps_pause`, défaut `20` min, borné 0-60) — jusqu'ici des constantes en dur dans `algo.py` — deviennent réglables depuis `/gestion/algo` → **Paramètres avancés**, via `ALGO_INTERVALLE_PAUSE`/`ALGO_TEMPS_PAUSE`, câblées dans `webserver/algo_bg.py::run_algo()` comme les autres réglages ; nouveaux champs en slider + texte vérifié (`attachSlider()`, même pattern que les 10 champs numériques existants de la page)
+- CP-SAT (`objectif_tassement`) raisonnait jusqu'ici en index de créneau brut, ignorant la pause périodique/méridienne (créneau juste après une pause "coûtant" autant qu'un créneau adjacent sans pause) — utilise désormais les mêmes minutes réelles que la contrainte d'écart minimum candidat (`AlgoCP._minutes_creneau()`, cf. section pause méridienne ci-dessous), donc un tassement qui reflète le temps réellement perdu par l'examinateur
+- Passer le tassement en minutes déplace mécaniquement sa magnitude possible bien au-delà d'un simple index de créneau (jusqu'à dépasser `ALGO_POIDS_EQUITE` par défaut sur un jeu de données réel), ce qui aurait pu casser la dominance de l'équité de charge sur le tassement — nouvelle méthode `AlgoCP._poids_equite_effectif()`, qui relève dynamiquement le poids d'équité effectivement utilisé dans `model.Minimize(...)` au-delà de la borne max théorique du tassement quand nécessaire (inchangé sinon) ; `ALGO_POIDS_EQUITE` devient un plancher garanti plutôt qu'une valeur fixe
+
+**Tests (suite 18)**
+- `tests/unit/test_algo_bg.py` : câblage de `intervalle_pause`/`temps_pause` en variables d'environnement
+- `tests/integration/test_flask_routes.py` : valeurs par défaut et bornes (3-6, 0-60) de `intervalle_pause`/`temps_pause` via `/gestion/algo/params`
+- `tests/unit/test_algo_cp.py::TestPoidsEquiteEffectif` : poids configuré inchangé quand suffisant, relevé quand le tassement en minutes pourrait le dépasser, jamais abaissé sous la valeur configurée
+
 **UX — sélecteur d'heure façon Android, sur toutes les pages avec un champ heure**
 - Tout champ heure de l'interface admin (`/gestion/algo` : **Heure de début**, **Pause méridienne — Début** ; `/gestion/edit-oral` : **Heure de sujet** ; `/gestion/examinateur/disponibilite` : **Indisponible à partir de**, **Disponible de nouveau à partir de**) remplace le petit widget natif `<input type="time">` (peu ergonomique sur desktop) par un sélecteur tactile façon Android : au clic, une bulle s'ouvre sous le champ avec deux roues défilantes (heures 00-23, minutes 00-59) à défilement magnétique (`scroll-snap`), validées par un bouton **OK**
 - Champs optionnels (pause méridienne, disponibilité examinateur) : bouton **Vider** supplémentaire dans la bulle pour revenir à « vide » — absent sur les champs obligatoires (heure de début, heure de sujet)

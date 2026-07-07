@@ -121,6 +121,18 @@ class TestRunAlgoEnvVars:
         )
         assert "50" in lines
 
+    def test_intervalle_pause_transmis(self, monkeypatch):
+        lines = self._capture_env(
+            monkeypatch, {"intervalle_pause": 5}, "ALGO_INTERVALLE_PAUSE",
+        )
+        assert "5" in lines
+
+    def test_temps_pause_transmis(self, monkeypatch):
+        lines = self._capture_env(
+            monkeypatch, {"temps_pause": 30}, "ALGO_TEMPS_PAUSE",
+        )
+        assert "30" in lines
+
 
 class TestStopAlgo:
     def test_returns_false_when_nothing_running(self):

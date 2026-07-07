@@ -110,6 +110,8 @@ Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → sec
 | `ALGO_MARGE_PETITE_MATIERE`        | `2`    | Créneaux de marge laissés en plus du strict nécessaire pour une petite matière |
 | `ALGO_PAUSE_MERIDIENNE_DEBUT`      | *(vide)* | Heure à partir de laquelle aucun oral ne doit être en cours pour un examinateur ; vide = désactivée |
 | `ALGO_PAUSE_MERIDIENNE_DUREE`      | `0` (min) | Durée de la pause méridienne ; ignorée si `ALGO_PAUSE_MERIDIENNE_DEBUT` est vide |
+| `ALGO_INTERVALLE_PAUSE`   | `4`            | Nombre d'oraux entre deux pauses périodiques d'un examinateur (borné entre 3 et 6) |
+| `ALGO_TEMPS_PAUSE`        | `20` (min)     | Durée de la pause périodique (borné entre 0 et 60 min ; `0` désactive la pause) |
 | `ALGO_CRENEAU_CIBLE_FIN_JOURNEE`   | *(vide)* | Dernier créneau souhaité pour le dernier oral de la journée ; vide = désactivée. Objectif souple (les 2 moteurs), jamais bloquant |
 | `ALGO_POIDS_CRENEAU_FIN_JOURNEE`   | `200`  | Poids de la pénalité "créneau cible de fin de journée" dans l'objectif CP-SAT (ignoré par Monte-Carlo, cf. ci-dessous) |
 | `ALGO_POIDS_EQUITE`       | `1 000 000`    | Poids de l'équité de charge entre examinateurs d'une même matière (CP-SAT uniquement) — doit rester très supérieur aux autres poids |
@@ -259,6 +261,29 @@ dans les paramètres principaux, à côté de la pause méridienne et des petite
 Une version antérieure de ce réglage était exprimée en heure et convertie en index de créneau via
 une durée d'oral moyenne approchée côté CP-SAT — remplacé par un réglage direct en créneaux pour
 éviter cette approximation et unifier les deux moteurs sur la même grandeur exacte.
+
+### Pause périodique et tassement (CP-SAT)
+
+La pause périodique (toutes les `ALGO_INTERVALLE_PAUSE` oraux, durée `ALGO_TEMPS_PAUSE`) est,
+comme la pause méridienne, appliquée après résolution dans `AlgoOne.calcul_horaires()` — les deux
+réglages sont réglables depuis `/gestion/algo` → section Paramètres.
+
+Le terme de tassement de l'objectif CP-SAT (`objectif_tassement`, qui pousse le solveur à préférer
+les créneaux les plus tôt possible, à `ALGO_BRUIT_TASSEMENT` près pour désambiguïser les égalités)
+utilise, comme la contrainte d'écart minimum candidat ci-dessus, les **minutes réelles**
+(`AlgoCP._minutes_creneau()`) plutôt qu'un simple index de créneau — un créneau situé juste après
+une pause (périodique ou méridienne) "coûte" donc davantage qu'un créneau adjacent sans pause, ce
+qui reflète correctement le temps réellement perdu par l'examinateur plutôt qu'un simple décalage
+d'index.
+
+Passer le tassement en minutes déplace mécaniquement sa magnitude (potentiellement bien plus grande
+qu'un index de créneau, surtout sur un jeu de données réel avec beaucoup de candidats). Pour
+préserver la dominance de l'équité de charge sur le tassement (qui doit toujours l'emporter — cf.
+`ALGO_POIDS_EQUITE` ci-dessus), le poids d'équité réellement utilisé dans `model.Minimize(...)`
+n'est plus directement `ALGO_POIDS_EQUITE` mais `AlgoCP._poids_equite_effectif()`, qui relève ce
+poids **dynamiquement** au-delà de la borne max théorique du tassement quand nécessaire (et le
+laisse inchangé sinon). `ALGO_POIDS_EQUITE` reste donc un plancher réglable, jamais une valeur
+pouvant être dépassée par le tassement.
 
 ---
 

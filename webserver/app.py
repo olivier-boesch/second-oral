@@ -3148,6 +3148,8 @@ _ALGO_PARAMS_DEFAULTS = {
     "poids_creneau_fin_journee": 200,
     "poids_equite": 1_000_000,
     "bruit_tassement": 25,
+    "intervalle_pause": 4,
+    "temps_pause": 20,
 }
 
 def _load_algo_params() -> dict:
@@ -3395,6 +3397,12 @@ def algo_save_params() -> ResponseReturnValue:
         )
         params["bruit_tassement"] = max(
             1, min(10_000, int(data.get("bruit_tassement", 25))),
+        )
+        params["intervalle_pause"] = max(
+            3, min(6, int(data.get("intervalle_pause", 4))),
+        )
+        params["temps_pause"] = max(
+            0, min(60, int(data.get("temps_pause", 20))),
         )
     except (ValueError, KeyError):
         return jsonify({"ok": False, "reason": "invalid_params"}), 400

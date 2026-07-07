@@ -502,6 +502,45 @@ class TestAlgoCPEquiteEntreExaminateurs:
         assert max(valeurs) - min(valeurs) <= 1
 
 
+class TestPoidsEquiteEffectif:
+    """AlgoCP._poids_equite_effectif() : garantit la dominance de l'équité
+    sur le tassement (désormais en minutes réelles, potentiellement bien plus
+    grandes qu'un simple index de créneau) — testée directement, sans passer
+    par le solveur."""
+
+    def test_poids_configure_suffisant_inchange(self, tmp_path):
+        # max_minutes=60, bruit=25, 2 candidats -> borne = 2*2*(60*25+25) = 5050,
+        # largement sous ALGO_POIDS_EQUITE par défaut (1 000 000) : pas de relevé.
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"600000000{i}") for i in range(2)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        import algo_cp
+        assert alg._poids_equite_effectif(60, 25) == algo_cp.ALGO_POIDS_EQUITE
+
+    def test_poids_configure_insuffisant_releve(self, tmp_path, monkeypatch):
+        import algo_cp
+        monkeypatch.setattr(algo_cp, "ALGO_POIDS_EQUITE", 10)
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"610000000{i}") for i in range(10)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        # max_minutes=1200, bruit=25, 10 candidats -> borne = 2*10*(1200*25+25) = 600 500.
+        assert alg._poids_equite_effectif(1200, 25) == 600_501
+
+    def test_ne_descend_jamais_sous_la_valeur_configuree(self, tmp_path):
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"620000000{i}") for i in range(3)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        import algo_cp
+        # Même avec max_minutes/bruit à 0 (borne nulle), jamais sous la valeur configurée.
+        assert alg._poids_equite_effectif(0, 0) == algo_cp.ALGO_POIDS_EQUITE
+
+
 class TestCutoffCreneauFinJournee:
     """AlgoCP._cutoff_creneau_fin_journee : borne creneau_cible_fin_journee
     à [0, max_creneau] — testée directement, sans passer par le solveur

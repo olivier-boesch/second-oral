@@ -132,6 +132,10 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
                 env["ALGO_POIDS_EQUITE"] = str(params["poids_equite"])
             if "bruit_tassement" in params:
                 env["ALGO_BRUIT_TASSEMENT"] = str(params["bruit_tassement"])
+            if "intervalle_pause" in params:
+                env["ALGO_INTERVALLE_PAUSE"] = str(params["intervalle_pause"])
+            if "temps_pause" in params:
+                env["ALGO_TEMPS_PAUSE"] = str(params["temps_pause"])
         # Force le mode non-bufférisé : chaque ligne est envoyée immédiatement
         # sans attendre le remplissage du buffer stdout Python (crucial pour le
         # streaming temps-réel vers le log console).

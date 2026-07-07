@@ -102,6 +102,9 @@ PAUSE_MERIDIENNE_DEBUT = _env_time_optional("ALGO_PAUSE_MERIDIENNE_DEBUT")
 PAUSE_MERIDIENNE_DUREE = timedelta(minutes=_env_int("ALGO_PAUSE_MERIDIENNE_DUREE", 0))
 # Objectif souple (jamais bloquant) de dernier créneau utilisé — cf. AlgoOne.__init__.
 CRENEAU_CIBLE_FIN_JOURNEE = _env_int_optional("ALGO_CRENEAU_CIBLE_FIN_JOURNEE")
+# Pause périodique (toutes les N oraux) — réglable depuis /gestion/algo.
+INTERVALLE_PAUSE = _env_int("ALGO_INTERVALLE_PAUSE", 4)
+TEMPS_PAUSE      = timedelta(minutes=_env_int("ALGO_TEMPS_PAUSE", 20))
 
 # données
 DATA_DIR = 'data'
@@ -1204,6 +1207,10 @@ if __name__ == '__main__':
     _creneau_cible_kwargs = {
         'creneau_cible_fin_journee': CRENEAU_CIBLE_FIN_JOURNEE,
     }
+    _pause_periodique_kwargs = {
+        'intervalle_pause': INTERVALLE_PAUSE,
+        'temps_pause': TEMPS_PAUSE,
+    }
     if ALGO_ENGINE == "cpsat":
         # Moteur CP-SAT : une seule résolution (pas de tirages Monte-Carlo),
         # avec écart minimum candidat garanti par construction du modèle.
@@ -1219,7 +1226,8 @@ if __name__ == '__main__':
                       'numero_run': 0,
                       **_petites_matieres_kwargs,
                       **_pause_meridienne_kwargs,
-                      **_creneau_cible_kwargs}
+                      **_creneau_cible_kwargs,
+                      **_pause_periodique_kwargs}
         results = [algo_cp_run(parameters)]
     else:
         log.info(f"Lancement de l'algorithme ({N_run} runs en parallèle)")
@@ -1235,6 +1243,7 @@ if __name__ == '__main__':
                                **_petites_matieres_kwargs,
                                **_pause_meridienne_kwargs,
                                **_creneau_cible_kwargs,
+                               **_pause_periodique_kwargs,
                                'traiter_matiere_principales_en_premier': True,
                                'numero_run': i}
                                 for i in range(N_run)]

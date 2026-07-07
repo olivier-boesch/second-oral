@@ -137,6 +137,24 @@ class AlgoCP(AlgoOne):
             return None
         return max(0, min(max_creneau, self.creneau_cible_fin_journee))
 
+    def _poids_equite_effectif(self, max_minutes: int, bruit_tassement: int) -> int:
+        """Poids d'équité réellement utilisé dans l'objectif CP-SAT, en
+        garantissant sa dominance sur le tassement (cf. commentaire dans
+        `resoudre()`).
+
+        Le tassement raisonne en minutes réelles (`AlgoCP._minutes_creneau`),
+        potentiellement bien plus grandes qu'un simple index de créneau (ex.
+        plusieurs centaines de minutes sur une journée) — sa contribution
+        maximale possible (exactement 2 termes par candidat, cf.
+        `model.AddExactlyOne`) peut donc dépasser `ALGO_POIDS_EQUITE` tel quel
+        selon les données/réglages, cassant la garantie que l'équité de
+        charge prime toujours sur un meilleur tassement. Ne descend jamais
+        sous la valeur configurée par l'utilisateur, seulement au-dessus si
+        nécessaire.
+        """
+        borne_tassement = 2 * len(self.liste_candidats) * (max_minutes * bruit_tassement + bruit_tassement)
+        return max(ALGO_POIDS_EQUITE, borne_tassement + 1)
+
     def _minutes_creneau(self, examinateur: Examinateur, matiere: Matiere) -> list[int | None]:
         """Minutes réelles écoulées depuis `heure_debut` jusqu'au sujet de
         chaque créneau de cet examinateur — réplique `AlgoOne.calcul_horaires()`
@@ -298,9 +316,9 @@ class AlgoCP(AlgoOne):
         # matière ayant plusieurs examinateurs, on pénalise l'écart entre
         # l'examinateur le plus chargé et le moins chargé (nombre d'oraux
         # reçus). Poids délibérément énorme par rapport à la contribution
-        # maximale possible du terme de tassement ci-dessous (ALGO_POIDS_EQUITE
-        # >> max_creneau * ALGO_BRUIT_TASSEMENT * nombre de variables) : le
-        # solveur sacrifie toujours un meilleur tassement pour une meilleure
+        # maximale possible du terme de tassement (calculé plus bas, une fois
+        # `objectif_tassement` connu — cf. `poids_equite_effectif`) : le
+        # solveur sacrifice toujours un meilleur tassement pour une meilleure
         # répartition de charge, jamais l'inverse.
         ecarts_charge = []
         for matiere in self.liste_matieres:
@@ -322,22 +340,34 @@ class AlgoCP(AlgoOne):
             model.AddMinEquality(charge_min, charge_vars)
             ecarts_charge.append(charge_max - charge_min)
 
-        # Objectif : tasser les oraux tôt dans la journée (réduit les trous
-        # avant le dernier créneau utilisé par examinateur -> meilleur taux
-        # d'occupation, cf. AlgoOne.statistiques()), MAIS avec un bruit
-        # aléatoire de désambiguïsation par variable (0..bruit_tassement-1,
-        # toujours strictement inférieur au poids d'un seul créneau) : sans
+        # Objectif : tasser les oraux tôt dans la journée en TEMPS RÉEL (pas
+        # en nombre de créneaux, cf. minutes_par_examinateur ci-dessus) —
+        # traverser une pause (périodique ou méridienne) coûte alors
+        # réellement le nombre de minutes qu'elle dure, pas seulement "un
+        # créneau de plus" comme le ferait un tassement en index de créneau ;
+        # le solveur évite donc activement de pousser un examinateur au-delà
+        # d'une pause quand une place plus tôt est disponible. MAIS avec un
+        # bruit aléatoire de désambiguïsation par variable (0..bruit_tassement-1,
+        # toujours strictement inférieur au poids d'une seule minute) : sans
         # lui, le solveur choisirait systématiquement la même solution parmi
         # toutes celles à égalité de score (fréquent ici — de nombreux
         # examinateurs d'une même matière sont interchangeables). Le terme
-        # `creneau * bruit_tassement` reste dominant sur le tassement, donc la
+        # `minutes * bruit_tassement` reste dominant sur le tassement, donc la
         # solution reste proche de l'optimum du tassement ; seul le choix
         # entre solutions quasi équivalentes change à chaque run.
         bruit_tassement = max(1, ALGO_BRUIT_TASSEMENT)
         objectif_tassement = sum(
-            (creneau * bruit_tassement + random.randint(0, bruit_tassement - 1)) * var
-            for (_c, _m, _e, creneau), var in x.items()
+            (minutes_par_examinateur[e][creneau] * bruit_tassement + random.randint(0, bruit_tassement - 1)) * var
+            for (_c, _m, e, creneau), var in x.items()
         )
+        poids_equite_effectif = self._poids_equite_effectif(max_minutes, bruit_tassement)
+        if poids_equite_effectif > ALGO_POIDS_EQUITE:
+            log.debug(
+                f"Run {self.numero_run} : CP-SAT — poids équité relevé de "
+                f"{ALGO_POIDS_EQUITE} à {poids_equite_effectif} pour garantir sa dominance "
+                f"sur le tassement (désormais en minutes réelles, potentiellement plus grand "
+                f"qu'un simple index de créneau)"
+            )
 
         # Créneau cible de fin de journée (objectif souple, jamais bloquant) —
         # pénalise le dépassement de cet index, PAR EXAMINATEUR (pas par
@@ -371,7 +401,7 @@ class AlgoCP(AlgoOne):
             penalite_fin_journee = sum(penalites_examinateurs)
 
         model.Minimize(
-            ALGO_POIDS_EQUITE * sum(ecarts_charge)
+            poids_equite_effectif * sum(ecarts_charge)
             + ALGO_POIDS_CRENEAU_FIN_JOURNEE * penalite_fin_journee
             + objectif_tassement
         )

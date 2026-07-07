@@ -430,6 +430,32 @@
                 <span class="param-hint">En minutes — par défaut 80 min (1 h 20), de 10 à 240</span>
             </div>
             <div class="param-row">
+                <label class="param-label" for="p-intervalle-pause">
+                    Nombre d'oraux avant pause
+                    <span class="info-icon" title="Une pause est insérée dans le planning d'un examinateur toutes les N oraux délivrés (les deux moteurs respectent ce réglage — Monte-Carlo et CP-SAT dans le calcul de son objectif de tassement, cf. réglage suivant).">?</span>
+                </label>
+                <div class="param-slider-group">
+                    <input type="range" class="param-slider" id="p-intervalle-pause-slider"
+                           min="3" max="6" step="1" value="{{ algo_params.intervalle_pause }}">
+                    <input class="param-input param-slider-value" type="text" inputmode="numeric"
+                           id="p-intervalle-pause" name="intervalle_pause" value="{{ algo_params.intervalle_pause }}">
+                </div>
+                <span class="param-hint">Par défaut 4 (3 à 6)</span>
+            </div>
+            <div class="param-row">
+                <label class="param-label" for="p-temps-pause">
+                    Durée de la pause (min)
+                    <span class="info-icon" title="Durée de la pause périodique insérée toutes les N oraux (réglage précédent). Ignorée si le nombre d'oraux avant pause n'est jamais atteint (journée trop courte).">?</span>
+                </label>
+                <div class="param-slider-group">
+                    <input type="range" class="param-slider" id="p-temps-pause-slider"
+                           min="0" max="60" step="1" value="{{ algo_params.temps_pause }}">
+                    <input class="param-input param-slider-value" type="text" inputmode="numeric"
+                           id="p-temps-pause" name="temps_pause" value="{{ algo_params.temps_pause }}">
+                </div>
+                <span class="param-hint">En minutes — par défaut 20 min, de 0 à 60</span>
+            </div>
+            <div class="param-row">
                 <label class="param-label" for="p-debug">
                     Affichage détaillé (debug)
                     <span class="info-icon" title="Affiche dans la sortie en temps réel le détail de chaque run (chargement des données, appairage, calcul des horaires...) en plus du lancement et de la fin de chaque run. Utile pour diagnostiquer un problème, mais très verbeux.">?</span>
@@ -817,6 +843,8 @@ function attachSlider(sliderId, textId) {
     ['p-bruit-tassement-slider', 'p-bruit-tassement'],
     ['p-poids-creneau-fin-slider', 'p-poids-creneau-fin'],
     ['p-ecart-mini-slider', 'p-ecart-mini'],
+    ['p-intervalle-pause-slider', 'p-intervalle-pause'],
+    ['p-temps-pause-slider', 'p-temps-pause'],
 ].forEach(([sliderId, textId]) => attachSlider(sliderId, textId));
 
 // ── Confirmation avant activation du mode optimal (aucune limite de temps) ──
@@ -853,6 +881,8 @@ function sauvegarderParams() {
         poids_creneau_fin_journee: parseInt(document.getElementById('p-poids-creneau-fin').value, 10),
         poids_equite: parseInt(document.getElementById('p-poids-equite').value, 10),
         bruit_tassement: parseInt(document.getElementById('p-bruit-tassement').value, 10),
+        intervalle_pause: parseInt(document.getElementById('p-intervalle-pause').value, 10),
+        temps_pause: parseInt(document.getElementById('p-temps-pause').value, 10),
     };
     fb.textContent = 'Sauvegarde…';
     fb.style.color = '#555';

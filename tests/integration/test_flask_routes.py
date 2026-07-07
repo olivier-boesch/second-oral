@@ -592,6 +592,66 @@ class TestAdminRoutes:
         assert r.status_code == 200
         assert json.loads(r.data)["params"]["bruit_tassement"] == 1
 
+    def test_save_params_intervalle_pause_defaut_et_borne(self, admin_client, tmp_path,
+                                                           flask_app, monkeypatch):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["intervalle_pause"] == 4
+
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70,
+                             "intervalle_pause": 1}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["intervalle_pause"] == 3
+
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70,
+                             "intervalle_pause": 99}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["intervalle_pause"] == 6
+
+    def test_save_params_temps_pause_defaut_et_borne(self, admin_client, tmp_path,
+                                                      flask_app, monkeypatch):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["temps_pause"] == 20
+
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70,
+                             "temps_pause": 999}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["temps_pause"] == 60
+
     def test_save_params_invalid(self, admin_client):
         r = admin_client.post(
             "/gestion/algo/params",
