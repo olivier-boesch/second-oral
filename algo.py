@@ -60,12 +60,6 @@ def _env_time(key, default_h, default_m):
 def _env_bool(key, default=False):
     return _os.environ.get(key, str(default)).strip().lower() in ("1", "true", "yes", "on")
 
-def _env_float(key, default):
-    try:
-        return float(_os.environ.get(key, default))
-    except (ValueError, TypeError):
-        return default
-
 def _env_time_optional(key):
     """Comme _env_time, mais retourne None (fonctionnalité désactivée) si la
     variable est absente ou vide, plutôt qu'une heure par défaut arbitraire."""
@@ -89,7 +83,7 @@ ALGO_ENGINE         = _os.environ.get("ALGO_ENGINE", "monte_carlo").strip().lowe
 # (AlgoOne.__init__ défaut à False) pour ne pas changer le comportement des appelants
 # existants (tests, scripts) qui ne demandent pas explicitement cette optimisation.
 PETITES_MATIERES_FIN_JOURNEE = _env_bool("ALGO_PETITES_MATIERES_FIN_JOURNEE", True)
-SEUIL_PETITE_MATIERE         = _env_float("ALGO_SEUIL_PETITE_MATIERE", 0.5)
+SEUIL_PETITE_MATIERE         = _env_int("ALGO_SEUIL_PETITE_MATIERE", 5)
 MARGE_PETITE_MATIERE         = _env_int("ALGO_MARGE_PETITE_MATIERE", 2)
 # Pause méridienne (aucune par défaut — None désactive la fonctionnalité) :
 # heure de début et durée réglables depuis /gestion/algo.
@@ -553,7 +547,7 @@ class AlgoOne:
                  temps_minimum_entre_oraux: timedelta = timedelta(hours=1), interrompre_oral: bool = False,
                  max_creneaux_journee: int = 15, temps_pause: timedelta = timedelta(minutes=20),
                  intervalle_pause: int = 4, traiter_matiere_principales_en_premier: bool = True, numero_run: int = 0,
-                 optimiser_petites_matieres: bool = False, seuil_petite_matiere: float = 0.5,
+                 optimiser_petites_matieres: bool = False, seuil_petite_matiere: int = 5,
                  marge_flexibilite_petite_matiere: int = 2,
                  heure_pause_meridienne: time | None = None,
                  duree_pause_meridienne: timedelta = timedelta(minutes=0)):
@@ -584,9 +578,9 @@ class AlgoOne:
             journée (cf. _reserver_petites_matieres) ; désactivé par défaut (opt-in) pour ne pas
             changer le comportement des appelants existants — activé explicitement par __main__.
         :type optimiser_petites_matieres: bool
-        :param seuil_petite_matiere: ratio candidats/capacité en-dessous duquel une matière est
-            considérée "petite" et voit ses premiers créneaux réservés
-        :type seuil_petite_matiere: float
+        :param seuil_petite_matiere: nombre de candidats (oraux) en-dessous duquel une matière
+            est considérée "petite" et voit ses premiers créneaux réservés
+        :type seuil_petite_matiere: int
         :param marge_flexibilite_petite_matiere: nombre de créneaux de marge laissés ouverts
             en plus du strict nécessaire, pour ne pas sur-contraindre l'écart minimum candidat
         :type marge_flexibilite_petite_matiere: int
@@ -708,10 +702,9 @@ class AlgoOne:
         (partagé via AlgoOne.setup_from_files) leur profite à tous les deux
         sans aucune duplication de logique.
 
-        Une matière est jugée "petite" quand son ratio candidats/capacité
-        (nombre de candidats divisé par le nombre total de créneaux disponibles
-        chez ses examinateurs) est sous seuil_petite_matiere. Le nombre de
-        créneaux à garder ouverts par examinateur est calculé à partir du
+        Une matière est jugée "petite" quand son nombre de candidats est sous
+        seuil_petite_matiere (nombre absolu d'oraux, pas un ratio). Le nombre
+        de créneaux à garder ouverts par examinateur est calculé à partir du
         nombre réel de candidats de CETTE matière (+ une marge de flexibilité),
         donc deux petites matières de tailles différentes obtiennent
         naturellement des fenêtres de fin de journée différentes, sans besoin
@@ -721,14 +714,7 @@ class AlgoOne:
         for matiere in self.liste_matieres:
             if not matiere.examinateurs:
                 continue
-            capacite_totale = sum(
-                sum(1 for o in e.oraux if not isinstance(o, CreneauInterdit))
-                for e in matiere.examinateurs
-            )
-            if capacite_totale == 0:
-                continue
-            ratio = len(matiere.candidats) / capacite_totale
-            if ratio >= self.seuil_petite_matiere:
+            if len(matiere.candidats) >= self.seuil_petite_matiere:
                 continue
             n_a_garder = max(
                 1,
@@ -745,7 +731,8 @@ class AlgoOne:
                     examinateur.oraux[idx] = CreneauInterdit()
             log.debug(
                 f"Run {self.numero_run} : matière '{matiere.nom}' jugée petite "
-                f"(ratio={ratio:.2f}) — créneaux réservés en fin de journée "
+                f"({len(matiere.candidats)} candidat(s) < seuil {self.seuil_petite_matiere}) — "
+                f"créneaux réservés en fin de journée "
                 f"({n_a_garder} créneau(x) gardé(s) par examinateur)"
             )
 

@@ -109,6 +109,15 @@
 **Tests (suite 2)**
 - `tests/unit/test_algo.py::TestPetitesMatieresFinJournee` : désactivé par défaut, réservation correcte des créneaux d'une petite matière, non-impact sur les grosses matières, placement effectif en fin de journée
 
+**Algorithme de placement (suite 2 bis) — petites matières : critère en nombre de candidats et réglage depuis `/gestion/algo`**
+- Diagnostic d'un cas réel bloquant tous les runs (Monte-Carlo) et rendant le CP-SAT `INFEASIBLE` : quand un candidat choisit ses deux matières parmi celles jugées « petites », leurs fenêtres de fin de journée (calculées indépendamment) peuvent se chevaucher au point de ne plus laisser assez de place pour l'écart minimum candidat, sans que les CSV soient en cause
+- `seuil_petite_matiere` (`ALGO_SEUIL_PETITE_MATIERE`) passe d'un ratio candidats/capacité (défaut `0.5`) à un nombre absolu de candidats (défaut `5`) — plus lisible et plus facile à ajuster pour désamorcer un chevauchement entre deux petites matières
+- L'activation (**Petites matières en fin de journée**) et le seuil (**Seuil petite matière**) sont désormais réglables directement depuis `/gestion/algo` → section Paramètres (auparavant uniquement pilotables par variable d'environnement, sans effet depuis l'interface web puisque `algo_bg.run_algo()` ne les transmettait pas)
+
+**Tests (suite 2 ter)**
+- `tests/integration/test_flask_routes.py` : persistance et bornes de `petites_matieres_fin_journee` / `seuil_petite_matiere` via `/gestion/algo/params`
+- `tests/unit/test_algo_bg.py::TestRunAlgoEnvVars` : traduction correcte des deux paramètres en variables d'environnement (`ALGO_PETITES_MATIERES_FIN_JOURNEE`, `ALGO_SEUIL_PETITE_MATIERE`) transmises au sous-processus `algo.py`
+
 **Gestion en cours de journée — absence / retard / renfort d'un examinateur**
 - Nouveau bouton **🕒 Disponibilité** sur `/gestion/liste-examinateurs` : rééquilibre les oraux restants d'une matière suite à un changement de disponibilité d'un examinateur (absence, retard, renfort), à partir de deux heures réglables ("indisponible à partir de" / "disponible de nouveau à partir de")
 - Un retard se modélise comme une absence sur la fenêtre avant l'arrivée suivie d'un renfort sur la fenêtre après l'arrivée — même mécanisme, pas de troisième cas particulier (`webserver/rebalance.py`)

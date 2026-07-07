@@ -118,6 +118,12 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
                 env["ALGO_PAUSE_MERIDIENNE_DEBUT"] = str(params["pause_meridienne_debut"])
             if "pause_meridienne_duree" in params:
                 env["ALGO_PAUSE_MERIDIENNE_DUREE"] = str(params["pause_meridienne_duree"])
+            if "petites_matieres_fin_journee" in params:
+                env["ALGO_PETITES_MATIERES_FIN_JOURNEE"] = (
+                    "1" if params["petites_matieres_fin_journee"] else "0"
+                )
+            if "seuil_petite_matiere" in params:
+                env["ALGO_SEUIL_PETITE_MATIERE"] = str(params["seuil_petite_matiere"])
         # Force le mode non-bufférisé : chaque ligne est envoyée immédiatement
         # sans attendre le remplissage du buffer stdout Python (crucial pour le
         # streaming temps-réel vers le log console).

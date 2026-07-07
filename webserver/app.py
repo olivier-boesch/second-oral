@@ -3142,6 +3142,8 @@ _ALGO_PARAMS_DEFAULTS = {
     "cp_optimal":       False,
     "pause_meridienne_debut": "",
     "pause_meridienne_duree": 60,
+    "petites_matieres_fin_journee": True,
+    "seuil_petite_matiere": 5,
 }
 
 def _load_algo_params() -> dict:
@@ -3356,6 +3358,12 @@ def algo_save_params() -> ResponseReturnValue:
         params["n_run"]       = max(1, min(100_000, int(data.get("n_run", 1000))))
         params["ecart_mini"]  = max(10, min(240, int(data.get("ecart_mini", 80))))
         params["debug"]       = bool(data.get("debug", False))
+        params["petites_matieres_fin_journee"] = bool(
+            data.get("petites_matieres_fin_journee", True),
+        )
+        params["seuil_petite_matiere"] = max(
+            1, min(500, int(data.get("seuil_petite_matiere", 5))),
+        )
         engine = str(data.get("engine", "monte_carlo")).strip().lower()
         engines_valides = ("monte_carlo", "cpsat")
         params["engine"]     = engine if engine in engines_valides else "monte_carlo"

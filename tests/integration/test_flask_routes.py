@@ -420,6 +420,60 @@ class TestAdminRoutes:
         assert r.status_code == 200
         assert json.loads(r.data)["params"]["cp_optimal"] is True
 
+    def test_save_params_petites_matieres_defaut_active(self, admin_client, tmp_path,
+                                                          flask_app, monkeypatch):
+        """Activée par défaut si absente de la requête (comportement historique inchangé)."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        params = json.loads(r.data)["params"]
+        assert params["petites_matieres_fin_journee"] is True
+        assert params["seuil_petite_matiere"] == 5
+
+    def test_save_params_petites_matieres_desactivee(self, admin_client, tmp_path,
+                                                      flask_app, monkeypatch):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70,
+                             "petites_matieres_fin_journee": False,
+                             "seuil_petite_matiere": 8}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        params = json.loads(r.data)["params"]
+        assert params["petites_matieres_fin_journee"] is False
+        assert params["seuil_petite_matiere"] == 8
+
+    def test_save_params_seuil_petite_matiere_borne(self, admin_client, tmp_path,
+                                                     flask_app, monkeypatch):
+        """seuil_petite_matiere est borné entre 1 et 500 (au-delà, clampé silencieusement)."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE",
+                            tmp_path / "algo_params.json")
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+        r = admin_client.post(
+            "/gestion/algo/params",
+            data=json.dumps({"heure_debut": "08:30", "creneaux": 12,
+                             "n_run": 500, "ecart_mini": 70,
+                             "seuil_petite_matiere": 10000}),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+        assert json.loads(r.data)["params"]["seuil_petite_matiere"] == 500
+
     def test_save_params_invalid(self, admin_client):
         r = admin_client.post(
             "/gestion/algo/params",

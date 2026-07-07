@@ -1,6 +1,8 @@
 """Tests unitaires pour algo_bg.py — gestion du run algo.py en tâche de fond."""
+import json
 import subprocess
 import sys
+import threading
 import time as _time
 from pathlib import Path
 
@@ -44,6 +46,55 @@ class TestIsRunning:
         proc.wait()
         algo_bg._process = proc
         assert algo_bg.is_running() is False
+
+
+class TestRunAlgoEnvVars:
+    """run_algo() traduit les params web en variables d'environnement pour algo.py."""
+
+    def _capture_env(self, monkeypatch, params, var_name):
+        """Lance run_algo() avec un faux script qui imprime la variable d'env demandée,
+        et retourne la ligne de sortie capturée par le thread de streaming."""
+        lines = []
+        done = threading.Event()
+
+        def publish(data_str):
+            payload = json.loads(data_str)
+            lines.append(payload["line"])
+            if payload.get("done"):
+                done.set()
+
+        real_popen = subprocess.Popen
+
+        def fake_popen(args, **kwargs):
+            script = (
+                f"import os; print(os.environ.get('{var_name}', '<absent>'))"
+            )
+            return real_popen([sys.executable, "-c", script], **kwargs)
+
+        monkeypatch.setattr(subprocess, "Popen", fake_popen)
+        assert algo_bg.run_algo(publish, params=params) is True
+        done.wait(timeout=5)
+        return lines
+
+    def test_petites_matieres_active_transmise(self, monkeypatch):
+        lines = self._capture_env(
+            monkeypatch, {"petites_matieres_fin_journee": True},
+            "ALGO_PETITES_MATIERES_FIN_JOURNEE",
+        )
+        assert "1" in lines
+
+    def test_petites_matieres_desactivee_transmise(self, monkeypatch):
+        lines = self._capture_env(
+            monkeypatch, {"petites_matieres_fin_journee": False},
+            "ALGO_PETITES_MATIERES_FIN_JOURNEE",
+        )
+        assert "0" in lines
+
+    def test_seuil_petite_matiere_transmis(self, monkeypatch):
+        lines = self._capture_env(
+            monkeypatch, {"seuil_petite_matiere": 8}, "ALGO_SEUIL_PETITE_MATIERE",
+        )
+        assert "8" in lines
 
 
 class TestStopAlgo:

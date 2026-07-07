@@ -251,6 +251,25 @@
                    min="0" max="240" value="{{ algo_params.pause_meridienne_duree }}">
             <span class="param-hint">En minutes — ignoré si aucune heure de début n'est renseignée</span>
         </div>
+        <div class="param-row">
+            <label class="param-label" for="p-petites-matieres">
+                Petites matières en fin de journée
+                <span class="info-icon" title="Repousse les matières peu demandées (moins de candidats que le seuil ci-dessous) vers la fin de journée, pour laisser les meilleurs créneaux aux matières principales. Peut rendre le placement impossible si un candidat a choisi deux matières toutes deux jugées « petites » (leurs fenêtres de fin de journée se chevauchent) — désactivez cette option si l'algorithme échoue avec « Aucun placement valide trouvé ».">?</span>
+            </label>
+            <input type="checkbox" id="p-petites-matieres" name="petites_matieres_fin_journee"
+                   {% if algo_params.petites_matieres_fin_journee %}checked{% endif %}
+                   onchange="onPetitesMatieresChange()">
+            <span class="param-hint">Activé par défaut — désactivez en cas d'échec du placement</span>
+        </div>
+        <div class="param-row" id="p-seuil-petite-matiere-row">
+            <label class="param-label" for="p-seuil-petite-matiere">
+                Seuil petite matière (nombre de candidats)
+                <span class="info-icon" title="Une matière est jugée « petite » quand son nombre de candidats est strictement inférieur à ce seuil. Ignoré si l'option ci-dessus est désactivée.">?</span>
+            </label>
+            <input class="param-input" type="number" id="p-seuil-petite-matiere" name="seuil_petite_matiere"
+                   min="1" max="500" value="{{ algo_params.seuil_petite_matiere }}">
+            <span class="param-hint">Par défaut 5 candidats — ignoré si l'option ci-dessus est désactivée</span>
+        </div>
     </div>
 
     <details class="params-advanced">
@@ -620,6 +639,12 @@ function onEngineChange() {
     document.getElementById('p-cp-optimal-row').style.opacity = engine === 'cpsat'       ? 1 : .4;
 }
 
+// ── Bascule visuelle du seuil selon l'activation des petites matières ───────
+function onPetitesMatieresChange() {
+    const actif = document.getElementById('p-petites-matieres').checked;
+    document.getElementById('p-seuil-petite-matiere-row').style.opacity = actif ? 1 : .4;
+}
+
 // ── Confirmation avant activation du mode optimal (aucune limite de temps) ──
 function onCpOptimalChange(checkbox) {
     if (checkbox.checked && !confirm(
@@ -646,6 +671,8 @@ function sauvegarderParams() {
         cp_optimal:  document.getElementById('p-cp-optimal').checked,
         pause_meridienne_debut: document.getElementById('p-pause-meridienne-debut').value,
         pause_meridienne_duree: parseInt(document.getElementById('p-pause-meridienne-duree').value, 10),
+        petites_matieres_fin_journee: document.getElementById('p-petites-matieres').checked,
+        seuil_petite_matiere: parseInt(document.getElementById('p-seuil-petite-matiere').value, 10),
     };
     fb.textContent = 'Sauvegarde…';
     fb.style.color = '#555';
@@ -670,6 +697,7 @@ function sauvegarderParams() {
 // ── Init ─────────────────────────────────────────────────────────────────────
 validerAvantLancement(() => {});
 onEngineChange();
+onPetitesMatieresChange();
 
 {% if is_running %}
 connectAlgoSSE();

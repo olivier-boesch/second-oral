@@ -106,7 +106,7 @@ Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → sec
 | `ALGO_CP_TIMEOUT`         | `60` (s)       | Délai max du solveur CP-SAT (CP-SAT uniquement, ignoré si `ALGO_CP_OPTIMAL` est actif) |
 | `ALGO_CP_OPTIMAL`         | `false`        | ⚠️ Supprime toute limite de temps au solveur CP-SAT — cf. avertissement ci-dessous |
 | `ALGO_PETITES_MATIERES_FIN_JOURNEE` | `true` | Repousse les matières peu demandées en fin de journée (les 2 moteurs) |
-| `ALGO_SEUIL_PETITE_MATIERE`        | `0.5`  | Ratio candidats/capacité en-dessous duquel une matière est jugée "petite"|
+| `ALGO_SEUIL_PETITE_MATIERE`        | `5`    | Nombre de candidats en-dessous duquel une matière est jugée "petite" (nombre absolu, pas un ratio) |
 | `ALGO_MARGE_PETITE_MATIERE`        | `2`    | Créneaux de marge laissés en plus du strict nécessaire pour une petite matière |
 | `ALGO_PAUSE_MERIDIENNE_DEBUT`      | *(vide)* | Heure à partir de laquelle aucun oral ne doit être en cours pour un examinateur ; vide = désactivée |
 | `ALGO_PAUSE_MERIDIENNE_DUREE`      | `0` (min) | Durée de la pause méridienne ; ignorée si `ALGO_PAUSE_MERIDIENNE_DEBUT` est vide |
@@ -143,16 +143,29 @@ Comme les deux moteurs respectent déjà `CreneauInterdit` de façon identique, 
 implémenté une seule fois, dans `AlgoOne._reserver_petites_matieres()` (appelée depuis
 `setup_from_files()`), et profite donc automatiquement à `AlgoOne` et `AlgoCP` sans duplication.
 
-Une matière est jugée "petite" quand `candidats / (examinateurs × créneaux disponibles) <
-ALGO_SEUIL_PETITE_MATIERE`. Le nombre de créneaux laissés ouverts par examinateur est calculé à
-partir du nombre réel de candidats de cette matière (`+ ALGO_MARGE_PETITE_MATIERE` de flexibilité,
-pour ne pas sur-contraindre l'écart minimum candidat) — deux petites matières de tailles
-différentes obtiennent donc naturellement des fenêtres de fin de journée différentes.
+Une matière est jugée "petite" quand son nombre de candidats est strictement inférieur à
+`ALGO_SEUIL_PETITE_MATIERE` (un nombre absolu d'oraux, pas un ratio candidats/capacité). Le nombre
+de créneaux laissés ouverts par examinateur est calculé à partir du nombre réel de candidats de
+cette matière (`+ ALGO_MARGE_PETITE_MATIERE` de flexibilité, pour ne pas sur-contraindre l'écart
+minimum candidat) — deux petites matières de tailles différentes obtiennent donc naturellement des
+fenêtres de fin de journée différentes.
 
 Ce comportement est **opt-in au niveau de l'API** (`AlgoOne.__init__(optimiser_petites_matieres=False)`
 par défaut) pour ne pas changer le comportement des appelants existants (tests, scripts) qui ne le
 demandent pas explicitement — mais activé par défaut en production via `__main__` (donc par défaut
-dans `/gestion/algo` et `ALGO_ENGINE`), piloté par `ALGO_PETITES_MATIERES_FIN_JOURNEE`.
+dans `/gestion/algo`). L'activation (case **Petites matières en fin de journée**) et le seuil
+(**Seuil petite matière**, en nombre de candidats) sont réglables directement depuis
+`/gestion/algo` → section Paramètres, en plus de `ALGO_PETITES_MATIERES_FIN_JOURNEE` /
+`ALGO_SEUIL_PETITE_MATIERE`.
+
+> **Piège connu** : si un candidat a choisi **ses deux matières parmi celles jugées "petites"**,
+> leurs fenêtres de fin de journée (calculées indépendamment par matière) peuvent se chevaucher
+> presque exactement, ne laissant pas assez de place pour respecter l'écart minimum candidat entre
+> les deux oraux — le placement peut alors devenir impossible pour *tous* les runs (Monte-Carlo)
+> ou `INFEASIBLE` (CP-SAT), même si les fichiers CSV sont par ailleurs valides. Si l'algorithme
+> échoue avec « Aucun placement valide trouvé » ou une erreur CP-SAT `INFEASIBLE`, désactiver cette
+> option (ou ajuster le seuil pour qu'un seul des deux choix du candidat concerné reste "petit")
+> permet de contourner le problème.
 
 ### Pause méridienne
 
