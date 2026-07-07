@@ -4,6 +4,10 @@
 
 ### Changed
 
+**Sécurité**
+- Les PDF générés (papillons de connexion, fiches candidats/salles/loges — noms, numéros, identifiants en clair) sont désormais écrits dans `webserver/generated/`, hors de `webserver/static/`, au lieu de `webserver/static/docs/`. Auparavant, ce dossier restait sous l'arbre servi tel quel par nginx (`location /static/`) **et** par le handler statique intégré de Flask : n'importe qui devinant un nom de fichier (`candidat_Martin_Paul.pdf`, `papillons_candidats.pdf`) y accédait directement, sans passer par les contrôles d'authentification de `/download`. Seule cette route (session active requise) donne désormais accès à ces fichiers. Volume Docker renommé `generated_docs`, retiré du montage du conteneur nginx (`docker-compose.yml`) ; bloc `location /static/docs/` supprimé de `docker/nginx/second_oral.conf` (devenu sans objet).
+- `.gitignore` : `data/examinateurs.csv` traité comme `data/candidats.csv` (données personnelles, jamais versionné) — corrige un oubli lors du renommage historique de `profs_total.csv` en `examinateurs.csv`.
+
 - `cp_timeout` (délai max du solveur CP-SAT, `/gestion/algo`) : plafond relevé de 600s à 1200s (20 min), backend et champ du formulaire.
 
 ### Added

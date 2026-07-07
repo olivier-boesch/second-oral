@@ -940,7 +940,7 @@ def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturn
         app.logger.debug(f"Document: fiche candidat {id_doc}")
         with tempfile.TemporaryDirectory() as tmpdir:
             filename = reports.fiche_candidat(
-                info_candidat, tmpdir, 'static/docs',
+                info_candidat, tmpdir, 'generated',
                 filename_root='candidat_', centre_examen=CENTRE_EXAMEN,
             )
         return jsonify({"url": url_for('download', filename=filename)})
@@ -954,7 +954,7 @@ def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturn
         app.logger.debug(f"Document: fiche salle {id_doc}")
         with tempfile.TemporaryDirectory() as tmpdir:
             filename = reports.salle_oraux(
-                info_salle, tmpdir, file_dir='static/docs',
+                info_salle, tmpdir, file_dir='generated',
                 filename_root='salle', centre_examen=CENTRE_EXAMEN,
             )
         return jsonify({"url": url_for('download', filename=filename)})
@@ -968,7 +968,7 @@ def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturn
         app.logger.debug(f"Document: fiche loge {id_doc}")
         with tempfile.TemporaryDirectory() as tmpdir:
             filename = reports.loge_oraux(
-                donnees_loge, tmpdir, file_dir='static/docs',
+                donnees_loge, tmpdir, file_dir='generated',
                 filename_root='loge', centre_examen=CENTRE_EXAMEN,
             )
         return jsonify({"url": url_for('download', filename=filename)})
@@ -2866,7 +2866,7 @@ def archive_page() -> ResponseReturnValue:
     """
     # Les fiches de salle sont (re)générées au moment du téléchargement — on
     # liste donc les salles concernées plutôt que les fichiers déjà présents
-    # dans static/docs (qui pourraient être incomplets ou obsolètes).
+    # dans generated (qui pourraient être incomplets ou obsolètes).
     salles = sorted(
         s['salle'] for s in db_get(db_facility_web.SELECT_DOC_LISTE_SALLES, no_list_auto=False)
     )
@@ -2886,11 +2886,13 @@ def _archive_regenerate_fiches_salle() -> list[Path]:
         s['oraux'] = db_get(
             db_facility_web.SELECT_DOC_LISTE_SALLES_ORAUX, s['id'], no_list_auto=False
         )
-    reports.liste_salle_oraux(salles, 'static/docs', 'salle', centre_examen=CENTRE_EXAMEN)
-    docs_dir = Path(app.root_path) / 'static' / 'docs'
-    if not docs_dir.is_dir():
+    reports.liste_salle_oraux(salles, 'generated', 'salle', centre_examen=CENTRE_EXAMEN)
+    generated_dir = Path(app.root_path) / 'generated'
+    if not generated_dir.is_dir():
         return []
-    return sorted(list(docs_dir.glob('salle-*.pdf')) + list(docs_dir.glob('liste_salles.pdf')))
+    return sorted(
+        list(generated_dir.glob('salle-*.pdf')) + list(generated_dir.glob('liste_salles.pdf'))
+    )
 
 
 def _archive_build_zip(fiches_salles: list[Path], now: datetime) -> BytesIO:
@@ -2968,7 +2970,7 @@ def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseRetu
     """Génère un PDF groupé (tous candidats, toutes salles ou toutes loges)."""
     if type_doc == 'liste_oraux':
         infos = db_get(db_facility_web.SELECT_DOC_LISTE_ORAUX, no_list_auto=False)
-        reports.liste_generale_oraux(infos, filename='static/docs/liste_oraux.pdf',
+        reports.liste_generale_oraux(infos, filename='generated/liste_oraux.pdf',
                                      centre_examen=CENTRE_EXAMEN)
         return jsonify({"url": url_for('download', filename='liste_oraux.pdf')})
 
@@ -2979,7 +2981,7 @@ def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseRetu
                 db_facility_web.SELECT_DOC_LISTE_CANDIDATS_ORAUX,
                 c['id'], no_list_auto=False,
             )
-        reports.liste_fiches_candidats(infos, file_dir='static/docs',
+        reports.liste_fiches_candidats(infos, file_dir='generated',
                                        filename_root='candidat_',
                                        centre_examen=CENTRE_EXAMEN)
         return jsonify({"url": url_for('download', filename='liste_candidats.pdf')})
@@ -2991,7 +2993,7 @@ def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseRetu
                 db_facility_web.SELECT_DOC_LISTE_SALLES_ORAUX,
                 s['id'], no_list_auto=False,
             )
-        reports.liste_salle_oraux(infos, 'static/docs', 'salle',
+        reports.liste_salle_oraux(infos, 'generated', 'salle',
                                   centre_examen=CENTRE_EXAMEN)
         return jsonify({"url": url_for('download', filename='liste_salles.pdf')})
 
@@ -3002,7 +3004,7 @@ def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseRetu
                 db_facility_web.SELECT_ORAUX_LOGE,
                 loge_item['salle'], no_list_auto=False,
             )
-        reports.liste_loge_oraux(infos, 'static/docs', 'loge',
+        reports.liste_loge_oraux(infos, 'generated', 'loge',
                                  centre_examen=CENTRE_EXAMEN)
         return jsonify({"url": url_for('download', filename='liste_loges.pdf')})
 
@@ -3011,7 +3013,7 @@ def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseRetu
         base_url = request.host_url.rstrip('/')
         reports.liste_papillons_candidats(
             infos,
-            filename='static/docs/papillons_candidats.pdf',
+            filename='generated/papillons_candidats.pdf',
             base_url=base_url,
             centre_examen=CENTRE_EXAMEN,
         )
@@ -3025,10 +3027,10 @@ def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseRetu
 @app.route('/gestion/algo/doc-exists/<filename>')
 @admin_required
 def algo_doc_exists(filename: str) -> ResponseReturnValue:
-    """Indique si un PDF dans static/docs/ existe (utilisé par la page algo)."""
+    """Indique si un PDF dans generated/ existe (utilisé par la page algo)."""
     if not re.match(r'^[\w\-. ]+\.pdf$', filename):
         abort(400)
-    exists = (Path(app.root_path) / 'static' / 'docs' / filename).exists()
+    exists = (Path(app.root_path) / 'generated' / filename).exists()
     return jsonify({"exists": exists,
                     "url": url_for('download', filename=filename) if exists else None})
 
@@ -3058,7 +3060,7 @@ def download() -> ResponseReturnValue:
             return redirect(url_for('login', link_back=request.url))
 
     app.logger.info(f"Téléchargement: {filename}")
-    return send_from_directory('static/docs', filename)
+    return send_from_directory('generated', filename)
 
 
 @app.route('/theme.css')
@@ -3536,7 +3538,7 @@ def _regenerer_papillons_examinateurs(base_url: str) -> None:
     if connexions:
         reports.liste_papillons_connexion(
             connexions,
-            filename=str(Path(app.root_path) / 'static' / 'docs' / 'papillons_examinateurs.pdf'),
+            filename=str(Path(app.root_path) / 'generated' / 'papillons_examinateurs.pdf'),
             base_url=base_url,
             centre_examen=CENTRE_EXAMEN,
         )
@@ -3559,7 +3561,7 @@ def _regenerer_papillons_loges(base_url: str) -> None:
     if loges_data:
         reports.liste_papillons_loges(
             loges_data,
-            filename=str(Path(app.root_path) / 'static' / 'docs' / 'papillons_loges.pdf'),
+            filename=str(Path(app.root_path) / 'generated' / 'papillons_loges.pdf'),
             base_url=base_url,
             centre_examen=CENTRE_EXAMEN,
         )
@@ -3575,7 +3577,7 @@ def _regenerer_papillons_candidats(base_url: str) -> None:
     if candidats:
         reports.liste_papillons_candidats(
             candidats,
-            filename=str(Path(app.root_path) / 'static' / 'docs' / 'papillons_candidats.pdf'),
+            filename=str(Path(app.root_path) / 'generated' / 'papillons_candidats.pdf'),
             base_url=base_url,
             centre_examen=CENTRE_EXAMEN,
         )
@@ -3690,7 +3692,7 @@ def renew_examinateurs() -> ResponseReturnValue:
     if connexions:
         reports.liste_papillons_connexion(
             connexions,
-            filename=str(Path(app.root_path) / 'static' / 'docs' / papillon_filename),
+            filename=str(Path(app.root_path) / 'generated' / papillon_filename),
             base_url=base_url,
             centre_examen=CENTRE_EXAMEN,
         )
@@ -3737,7 +3739,7 @@ def renew_loges() -> ResponseReturnValue:
     if loges_data:
         reports.liste_papillons_loges(
             loges_data,
-            filename=str(Path(app.root_path) / 'static' / 'docs' / papillon_filename),
+            filename=str(Path(app.root_path) / 'generated' / papillon_filename),
             base_url=base_url,
             centre_examen=CENTRE_EXAMEN,
         )

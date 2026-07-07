@@ -34,10 +34,12 @@ ARG APP_GID=1000
 RUN groupadd --gid ${APP_GID} appuser && useradd --uid ${APP_UID} --gid ${APP_GID} --no-create-home appuser
 
 # Crée le répertoire des PDFs générés avec les bons droits avant de passer à appuser.
-# Le volume Docker nommé static_docs est initialisé à partir de ce dossier ;
+# Le volume Docker nommé generated_docs est initialisé à partir de ce dossier ;
 # sans cette étape il serait root:root 755 et appuser ne pourrait pas y écrire.
-RUN mkdir -p /app/webserver/static/docs \
-    && chown appuser:appuser /app/webserver/static/docs
+# Volontairement hors de webserver/static/ : jamais servi en statique par
+# nginx (cf. docker-compose.yml et docs/securite.md).
+RUN mkdir -p /app/webserver/generated \
+    && chown appuser:appuser /app/webserver/generated
 
 # Point d'entrée : gunicorn depuis le dossier webserver (monté en volume)
 WORKDIR /app/webserver

@@ -67,8 +67,11 @@ second_oral/
     │   ├── .well-known/
     │   │   └── security.txt     Contact de divulgation responsable (RFC 9116)
     │   ├── templates_csv/       Modèles CSV individuels
-    │   ├── docs/                PDFs générés (volume Docker nommé)
     │   └── ...                  CSS (main.css), polices, timer.js, icônes
+    │
+    ├── generated/                PDFs générés (volume Docker dédié) — HORS de static/ :
+    │                              jamais servi par nginx ni par le handler statique
+    │                              Flask, accès uniquement via /download (authentifié)
     │
     └── templates/
         ├── admin_nav.html       Sidebar de navigation admin (incluse dans les pages /gestion/*)

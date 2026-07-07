@@ -45,6 +45,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | **Open redirect** | Toutes les URLs `link_back` validées : schéma limité à `http`/`https`/vide ; même domaine obligatoire |
 | **IDOR** | `/generate-doc-one` protégé — auth obligatoire ; `/download?filename=candidat_*` requiert une session active ; canaux SSE soumis à autorisation par session |
 | **Path traversal** | `/download` : regex `^[\w\-. ]+\.pdf$` + `send_from_directory` |
+| **PDF générés (accès direct)** | Stockés dans `webserver/generated/`, hors de `webserver/static/` — jamais servis en statique par nginx (ni par le handler `/static/` intégré de Flask) ; seul `/download` (authentifié, cf. IDOR ci-dessus) y donne accès. Volume Docker dédié, non monté dans le conteneur nginx. |
 | **Logs d'audit** | Triggers MariaDB, chaîne de hash SHA-256 + sel côté DB. Les `password_hash` ne sont jamais journalisés. |
 | **SSE** | Auth requise (`before_request`) + autorisation par canal (`_sse_channel_allowed`) — un candidat/loge/examinateur ne peut s'abonner qu'à ses propres canaux ; `general` ne diffuse aucune donnée personnelle |
 | **Actions mutantes** | `delete-examinateur` / `reload-pages` exposées uniquement en POST (+ CSRF) |

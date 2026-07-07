@@ -933,7 +933,7 @@ class TestArchiveRoutes:
         db_mock.make_sql_select.side_effect = [
             [], [self.PLANNING_ROW], [self.EMARGEMENT_ROW], [self.LOG_ROW],
         ]
-        docs_dir = tmp_path / "static" / "docs"
+        docs_dir = tmp_path / "generated"
         docs_dir.mkdir(parents=True)
         kept = ["salle-101-Martin.pdf", "liste_salles.pdf"]
         excluded = ["papillons_examinateurs.pdf", "candidat_0123456789A.pdf",
@@ -954,7 +954,7 @@ class TestArchiveRoutes:
     def test_archive_download_regenerates_all_salle_sheets(self, admin_client, db_mock,
                                                             monkeypatch):
         """L'export ne doit pas se fier aux fiches de salle déjà présentes dans
-        static/docs (générées au fil de l'eau, salle par salle, donc
+        generated/ (générées au fil de l'eau, salle par salle, donc
         potentiellement incomplètes) : il doit toutes les régénérer — elles
         portent les preuves d'émargement (signatures) des candidats."""
         import app as app_module
@@ -984,7 +984,7 @@ class TestArchiveRoutes:
         regenerated = []
         monkeypatch.setattr(
             app_module.reports, "liste_salle_oraux",
-            lambda liste, *a, **kw: regenerated.extend(liste) or "static/docs/liste_salles.pdf",
+            lambda liste, *a, **kw: regenerated.extend(liste) or "generated/liste_salles.pdf",
         )
 
         r = admin_client.get("/gestion/archive/download")
@@ -1028,7 +1028,7 @@ class TestAddExaminateur:
         import app as app_module
         monkeypatch.setattr(app_module, "root_path", str(tmp_path),
                             raising=False)
-        (tmp_path / "static" / "docs").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "generated").mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
                             lambda *a, **kw: None)
 
@@ -1049,7 +1049,7 @@ class TestAddExaminateur:
                                                        monkeypatch, tmp_path):
         """Après création, la redirection doit inclure new_papillon."""
         import app as app_module
-        (tmp_path / "static" / "docs").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "generated").mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(app_module, "root_path", str(tmp_path),
                             raising=False)
         monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
@@ -1480,7 +1480,7 @@ class TestCredentialRenewal:
         import app as app_module
         db_mock.make_sql_update.reset_mock()
         db_mock.make_sql_select.return_value = [self.EXAMINATEUR]
-        (tmp_path / "static" / "docs").mkdir(parents=True)
+        (tmp_path / "generated").mkdir(parents=True)
         monkeypatch.setattr(app_module, "root_path", str(tmp_path), raising=False)
         monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
                             lambda *a, **kw: None)
@@ -1497,7 +1497,7 @@ class TestCredentialRenewal:
         import app as app_module
         db_mock.make_sql_update.reset_mock()
         db_mock.make_sql_select.return_value = [self.EXAMINATEUR]
-        (tmp_path / "static" / "docs").mkdir(parents=True)
+        (tmp_path / "generated").mkdir(parents=True)
         monkeypatch.setattr(app_module, "root_path", str(tmp_path), raising=False)
         monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
                             lambda *a, **kw: None)
@@ -1572,7 +1572,7 @@ class TestCredentialRenewal:
                             tmp_path / "credentials_new.json")
         monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
                             lambda *a, **kw: None)
-        (tmp_path / "static" / "docs").mkdir(parents=True)
+        (tmp_path / "generated").mkdir(parents=True)
         monkeypatch.setattr(app_module, "root_path", str(tmp_path), raising=False)
 
         admin_client.post("/gestion/credentials/examinateur/10")

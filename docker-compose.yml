@@ -30,9 +30,12 @@ services:
       #   sudo chmod 640 webserver/app_secrets.py
       # (GID 1000 = appuser dans le conteneur, défini dans le Dockerfile)
       - ./webserver/app_secrets.py:/app/webserver/app_secrets.py:ro
-      # ── PDFs générés : volume nommé persistant, partagé avec nginx ───────
-      # Remplace le sous-dossier du bind-mount → survit à docker compose down
-      - static_docs:/app/webserver/static/docs
+      # ── PDFs générés : volume nommé persistant ───────────────────────────
+      # Remplace le sous-dossier du bind-mount → survit à docker compose down.
+      # Hors de webserver/static/ (donc hors de tout ce que nginx sert en
+      # statique) — accès exclusivement via /download après authentification
+      # (cf. docs/securite.md). N'est PAS monté dans le service nginx.
+      - generated_docs:/app/webserver/generated
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)\" || exit 1"]
       interval: 30s
@@ -56,8 +59,9 @@ services:
       - ./docker/nginx/second_oral.conf:/etc/nginx/conf.d/default.conf:ro
       # Assets statiques servis directement (hôte, lecture seule)
       - ./webserver/static:/app/static:ro
-      # PDFs générés (même volume que l'app, lecture seule pour nginx)
-      - static_docs:/app/static/docs:ro
+      # Les PDFs générés (volume generated_docs) ne sont volontairement PAS
+      # montés ici : nginx ne doit jamais pouvoir les servir directement
+      # (cf. docs/securite.md) — seul /download (Flask, authentifié) y accède.
     networks:
       - internal
 
@@ -103,7 +107,7 @@ services:
 volumes:
   mariadb_data:
   redis_data:
-  static_docs:   # PDFs générés (partagé app ↔ nginx)
+  generated_docs:   # PDFs générés — accès exclusif au service app (jamais nginx)
 
 # ── Réseau isolé ──────────────────────────────────────────────────────────────
 networks:

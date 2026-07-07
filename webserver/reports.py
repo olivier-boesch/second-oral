@@ -845,7 +845,7 @@ def liste_papillons_connexion(connexions: list,
 
 
 def liste_papillons_candidats(candidats: list,
-                               filename: str = 'static/docs/papillons_candidats.pdf',
+                               filename: str = 'generated/papillons_candidats.pdf',
                                base_url: str = '', centre_examen: str = '') -> None:
     """Génère les papillons de connexion pour les candidats.
 

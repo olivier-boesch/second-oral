@@ -8,6 +8,8 @@ otp_setup.png
 # ── Données personnelles (RGPD) ───────────────────────────────────────────────
 data/candidats.csv
 data/candidats.csv.*
+data/examinateurs.csv
+data/examinateurs.csv.*
 data/profs_total.csv
 data/profs_total.csv.*
 # preps.csv est versionné (pas de données personnelles)
@@ -17,7 +19,7 @@ candidats.csv
 profs_total.csv
 
 # ── Documents générés ─────────────────────────────────────────────────────────
-webserver/static/docs/
+webserver/generated/
 paillons_*.pdf
 credentials.pdf
 *.pdf

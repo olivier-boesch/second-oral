@@ -1247,9 +1247,11 @@ if __name__ == '__main__':
     log.info("Meilleur Algo:")
     log.info(f"  Remplissage des créneaux examinateurs : {final_stats['profs']}%")
     log.info(f"  Écart mini entre oraux candidats : {final_stats['candidats']} min")
-    # Dossier de sortie commun (volume Docker, accessible via /download)
+    # Dossier de sortie commun (volume Docker, accessible via /download) —
+    # hors de webserver/static/ : jamais servi directement par nginx ni par
+    # le handler statique de Flask (cf. docs/securite.md).
     from pathlib import Path as _Path
-    DOCS_DIR = _Path('webserver') / 'static' / 'docs'
+    DOCS_DIR = _Path('webserver') / 'generated'
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
     log.info("Génération de la Base de données")

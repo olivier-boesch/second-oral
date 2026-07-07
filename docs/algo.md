@@ -248,12 +248,17 @@ Parmi les runs réussis, on retient celui qui **maximise le taux d'occupation de
 | Fichier / destination                              | Contenu                                    |
 |----------------------------------------------------|--------------------------------------------|
 | Base de données MariaDB                            | Candidats, examinateurs, oraux, horaires   |
-| `webserver/static/docs/papillons_examinateurs.pdf` | Papillons de connexion des examinateurs    |
-| `webserver/static/docs/papillons_candidats.pdf`    | Papillons de connexion des candidats       |
-| `webserver/static/docs/papillons_loges.pdf`        | Papillons de connexion des loges           |
+| `webserver/generated/papillons_examinateurs.pdf`   | Papillons de connexion des examinateurs    |
+| `webserver/generated/papillons_candidats.pdf`      | Papillons de connexion des candidats       |
+| `webserver/generated/papillons_loges.pdf`          | Papillons de connexion des loges           |
 | `data/credentials.enc`                             | Store chiffré des identifiants (AES-256-GCM) |
 | `data/log.txt`                                     | Log détaillé de l'exécution               |
 | `data/credentials_new.json`                        | Transitoire (quelques secondes), effacé automatiquement par le callback Flask |
+
+`webserver/generated/` est volontairement hors de `webserver/static/` : ces PDF contiennent des
+identifiants de connexion en clair et ne doivent jamais être servis en statique par nginx (ni par
+le handler statique intégré de Flask) — seule la route `/download` (authentification requise) y
+donne accès. Cf. [securite.md](securite.md).
 
 ---
 

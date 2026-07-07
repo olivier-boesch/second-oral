@@ -19,7 +19,7 @@ def _isolation(monkeypatch, tmp_path):
     import app as app_module
     monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE", tmp_path / "algo_params.json")
     monkeypatch.setattr(app_module, "_CREDENTIALS_FILE", tmp_path / "credentials.enc")
-    (tmp_path / "static" / "docs").mkdir(parents=True)
+    (tmp_path / "generated").mkdir(parents=True)
     monkeypatch.setattr(app_module, "root_path", str(tmp_path), raising=False)
     monkeypatch.setattr(app_module.reports, "liste_papillons_connexion", lambda *a, **kw: None)
 
