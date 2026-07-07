@@ -168,12 +168,16 @@
 - `heure_filter` (filtre Jinja2 `|heure`) : plantait en production (`AttributeError: 'str' object has no attribute 'total_seconds'`) dès qu'une colonne TIME était rendue directement depuis une ligne SQL brute (ex. `/gestion/edit-examinateur`) — mysql-connector-python peut renvoyer un `timedelta` ou une chaîne `HH:MM:SS` selon le driver/contexte. Le filtre normalise désormais la valeur via `_to_td()` (même logique que le reste du code) avant formatage, quel que soit le type reçu.
 - `AlgoOne.calcul_horaires()` : un examinateur dont `Heure mini` (créneaux interdits en tête, cf. début de journée décalé) était postérieure à l'heure de début générale voyait son premier oral décalé d'un créneau supplémentaire par rapport à l'heure déclarée (ex. `Heure mini = 8:00` avec une journée à 7h20 → premier oral à 8h20 au lieu de 8h00). La condition qui avance l'horloge au premier passage de la boucle testait l'index absolu (`i_oral != 0`) au lieu de l'index de départ réel après les créneaux interdits (`i_oral != i`), provoquant une avance en double. N'affectait pas les examinateurs sans créneau interdit (`Heure mini` = heure de début de journée).
 - `/gestion/algo/stop` : un arrêt manuel (bouton Stop, ou rechargement de `/gestion/algo` pendant un calcul) pouvait laisser le solveur CP-SAT tourner indéfiniment — `Solve()` est un appel natif bloquant qui ne vérifie ni signaux OS ni même son propre `max_time_in_seconds` de façon fiable sous charge (cf. issues OR-Tools #4882, #2310, #2058). `stop_algo()` envoie toujours SIGTERM en premier, mais escalade désormais vers SIGKILL après un délai de grâce de 5s si le groupe de processus est toujours vivant — SIGKILL ne peut ni être bloqué ni ignoré. Comportement inchangé par ailleurs : un arrêt manuel ne publie toujours aucune solution (contrairement à l'expiration normale de `cp_timeout`).
+- `/gestion/delete-examinateur` : la suppression d'un examinateur ne purgeait jamais son entrée dans `credentials.enc` (store chiffré des mots de passe en clair, utilisé pour régénérer les papillons) — son mot de passe y survivait indéfiniment, orphelin sous l'ancienne `salle`, jusqu'au prochain run complet de l'algo (qui remplace tout le store). Inoffensif pour l'authentification (la ligne DB n'existe plus) et jamais réexposé (les régénérations de papillons filtrent sur les examinateurs actuellement en base), mais constitue une rétention de donnée personnelle non nécessaire. La route récupère désormais la `salle` avant suppression et retire l'entrée correspondante du store si elle existe.
 
 **Tests (suite 12)**
 - `tests/unit/test_algo_bg.py::TestStopAlgo::test_escalade_vers_sigkill_si_sigterm_ignore` : un process qui ignore SIGTERM est bien arrêté via l'escalade SIGKILL après le délai de grâce
 
 **Tests (suite 14)**
 - `tests/unit/test_algo.py::TestPremierOralApresCreneauxInterdits` : le premier oral d'un examinateur respecte pile son `Heure mini` déclarée quand la journée commence plus tôt (créneaux interdits en tête) ; non-régression quand `Heure mini` == heure de début de journée (aucun créneau interdit)
+
+**Tests (suite 16)**
+- `tests/integration/test_flask_routes.py::TestDeleteExaminateurPurgeCredentials` : la suppression d'un examinateur ayant une entrée dans le vault la retire bien ; aucun plantage si l'examinateur n'y avait jamais eu d'entrée
 
 ### Removed
 

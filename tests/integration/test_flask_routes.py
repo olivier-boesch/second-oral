@@ -1191,6 +1191,43 @@ class TestListeExaminateursDelete:
         assert "Supprimer cet examinateur" not in body
 
 
+class TestDeleteExaminateurPurgeCredentials:
+    """La suppression d'un examinateur doit purger son mot de passe en clair
+    du store chiffré (credentials.enc) — sinon il y survit indéfiniment,
+    orphelin, jusqu'au prochain run complet de l'algo."""
+
+    def test_delete_purges_entry_from_vault(self, admin_client, db_mock, tmp_path, monkeypatch):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_CREDENTIALS_FILE", tmp_path / "credentials.enc")
+        app_module._save_credentials({"examinateurs": {"A01": "secret123"}, "loges": {}})
+
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.return_value = [
+            {"id": 10, "nom": "Martin Sophie", "salle": "A01"},
+        ]
+        r = admin_client.post("/gestion/delete-examinateur",
+                              data={"id_examinateur": "10"}, follow_redirects=False)
+        assert r.status_code == 302
+        db_mock.make_sql_update.assert_called_once()
+
+        remaining = app_module._load_credentials()
+        assert "A01" not in remaining.get("examinateurs", {})
+
+    def test_delete_ok_when_examinateur_absent_from_vault(self, admin_client, db_mock,
+                                                           tmp_path, monkeypatch):
+        """Ne doit pas planter si l'examinateur n'a jamais eu d'entrée dans le vault."""
+        import app as app_module
+        monkeypatch.setattr(app_module, "_CREDENTIALS_FILE", tmp_path / "credentials.enc")
+
+        db_mock.make_sql_select.return_value = [
+            {"id": 10, "nom": "Martin Sophie", "salle": "A01"},
+        ]
+        r = admin_client.post("/gestion/delete-examinateur",
+                              data={"id_examinateur": "10"}, follow_redirects=False)
+        assert r.status_code == 302
+        assert not (tmp_path / "credentials.enc").exists()
+
+
 # ── Timer de loge ─────────────────────────────────────────────────────────────
 
 class TestTimerState:

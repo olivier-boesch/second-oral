@@ -2624,7 +2624,15 @@ def delete_examinateur() -> ResponseReturnValue:
     id_examinateur = request.form.get('id_examinateur', None)
     if id_examinateur is None:
         abort(404, "Pas d'examinateur avec ce numéro")
+    exam = db_get(db_facility_web.SELECT_EXAMINATEUR_FOR_RENEWAL, id_examinateur)
     db_update(db_facility_web.DELETE_EXAMINATEUR, id=id_examinateur)
+    # Purge du mot de passe en clair dans le store chiffré (cf. _renew_examinateur)
+    # — sinon il y survit indéfiniment, orphelin, jusqu'au prochain run complet
+    # de l'algo (qui remplace tout le store).
+    if exam:
+        creds = _load_credentials()
+        if creds.get("examinateurs", {}).pop(exam['salle'], None) is not None:
+            _save_credentials(creds)
     return redirect(url_for('liste_examinateurs'))
 
 
