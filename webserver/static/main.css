@@ -881,7 +881,7 @@ select[multiple] { width: 100%; max-width: 600px; }
 .time-picker-wheels { display: flex; align-items: stretch; gap: .2em; }
 .time-picker-col {
     height: 180px; width: 3em; overflow-y: scroll; scroll-snap-type: y mandatory;
-    scrollbar-width: none; position: relative;
+    scrollbar-width: none; position: relative; cursor: grab; touch-action: pan-y;
 }
 .time-picker-col::-webkit-scrollbar { display: none; }
 .time-picker-col-inner { padding: 72px 0; }

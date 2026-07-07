@@ -41,6 +41,7 @@ function _creerRoueHeure(container, min, max, valeurInitiale) {
 
     let timeoutId = null;
     container.addEventListener('scroll', () => {
+        marquerSelection();
         clearTimeout(timeoutId);
         timeoutId = setTimeout(() => { allerA(valeurCourante(), true); marquerSelection(); }, 90);
     });
@@ -50,6 +51,48 @@ function _creerRoueHeure(container, min, max, valeurInitiale) {
             setTimeout(marquerSelection, 200);
         }
     });
+
+    // Clic-glissé à la souris : overflow-y:scroll ne répond nativement qu'à
+    // la molette, au tactile et à la barre de défilement — pas au
+    // clic-maintenu-glissé (contrairement au tactile, qui gère déjà le
+    // "swipe" nativement, donc rien à faire pour lui ici).
+    let dragging = false;
+    let dragStartY = 0;
+    let dragStartScroll = 0;
+    let dragMoved = false;
+    container.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        dragging = true;
+        dragMoved = false;
+        dragStartY = e.clientY;
+        dragStartScroll = container.scrollTop;
+        container.setPointerCapture(e.pointerId);
+        container.style.scrollSnapType = 'none';
+        container.style.cursor = 'grabbing';
+    });
+    container.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const delta = e.clientY - dragStartY;
+        if (Math.abs(delta) > 3) dragMoved = true;
+        container.scrollTop = dragStartScroll - delta;
+    });
+    function finirDrag() {
+        if (!dragging) return;
+        dragging = false;
+        container.style.scrollSnapType = 'y mandatory';
+        container.style.cursor = '';
+        allerA(valeurCourante(), true);
+        marquerSelection();
+    }
+    container.addEventListener('pointerup', finirDrag);
+    container.addEventListener('pointercancel', finirDrag);
+    // Capture (avant le bubbling vers le handler de clic sur un item) :
+    // un glissé qui se termine sur un item ne doit pas re-sélectionner cet
+    // item comme le ferait un simple clic.
+    container.addEventListener('click', (e) => {
+        if (dragMoved) { e.stopPropagation(); dragMoved = false; }
+    }, true);
+
     return { get: valeurCourante };
 }
 
