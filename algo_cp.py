@@ -173,9 +173,11 @@ class AlgoCP(AlgoOne):
         # un examinateur ne peut recevoir qu'un seul candidat par créneau
         par_examinateur_creneau: dict[tuple, list] = {}
         vars_par_examinateur: dict[Examinateur, list] = {}
+        creneaux_par_examinateur: dict[Examinateur, dict[int, list]] = {}
         for (_candidat, _choix_attr, examinateur, creneau), var in x.items():
             par_examinateur_creneau.setdefault((examinateur, creneau), []).append(var)
             vars_par_examinateur.setdefault(examinateur, []).append(var)
+            creneaux_par_examinateur.setdefault(examinateur, {}).setdefault(creneau, []).append(var)
         for vars_ in par_examinateur_creneau.values():
             model.AddAtMostOne(vars_)
 
@@ -247,9 +249,16 @@ class AlgoCP(AlgoOne):
         )
 
         # Créneau cible de fin de journée (objectif souple, jamais bloquant) —
-        # pénalise les créneaux utilisés au-delà de cet index (cf.
-        # _cutoff_creneau_fin_journee). Poids nettement inférieur à
-        # POIDS_EQUITE : l'équité de charge reste toujours prioritaire.
+        # pénalise le dépassement de cet index, PAR EXAMINATEUR (pas par
+        # oral) : pour chaque examinateur, on prend le max sur ses créneaux
+        # utilisés (même construction que charge_max/charge_min pour
+        # l'équité ci-dessus), donc un examinateur ayant plusieurs oraux en
+        # retard n'est pénalisé qu'une fois pour son pire dépassement — mais
+        # CHAQUE examinateur est individuellement poussé à respecter la
+        # cible, plutôt qu'une seule pénalité globale que le solveur pourrait
+        # laisser peser sur un seul examinateur sans qu'aucun autre terme ne
+        # s'y oppose spécifiquement. Poids nettement inférieur à POIDS_EQUITE :
+        # l'équité de charge reste toujours prioritaire.
         penalite_fin_journee = 0
         cutoff_creneau = self._cutoff_creneau_fin_journee(max_creneau)
         if cutoff_creneau is not None:
@@ -257,10 +266,18 @@ class AlgoCP(AlgoOne):
                 f"Run {self.numero_run} : CP-SAT — créneau cible de fin de journée "
                 f"{cutoff_creneau}"
             )
-            penalite_fin_journee = sum(
-                max(0, creneau - cutoff_creneau) * var
-                for (_c, _m, _e, creneau), var in x.items()
-            )
+            penalites_examinateurs = []
+            for examinateur, creneaux_utilises in creneaux_par_examinateur.items():
+                termes = [
+                    (creneau - cutoff_creneau) * sum(vars_)
+                    for creneau, vars_ in creneaux_utilises.items()
+                ]
+                penalite_examinateur = model.NewIntVar(
+                    0, max_creneau, f"penalite_fin_{examinateur.nom}",
+                )
+                model.AddMaxEquality(penalite_examinateur, termes + [model.NewConstant(0)])
+                penalites_examinateurs.append(penalite_examinateur)
+            penalite_fin_journee = sum(penalites_examinateurs)
 
         model.Minimize(
             POIDS_EQUITE * sum(ecarts_charge)

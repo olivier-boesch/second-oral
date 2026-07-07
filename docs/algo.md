@@ -210,11 +210,18 @@ exactement la même grandeur, sans aucune conversion :
   d'occupation ne sert plus qu'à départager une égalité. Sans effet sur le repli (aucun run
   conforme). Exact et disponible immédiatement après `resoudre()`, sans attendre `calcul_horaires()`.
 - **CP-SAT** (`AlgoCP.resoudre`) : `AlgoCP._cutoff_creneau_fin_journee()` borne simplement la valeur
-  fournie à `[0, max_creneau]`. Un terme d'objectif pénalise ensuite (poids
-  `ALGO_POIDS_CRENEAU_FIN_JOURNEE`, défaut `200` — nettement sous `POIDS_EQUITE` : l'équité de
-  charge reste toujours prioritaire) chaque créneau utilisé au-delà de cet index, sans jamais
-  interdire ces créneaux (contrainte dure) : le solveur les utilise quand même si c'est nécessaire
-  pour rester faisable, il paie juste une pénalité pour le faire.
+  fournie à `[0, max_creneau]`. Le dépassement est ensuite pénalisé **par examinateur**, pas par
+  oral : pour chaque examinateur, on prend le maximum entre 0 et son propre dépassement le plus
+  profond (`(dernier créneau utilisé par cet examinateur) - cutoff`, via `model.AddMaxEquality`,
+  même construction que `charge_max`/`charge_min` pour l'équité) plutôt que de sommer le
+  dépassement de chacun de ses oraux en retard — un examinateur ayant plusieurs oraux tardifs n'est
+  donc pénalisé qu'une fois pour son pire cas, mais **chaque** examinateur est individuellement
+  poussé à respecter la cible, ce qui empêche le solveur de laisser un seul examinateur absorber
+  tout le dépassement pendant que ses collègues finissent nettement plus tôt. Poids
+  `ALGO_POIDS_CRENEAU_FIN_JOURNEE` (défaut `200`, nettement sous `POIDS_EQUITE` : l'équité de charge
+  reste toujours prioritaire), sans jamais interdire ces créneaux (contrainte dure) : le solveur les
+  utilise quand même si c'est nécessaire pour rester faisable, il paie juste une pénalité pour le
+  faire.
 
 Une version antérieure de ce réglage était exprimée en heure et convertie en index de créneau via
 une durée d'oral moyenne approchée côté CP-SAT — remplacé par un réglage direct en créneaux pour

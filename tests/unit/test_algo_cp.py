@@ -318,6 +318,34 @@ class TestAlgoCPEquiteEntreExaminateurs:
         )
         assert max(charges.values()) - min(charges.values()) <= 1
 
+    def test_depassement_creneau_cible_reparti_pas_concentre(self, tmp_path, monkeypatch):
+        """Régression : la pénalité de créneau cible est calculée par examinateur
+        (max de son propre dépassement), pas sommée sur tous ses oraux en retard —
+        sinon un seul examinateur pourrait absorber tout le dépassement pendant
+        que ses collègues finissent nettement plus tôt."""
+        import algo_cp
+        monkeypatch.setattr(algo_cp, "ALGO_POIDS_CRENEAU_FIN_JOURNEE", 5000)
+        monkeypatch.setattr(algo_cp, "ALGO_CP_TIMEOUT", 5)
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"130000000{i}") for i in range(8)],
+            exams=[
+                _exam("ProfA", "Maths", "A101"), _exam("ProfA2", "Maths", "A102"),
+                _exam("ProfB", "Philo", "B101"), _exam("ProfB2", "Philo", "B102"),
+            ],
+            creneau_cible_fin_journee=2,
+        )
+        alg.resoudre()
+        dernier_creneau_par_examinateur: dict[str, int] = {}
+        for o in alg.liste_oraux:
+            if o.matiere.nom == "Maths":
+                nom = o.examinateur.nom
+                dernier_creneau_par_examinateur[nom] = max(
+                    dernier_creneau_par_examinateur.get(nom, 0), o.creneau,
+                )
+        valeurs = list(dernier_creneau_par_examinateur.values())
+        assert max(valeurs) - min(valeurs) <= 1
+
 
 class TestCutoffCreneauFinJournee:
     """AlgoCP._cutoff_creneau_fin_journee : borne creneau_cible_fin_journee
