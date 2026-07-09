@@ -1321,7 +1321,9 @@ def login_loge() -> ResponseReturnValue:
     passwd = form.password.data
     infos = db_get(db_facility_web.SELECT_PASSWORD_CHECK_LOGE,
                    loge_nom, no_list_auto=False)
-    if len(infos) == 1 and check_password(passwd, loge_nom, infos[0]['password_hash']):
+    # Le sel du hash est l'id de la loge (stable), pas son nom (mutable depuis
+    # l'ajout du renommage) — cf. _assurer_loge/_renew_loge/algo.py.
+    if len(infos) == 1 and check_password(passwd, str(infos[0]['id']), infos[0]['password_hash']):
         session.clear()
         session['loge'] = loge_nom
         session['_ts'] = __import__('time').time()

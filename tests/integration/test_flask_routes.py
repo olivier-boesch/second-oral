@@ -107,7 +107,7 @@ class TestLogin:
         """
         db_mock.make_sql_select.side_effect = [
             [{"salle": "Loge A"}],   # SELECT_LISTE_LOGES (peuple le formulaire)
-            [{"nom": "Loge A", "password_hash": "wrong-hash"}],  # SELECT_PASSWORD_CHECK_LOGE
+            [{"id": 5, "nom": "Loge A", "password_hash": "wrong-hash"}],  # SELECT_PASSWORD_CHECK_LOGE
         ]
         r = client.post("/login-loge", data={"loge": "Loge A", "password": "bad"},
                         follow_redirects=False)
@@ -118,12 +118,14 @@ class TestLogin:
             assert "loge" not in sess
 
     def test_correct_loge_password_sets_session(self, client, db_mock):
+        """Le sel du hash est l'id de la loge (stable), pas son nom (mutable
+        depuis l'ajout du renommage) — cf. algo.py/_assurer_loge/_renew_loge."""
         import sys
         app_secrets = sys.modules["app_secrets"]
-        good_hash = app_secrets.hash_password("secretloge", "Loge A")
+        good_hash = app_secrets.hash_password("secretloge", "5")
         db_mock.make_sql_select.side_effect = [
             [{"salle": "Loge A"}],
-            [{"nom": "Loge A", "password_hash": good_hash}],
+            [{"id": 5, "nom": "Loge A", "password_hash": good_hash}],
         ]
         r = client.post("/login-loge", data={"loge": "Loge A", "password": "secretloge"},
                         follow_redirects=False)
@@ -131,6 +133,25 @@ class TestLogin:
         assert "/login-loge" not in r.headers["Location"]
         with client.session_transaction() as sess:
             assert sess.get("loge") == "Loge A"
+
+    def test_loge_password_hashed_with_name_is_rejected(self, client, db_mock):
+        """Régression : un hash salé avec le *nom* (ancien schéma, avant la FK
+        loge_id du 2026-07-09) ne doit plus authentifier — seul l'id fait foi.
+        Sans ce test, login_loge() peut redevenir incohérent avec
+        algo.py/_assurer_loge/_renew_loge (qui salent tous avec l'id) sans que
+        rien ne le détecte : la connexion échouerait alors pour toutes les loges."""
+        import sys
+        app_secrets = sys.modules["app_secrets"]
+        name_salted_hash = app_secrets.hash_password("secretloge", "Loge A")
+        db_mock.make_sql_select.side_effect = [
+            [{"salle": "Loge A"}],
+            [{"id": 5, "nom": "Loge A", "password_hash": name_salted_hash}],
+        ]
+        r = client.post("/login-loge", data={"loge": "Loge A", "password": "secretloge"},
+                        follow_redirects=False)
+        assert "/login-loge" in r.headers["Location"]
+        with client.session_transaction() as sess:
+            assert "loge" not in sess
 
     def test_logout_loge_clears_session(self, client):
         with client.session_transaction() as sess:
