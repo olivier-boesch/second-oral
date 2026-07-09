@@ -80,6 +80,8 @@ def _warn(file, row, msg): return _issue("warning", file, row, msg)
 _INE_RE = re.compile(r'\(.+\)\s*$')
 # 'Heure mini' : heure entière ('9') ou heure:minute ('9:30'), cf. algo.parser_heure_mini
 _HOUR_RE = re.compile(r'^(\d{1,2})(?::(\d{1,2}))?$')
+# 'Téléphone' : chiffres/espaces/+/./- , tolérant (formats FR et international)
+_TEL_RE = re.compile(r'^[\d +().-]{6,20}$')
 
 
 # ── Validation preps.csv ──────────────────────────────────────────────────────
@@ -230,6 +232,13 @@ def validate_candidats(rows: list[dict], matieres: set[str], noms_courts: set[st
                 issues.append(_err("candidats", i,
                     f"'{col}' = '{disc}' introuvable dans preps.csv "
                     f"(candidat '{cand}'). Valeurs : {', '.join(sorted(matieres | noms_courts))}."))
+
+        # 'Téléphone' : colonne optionnelle (absente des anciens modèles CSV/ODS),
+        # non bloquante — seulement un avertissement si renseignée mais suspecte.
+        tel = r.get("Téléphone", "").strip()
+        if tel and not _TEL_RE.match(tel):
+            issues.append(_warn("candidats", i,
+                f"Format de téléphone suspect : '{tel}' (candidat '{cand}')."))
 
     return issues
 

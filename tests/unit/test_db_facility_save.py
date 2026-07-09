@@ -192,3 +192,38 @@ class TestSchemaPassageLoge:
     def test_oral_has_passage_loge_column(self):
         sql = self._sql_for("Oral")
         assert "passage_loge BOOLEAN NOT NULL DEFAULT FALSE" in sql
+
+
+class TestSchemaCandidatTelephone:
+    """Numéro de mobile candidat (ajouté 2026-07-09) : visible admin
+    uniquement, jamais journalisé (minimisation RGPD, cf. docs/securite.md)."""
+
+    def _sql_for(self, table_name: str) -> str:
+        marker = f"CREATE TABLE IF NOT EXISTS {table_name} ("
+        for entry in _real_db_facility_save.SQL_BASE:
+            if marker in entry["sql"]:
+                return entry["sql"]
+        raise AssertionError(f"CREATE TABLE {table_name} introuvable dans SQL_BASE")
+
+    def _trigger_sql(self, trigger_name: str) -> str:
+        marker = f"CREATE TRIGGER {trigger_name}"
+        for entry in _real_db_facility_save.SQL_BASE:
+            if marker in entry["sql"]:
+                return entry["sql"]
+        raise AssertionError(f"TRIGGER {trigger_name} introuvable dans SQL_BASE")
+
+    def test_candidat_has_telephone_column(self):
+        sql = self._sql_for("Candidat")
+        assert "telephone TEXT NOT NULL DEFAULT ''" in sql
+
+    def test_sql_insert_candidats_includes_telephone(self):
+        assert "%(telephone)s" in _real_db_facility_save.SQL_INSERT_CANDIDATS
+
+    def test_telephone_absent_from_audit_triggers(self):
+        """Régression RGPD : le téléphone ne doit jamais atteindre Logs/
+        journal_audit.json (export zip), contrairement à nom/numero/etablissement."""
+        for trigger in ("after_insert_Candidat", "after_update_Candidat",
+                        "after_delete_Candidat"):
+            sql = self._trigger_sql(trigger)
+            assert "telephone" not in sql, f"{trigger} ne doit pas logger 'telephone'"
+            assert "NEW.nom" in sql or "OLD.nom" in sql  # sanity : le trigger loggue bien autre chose

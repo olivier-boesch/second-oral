@@ -222,6 +222,56 @@ class TestExamEtabMerge:
         rows = _merge_exam_etabs([{"Nom": "X", "Etab1": "", "Etab2": "", "Etab3": "", "Loge": "A"}])
         assert rows[0]["Etab"] == ""
 
+
+# ── ODS candidats : colonne Téléphone (ajoutée 2026-07-09) ───────────────────
+
+class TestCandidatsTelephoneColumn:
+    """La lecture ODS est générique (1ère ligne = en-têtes) : une colonne
+    Téléphone doit donc être lue automatiquement, sans code dédié."""
+
+    @staticmethod
+    def _make_cands_ods(rows: list[dict]) -> bytes:
+        from odf.opendocument import OpenDocumentSpreadsheet
+        doc = OpenDocumentSpreadsheet()
+        sheet = Table(name="candidats")
+        hr = OdfTableRow()
+        for h in CANDIDATS_HEADERS:
+            c = TableCell(valuetype="string")
+            c.addElement(P(text=h))
+            hr.addElement(c)
+        sheet.addElement(hr)
+        for r in rows:
+            tr = OdfTableRow()
+            for h in CANDIDATS_HEADERS:
+                c = TableCell(valuetype="string")
+                c.addElement(P(text=str(r.get(h, ""))))
+                tr.addElement(c)
+            sheet.addElement(tr)
+        doc.spreadsheet.addElement(sheet)
+        buf = _io.BytesIO()
+        doc.save(buf)
+        return buf.getvalue()
+
+    def test_telephone_read_from_ods(self):
+        data = self._make_cands_ods([{
+            "CANDIDAT": "Dupont Marie (1234567890A)",
+            "CHOIX DISCIPLINE 1": "Maths", "CHOIX DISCIPLINE 2": "PC",
+            "TT": "0", "Etab": "St Ex", "Profs": "", "Téléphone": "0612345678",
+        }])
+        sheets = parse_ods(data)
+        assert sheets["candidats"][0]["Téléphone"] == "0612345678"
+
+    def test_telephone_absent_when_empty(self):
+        """Colonne présente mais vide : la ligne n'est pas filtrée (autres
+        champs non vides), 'Téléphone' vaut une chaîne vide."""
+        data = self._make_cands_ods([{
+            "CANDIDAT": "Martin Jean (0987654321B)",
+            "CHOIX DISCIPLINE 1": "SES", "CHOIX DISCIPLINE 2": "Anglais",
+            "TT": "1", "Etab": "Lumière", "Profs": "", "Téléphone": "",
+        }])
+        sheets = parse_ods(data)
+        assert sheets["candidats"][0]["Téléphone"] == ""
+
     def test_etab_key_order_preserved(self):
         """Etab doit apparaître à la position de Etab1 dans l'ordre des clés."""
         rows = _merge_exam_etabs([{
@@ -273,4 +323,22 @@ class TestExamEtabMerge:
                 ]
                 assert "Etab" in headers
                 assert "Etab1" not in headers
+                break
+
+    def test_ods_modele_candidats_sheet_has_telephone_column(self):
+        """Numéro de mobile candidat (ajouté 2026-07-09) : colonne optionnelle
+        en fin de feuille (pas de validation ODS stricte, texte libre)."""
+        assert "Téléphone" in CANDIDATS_HEADERS
+        doc = odf_load(_io.BytesIO(generate_ods_modele()))
+        for table in doc.spreadsheet.getElementsByType(Table):
+            if table.getAttribute("name") == "candidats":
+                rows = table.getElementsByType(OdfTableRow)
+                header_row = rows[0]
+                cells = header_row.getElementsByType(TableCell)
+                headers = [
+                    "".join(n.data for p in c.getElementsByType(P)
+                             for n in p.childNodes if hasattr(n, "data"))
+                    for c in cells
+                ]
+                assert "Téléphone" in headers
                 break

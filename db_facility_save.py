@@ -62,6 +62,7 @@ SQL_BASE = [
         tiers_temps BOOLEAN NOT NULL,
         login_key TEXT NOT NULL DEFAULT '',
         password_hash TEXT NOT NULL DEFAULT '',
+        telephone TEXT NOT NULL DEFAULT '',
         FOREIGN KEY (choix1) REFERENCES Matiere (id),
         FOREIGN KEY (choix2) REFERENCES Matiere (id)
     )
@@ -138,6 +139,9 @@ SQL_BASE = [
         ), 'Matiere');
     END
     """},
+    # login_key/password_hash/telephone volontairement absents du JSON loggé
+    # (comme pour Examinateur/Loge) : ces triggers alimentent journal_audit.json
+    # dans l'export ZIP admin, minimisation RGPD oblige.
     {"sql": """
     CREATE TRIGGER after_insert_Candidat
     AFTER INSERT ON Candidat FOR EACH ROW
@@ -321,9 +325,9 @@ VALUES (%(id)s, %(nom)s, %(nom_court)s)
 
 SQL_INSERT_CANDIDATS = """
 INSERT INTO Candidat (id, nom, numero, etablissement, choix1, choix2,
-                      tiers_temps, login_key, password_hash)
+                      tiers_temps, login_key, password_hash, telephone)
 VALUES (%(id)s, %(nom)s, %(numero)s, %(etablissement)s, %(choix1)s, %(choix2)s,
-        %(tiers_temps)s, %(login_key)s, %(password_hash)s)
+        %(tiers_temps)s, %(login_key)s, %(password_hash)s, %(telephone)s)
 """
 
 SQL_INSERT_EXAMINATEURS = """

@@ -153,6 +153,41 @@ class TestAlgoSimplePlacement:
                 f"L'examinateur {exam.nom} a des créneaux en double"
 
 
+class TestCandidatTelephone:
+    """Numéro de mobile candidat (ajouté 2026-07-09), colonne CSV optionnelle."""
+
+    def test_telephone_absent_defaults_empty(self, tmp_path):
+        """Ancien format candidats.csv (sans colonne Téléphone) : pas d'erreur,
+        champ vide par défaut."""
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand("Cand0", "6000000000")],
+            exams=[_exam("Prof Maths", "Maths", "A101"), _exam("Prof Philo", "Philo", "B101")],
+        )
+        assert alg.liste_candidats[0].telephone == ""
+        assert alg.liste_candidats[0].to_dict()['telephone'] == ""
+
+    def test_telephone_parsed_from_csv(self, tmp_path):
+        cand_hdr = _CAND_HDR + ";Téléphone"
+        alg = AlgoOne(
+            filename_candidats=_write_csv(
+                tmp_path / "candidats.csv", cand_hdr,
+                [_cand("Cand0", "6000000001") + ";0612345678"],
+            ),
+            filename_examinateurs=_write_csv(
+                tmp_path / "examinateurs.csv", _EXAM_HDR,
+                [_exam("Prof Maths", "Maths", "A101"), _exam("Prof Philo", "Philo", "B101")],
+            ),
+            filename_matieres=_write_csv(tmp_path / "preps.csv", _PREPS_HDR, _PREPS_BASE),
+            temps_minimum_entre_oraux=_ECART_MINI,
+            max_creneaux_journee=_MAX_CRENEAUX,
+            heure_debut=time(hour=8, minute=0),
+        )
+        alg.setup_from_files()
+        assert alg.liste_candidats[0].telephone == "0612345678"
+        assert alg.liste_candidats[0].to_dict()['telephone'] == "0612345678"
+
+
 class TestAlgoInsufficientCapacity:
     """Capacité insuffisante : doit lever PasDeCreneauDisponible."""
 

@@ -183,7 +183,7 @@ LYCEES_DISPLAY = [f"{nom} — {ville} ({uai})" for uai, nom, ville, _ in _LYCEES
 
 PREPS_HEADERS     = ["Matiere", "Matière court", "Temps preparation (min)", "Duree (min)"]
 EXAM_HEADERS      = ["Nom", "Disc.poste", "Salle", "Heure mini", "Etab", "Loge"]
-CANDIDATS_HEADERS = ["CANDIDAT", "CHOIX DISCIPLINE 1", "CHOIX DISCIPLINE 2", "TT", "Etab", "Profs"]
+CANDIDATS_HEADERS = ["CANDIDAT", "CHOIX DISCIPLINE 1", "CHOIX DISCIPLINE 2", "TT", "Etab", "Profs", "Téléphone"]
 
 # En-têtes de la feuille ODS examinateurs : 3 colonnes Etab distinctes,
 # fusionnées en un seul champ "Etab" lors de la lecture (parse_ods).
@@ -432,7 +432,7 @@ def generate_ods_modele(preps_rows: list[dict] | None = None) -> bytes:
     validations.addElement(val_etab)
 
     # ── Feuille candidats ─────────────────────────────────────────────────────
-    # CANDIDAT(0) CHOIX1(1) CHOIX2(2) TT(3) Etab(4) Profs(5)
+    # CANDIDAT(0) CHOIX1(1) CHOIX2(2) TT(3) Etab(4) Profs(5) Téléphone(6)
     sheet_cands = Table(name="candidats")
     doc.spreadsheet.addElement(sheet_cands)
 

@@ -102,14 +102,15 @@ CANDIDAT;CHOIX DISCIPLINE 1;CHOIX DISCIPLINE 2;TT;Etab;Profs
 | `TT` | Tiers-temps | `0` = non, `1` = oui | `0` |
 | `Etab` | Établissement d'origine (abréviation libre) | Texte libre | `St Ex` |
 | `Profs` | Examinateurs à éviter (séparés par virgule) | Noms tels que dans `examinateurs.csv` | `Dupont,Martin` |
+| `Téléphone` | Mobile du candidat (colonne optionnelle) | Texte libre | `0612345678` |
 
 **Exemple :**
 
 ```csv
-CANDIDAT;CHOIX DISCIPLINE 1;CHOIX DISCIPLINE 2;TT;Etab;Profs
-Dupont Marie (1234567890A);Maths;PC;0;St Ex;
-Martin Jean (0987654321B);SES;Anglais;1;Lumière;Durand
-Leroy Sophie (1122334455C);Mana;Droit Eco;0;Cézanne;Dupont,Bernard
+CANDIDAT;CHOIX DISCIPLINE 1;CHOIX DISCIPLINE 2;TT;Etab;Profs;Téléphone
+Dupont Marie (1234567890A);Maths;PC;0;St Ex;;0612345678
+Martin Jean (0987654321B);SES;Anglais;1;Lumière;Durand;
+Leroy Sophie (1122334455C);Mana;Droit Eco;0;Cézanne;Dupont,Bernard;
 ```
 
 **Règles importantes :**
@@ -118,6 +119,7 @@ Leroy Sophie (1122334455C);Mana;Droit Eco;0;Cézanne;Dupont,Bernard
 - La colonne `Profs` peut être vide (laisser le champ vide, pas d'espace)
 - Un candidat avec tiers-temps (`TT=1`) bénéficie automatiquement d'un temps de préparation majoré d'un tiers
 - La colonne `Etab` empêche l'algorithme d'assigner un examinateur du même établissement que le candidat
+- La colonne `Téléphone` est optionnelle (peut être absente du fichier ou vide) : visible et modifiable uniquement par l'administrateur depuis `/gestion/liste-candidats` → éditer, jamais transmise au candidat, aux examinateurs ni à l'archive zip de fin de session (cf. [securite.md](securite.md#rgpd))
 
 ---
 

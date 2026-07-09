@@ -1821,7 +1821,7 @@ def liste_candidats() -> ResponseReturnValue:
 @admin_required
 @nocache
 def edit_candidat() -> ResponseReturnValue:
-    """Édition des informations d'un candidat (nom, numéro, tiers temps).
+    """Édition des informations d'un candidat (nom, numéro, tiers temps, téléphone).
 
     Cocher/décocher « Tiers temps » pour un candidat dont l'état change
     déclenche la même adaptation d'horaires que /gestion/candidat/tiers-temps
@@ -1835,6 +1835,7 @@ def edit_candidat() -> ResponseReturnValue:
         id_candidat_str = request.form.get('id')
         nom = (request.form.get('nom') or '').strip()
         numero = (request.form.get('numero') or '').strip()
+        telephone = (request.form.get('telephone') or '').strip()
         nouveau_tiers_temps = 1 if request.form.get('tiers_temps') == 'on' else 0
         if not nom or not numero or not id_candidat_str:
             abort(400, "Nom et numéro sont obligatoires")
@@ -1852,6 +1853,7 @@ def edit_candidat() -> ResponseReturnValue:
                 donnees_candidat = dict(candidat_actuel)
                 donnees_candidat['nom'] = nom
                 donnees_candidat['numero'] = numero
+                donnees_candidat['telephone'] = telephone
                 return render_template(
                     'edit_candidat.html',
                     centre=CENTRE_EXAMEN,
@@ -1868,6 +1870,7 @@ def edit_candidat() -> ResponseReturnValue:
         db_update(
             db_facility_web.UPDATE_CANDIDAT_INFOS,
             id=id_candidat, nom=nom, numero=numero, tiers_temps=nouveau_tiers_temps,
+            telephone=telephone,
         )
         url = _safe_redirect_url(request.form.get('link_back'))
         return redirect(url or url_for('liste_candidats'))

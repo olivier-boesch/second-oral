@@ -1225,6 +1225,32 @@ class TestCandidatRoutes:
         # Peut retourner 200 ou redirect selon l'état de la session
         assert r.status_code in (200, 302, 404)
 
+    def test_telephone_not_exposed_to_candidat(self):
+        """Régression RGPD : la fiche candidat.html (consultée par le candidat
+        lui-même) ne doit jamais recevoir le numéro de mobile — seules les
+        requêtes admin (/gestion/*) le sélectionnent."""
+        import db_facility_web as dfw
+        assert "telephone" not in dfw.SELECT_INFOS_CANDIDAT.lower()
+
+
+class TestListeCandidatsTelephone:
+    """Le numéro de mobile est visible dans /gestion/liste-candidats (admin
+    uniquement, cf. docs/securite.md#rgpd)."""
+
+    def test_get_requires_admin(self, client):
+        r = client.get("/gestion/liste-candidats", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login" in r.headers["Location"]
+
+    def test_telephone_displayed(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [
+            {"id": 1, "nom": "Dupont Jean", "numero": "111111111AA",
+             "tiers_temps": 0, "telephone": "0612345678"},
+        ]
+        r = admin_client.get("/gestion/liste-candidats")
+        assert r.status_code == 200
+        assert "0612345678" in r.data.decode()
+
 
 # ── Archive de fin de session (zip) ───────────────────────────────────────────
 

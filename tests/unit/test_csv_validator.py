@@ -291,6 +291,30 @@ class TestValidateCandidats:
         rows = parse_cands(make_cand_row(d1="maths", d2="ses"))
         assert validate_candidats(rows, MATIERES, NOM_COURTS) == []
 
+    def test_telephone_column_optional_absent_no_issue(self):
+        """Colonne 'Téléphone' absente (anciens modèles CSV/ODS) : pas d'erreur."""
+        rows = parse_cands(make_cand_row())
+        assert validate_candidats(rows, MATIERES, NOM_COURTS) == []
+
+    def test_telephone_valid_no_warning(self):
+        raw = csv_bytes(CANDS_HEADER + ";Téléphone",
+                        make_cand_row() + ";0612345678")
+        rows, _ = normalize_csv(raw)
+        warns = warnings_of(validate_candidats(rows, MATIERES, NOM_COURTS))
+        assert not any("téléphone" in w["message"].lower() for w in warns)
+
+    def test_telephone_empty_no_warning(self):
+        raw = csv_bytes(CANDS_HEADER + ";Téléphone", make_cand_row() + ";")
+        rows, _ = normalize_csv(raw)
+        warns = warnings_of(validate_candidats(rows, MATIERES, NOM_COURTS))
+        assert not any("téléphone" in w["message"].lower() for w in warns)
+
+    def test_telephone_suspicious_format_warns(self):
+        raw = csv_bytes(CANDS_HEADER + ";Téléphone", make_cand_row() + ";abcXYZ")
+        rows, _ = normalize_csv(raw)
+        warns = warnings_of(validate_candidats(rows, MATIERES, NOM_COURTS))
+        assert any("téléphone" in w["message"].lower() for w in warns)
+
 
 # ── validate_all ──────────────────────────────────────────────────────────────
 

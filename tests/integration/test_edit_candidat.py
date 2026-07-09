@@ -89,6 +89,34 @@ class TestEditCandidatSimple:
         assert kwargs["tiers_temps"] == 0
 
 
+class TestEditCandidatTelephone:
+    """Numéro de mobile candidat (ajouté 2026-07-09) : modifiable depuis
+    /gestion/edit-candidat, admin uniquement (cf. docs/securite.md#rgpd)."""
+
+    def test_post_saves_telephone(self, admin_client, db_mock):
+        db_mock.make_sql_select.side_effect = _side_effect
+        db_mock.make_sql_update.reset_mock()
+        r = admin_client.post("/gestion/edit-candidat", data={
+            "id": "100", "nom": "Cand Test", "numero": "N100",
+            "telephone": "0612345678",
+        })
+        assert r.status_code == 302
+        import db_facility_web as dfw
+        db_mock.make_sql_update.assert_called_once()
+        args, kwargs = db_mock.make_sql_update.call_args
+        assert args[0] is dfw.UPDATE_CANDIDAT_INFOS
+        assert kwargs["telephone"] == "0612345678"
+
+    def test_get_renders_telephone_field(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [{
+            "id": 100, "nom": "Cand Test", "numero": "N100", "tiers_temps": 0,
+            "login_key": "k", "telephone": "0612345678",
+        }]
+        r = admin_client.get("/gestion/edit-candidat?id=100")
+        assert r.status_code == 200
+        assert "0612345678" in r.data.decode()
+
+
 class TestEditCandidatDeclareTiersTemps:
     def test_cocher_declenche_la_cascade(self, admin_client, db_mock, monkeypatch):
         import app as app_module

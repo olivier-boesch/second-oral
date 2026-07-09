@@ -297,7 +297,7 @@ class Candidat:
     """Candidat au second groupe"""
 
     def __init__(self, nom: str, numero: str, choix1: "Matiere", choix2: "Matiere", tiers_temps: bool,
-                 profs_a_eviter="", etablissement=""):
+                 profs_a_eviter="", etablissement="", telephone=""):
         """
         :param nom: nom du candidat
         :type nom: str
@@ -309,6 +309,8 @@ class Candidat:
         :type choix2: Matiere
         :param tiers_temps: le candidat a un tiers temps
         :type tiers_temps: bool
+        :param telephone: numéro de mobile du candidat (optionnel, visible admin uniquement)
+        :type telephone: str
         """
         self.nom: str = nom.strip()
         self.numero: str = numero.strip()
@@ -318,6 +320,7 @@ class Candidat:
         self.idx = None
         self.profs_a_eviter = profs_a_eviter.split(',')
         self.etablissement = etablissement
+        self.telephone = telephone.strip()
         self.login_key: str = generate_password()
         self.oraux: list["Oral"] = []
 
@@ -338,6 +341,7 @@ class Candidat:
             'etablissement': self.etablissement,
             'login_key': self.login_key,
             'password_hash': hash_password(self.login_key, self.numero),
+            'telephone': self.telephone,
         }
 
     @property
@@ -706,9 +710,10 @@ class AlgoOne:
             tiers_temps = True if e["TT"] == "1" else False
             profs = e['Profs']
             etab = e['Etab']
+            telephone = e.get('Téléphone', '')
             s = Candidat(nom=name, numero=number, choix1=course1, choix2=course2, tiers_temps=tiers_temps,
                          profs_a_eviter=profs,
-                         etablissement=etab)
+                         etablissement=etab, telephone=telephone)
             course1.candidats.append(s)
             course2.candidats.append(s)
             self.liste_candidats.append(s)

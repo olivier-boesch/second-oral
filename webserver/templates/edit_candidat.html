@@ -36,6 +36,12 @@
         <small>⚠ Modifier le numéro change aussi l'identifiant de connexion du candidat.</small>
     </p>
     <p>
+        <label for="telephone">Téléphone mobile :</label><br>
+        <input type="tel" id="telephone" name="telephone" value="{{ donnees_candidat['telephone'] or '' }}"
+               style="width:100%; box-sizing:border-box;">
+        <small>Visible uniquement de l'administrateur — jamais transmis au candidat ni aux examinateurs.</small>
+    </p>
+    <p>
         <label>
             <input type="checkbox" name="tiers_temps"
                    {% if donnees_candidat['tiers_temps'] %}checked{% endif %}

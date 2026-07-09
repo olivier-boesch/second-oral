@@ -73,7 +73,24 @@ Résumé des traitements :
 | Donnée | Base légale | Durée de conservation |
 |---|---|---|
 | Données candidats (nom, INE, établissement) | Mission de service public (art. 6.1.e) | Fin de session → archivage minimal |
+| Téléphone mobile candidat | Intérêt légitime (art. 6.1.f) — joindre un candidat en cas d'imprévu | Fin de session, **exclu de l'archive zip** |
 | Adresses IP des sessions actives | Intérêt légitime (art. 6.1.f) — diagnostic | 8 h (TTL Redis) |
 | Journal d'audit | Obligation légale | À déterminer avec le DPD |
 | Images de signature | Preuve d'émargement | Archive zip, à conserver par le centre |
 | Mots de passe / login_key | — | Supprimés dès que le conteneur est purgé |
+
+**Téléphone mobile candidat** (ajouté 2026-07-09) : import optionnel depuis
+`candidats.csv`/le fichier ODS (colonne `Téléphone`), modifiable depuis
+`/gestion/liste-candidats` → `/gestion/edit-candidat`. Minimisation appliquée
+à trois niveaux :
+- **Accès restreint à l'administrateur** : `SELECT_INFOS_CANDIDAT` (fiche
+  `candidat.html`, consultée par le candidat lui-même) ne sélectionne pas ce
+  champ — seules les requêtes des routes `/gestion/*` (admin) le renvoient.
+  Absent de `salle.html`/`loge.html` (aucune donnée candidat détaillée n'y
+  transite).
+- **Absent du journal d'audit** : volontairement exclu des triggers de log
+  `Candidat` (comme `login_key`/`password_hash`), donc jamais présent dans
+  `journal_audit.json`.
+- **Absent de l'archive zip de fin de session** : `planning_oraux.csv` et
+  `emargements.csv` listent leurs colonnes explicitement (pas de
+  sérialisation automatique), le téléphone n'y figure pas.

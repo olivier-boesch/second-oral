@@ -13,14 +13,18 @@ INIT_DB = "SET @salt = %(salt)s"
 # ---------- Candidat
 
 SELECT_ALL_CANDIDATS = """
-SELECT id, nom, numero, tiers_temps FROM Candidat ORDER BY nom
+SELECT id, nom, numero, tiers_temps, telephone FROM Candidat ORDER BY nom
 """
 
 UPDATE_CANDIDAT_INFOS = """
-UPDATE Candidat SET nom = %(nom)s, numero = %(numero)s, tiers_temps = %(tiers_temps)s
+UPDATE Candidat SET nom = %(nom)s, numero = %(numero)s, tiers_temps = %(tiers_temps)s,
+                    telephone = %(telephone)s
 WHERE id = %(id)s
 """
 
+# Ne renvoie pas `telephone` : requête utilisée par la fiche candidat.html,
+# accessible au candidat lui-même — le numéro de mobile est réservé à l'admin
+# (cf. SELECT_INFOS_CANDIDAT_BY_ID, utilisée uniquement par les routes /gestion/*).
 SELECT_INFOS_CANDIDAT = """
 SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Candidat.login_key AS login_key
@@ -30,7 +34,8 @@ WHERE Candidat.numero = %s
 
 SELECT_INFOS_CANDIDAT_BY_ID = """
 SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
-       Candidat.tiers_temps AS tiers_temps, Candidat.login_key AS login_key
+       Candidat.tiers_temps AS tiers_temps, Candidat.login_key AS login_key,
+       Candidat.telephone AS telephone
 FROM Candidat
 WHERE Candidat.id = %s
 """
