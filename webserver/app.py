@@ -2839,6 +2839,19 @@ def timer_state() -> ResponseReturnValue:
         abort(500)
 
 
+@app.route('/loge/<id_loge>/passage/<int:id_oral>', methods=['POST'])
+@nocache
+def loge_passage(id_loge: str, id_oral: int) -> ResponseReturnValue:
+    """Marque/démarque un oral comme passé en loge (persisté en base, contrairement
+    aux minuteurs qui ne vivent que dans Redis avec une expiration de 24h)."""
+    if not is_admin_user() and not is_loge_user(id_loge):
+        abort(403)
+    passage = bool((request.json or {}).get('passage'))
+    db_update(db_facility_web.UPDATE_PASSAGE_LOGE,
+              id=id_oral, loge=id_loge, passage_loge=passage)
+    return jsonify({'ok': True, 'passage': passage})
+
+
 def _monitoring_redis_stats() -> tuple[bool, dict]:
     """Lit les stats Redis pour le monitoring. Retourne (redis_ok, data)."""
     try:

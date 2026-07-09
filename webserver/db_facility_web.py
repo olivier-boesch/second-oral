@@ -131,10 +131,10 @@ WHERE Loge.nom = %s
 """
 
 SELECT_ORAUX_LOGE = """
-SELECT Loge.nom AS loge, Candidat.nom AS candidat, Candidat.numero AS numero,
+SELECT Oral.id AS id_oral, Loge.nom AS loge, Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Examinateur.salle AS salle,
        Oral.heure_sujet AS sujet, Oral.mis_a_jour AS maj, Oral.heure_oral AS oral,
-       Oral.heure_fin AS fin,
+       Oral.heure_fin AS fin, Oral.passage_loge AS passage_loge,
        Matiere.nom AS matiere, Matiere.nom_court AS matiere_court,
        Examinateur.nom AS examinateur
 FROM Oral
@@ -144,6 +144,14 @@ FROM Oral
     JOIN Loge ON Examinateur.loge_id = Loge.id
 WHERE Loge.nom = %s
 ORDER BY sujet, candidat
+"""
+
+UPDATE_PASSAGE_LOGE = """
+UPDATE Oral
+    JOIN Examinateur ON Oral.examinateur = Examinateur.id
+    JOIN Loge ON Examinateur.loge_id = Loge.id
+SET Oral.passage_loge = %(passage_loge)s
+WHERE Oral.id = %(id)s AND Loge.nom = %(loge)s
 """
 
 # ---------- Matières / Examinateurs

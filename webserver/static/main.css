@@ -864,6 +864,24 @@ p.error {
 .timer-btn:hover    { background: var(--primary); }
 .timer-btn:disabled { background: var(--text-sm); cursor: default; }
 
+/* ── Vue loge : contrôles et colonnes filtrables ─────────────────────────── */
+.loge-controls { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.loge-controls label { cursor: pointer; }
+#oraux-table .col-examinateur { display: none; }
+#oraux-table.show-examinateurs .col-examinateur { display: table-cell; }
+.passage-cell { white-space: nowrap; text-align: center; }
+.passage-btn {
+    background: var(--primary-dk);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.2em 0.6em;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.passage-btn:hover     { background: var(--primary); }
+.passage-btn.is-passed { background: var(--success); }
+
 /* ── Sélecteur multiple établissements ───────────────────────────────────── */
 select[multiple] { width: 100%; max-width: 600px; }
 

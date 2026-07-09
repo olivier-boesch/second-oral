@@ -67,7 +67,7 @@ second_oral/
     │   ├── .well-known/
     │   │   └── security.txt     Contact de divulgation responsable (RFC 9116)
     │   ├── templates_csv/       Modèles CSV individuels
-    │   └── ...                  CSS (main.css), polices, timer.js, icônes
+    │   └── ...                  CSS (main.css), polices, timer.js, loge_view.js, icônes
     │
     ├── generated/                PDFs générés (volume Docker dédié) — HORS de static/ :
     │                              jamais servi par nginx ni par le handler statique

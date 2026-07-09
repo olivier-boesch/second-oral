@@ -35,7 +35,20 @@ Chaque ligne dispose d'un minuteur qui décompte le **temps de préparation** du
 - Le son ne s'active qu'après un premier clic sur la page (contrainte des navigateurs) — cliquez n'importe où si vous n'entendez rien.
 - Démarrez le minuteur au moment où vous remettez le sujet au candidat, afin qu'il sache quand se rendre en salle.
 
-## 4. Autres liens utiles
+## 4. Affichage et filtres
+
+Au-dessus du tableau, deux cases à cocher permettent d'adapter l'affichage :
+
+- **Tout montrer** (décochée par défaut) : la colonne Examinateur est masquée tant que cette case n'est pas cochée.
+- **Masquer les passés** : ne coche cette case que si vous voulez ne voir que les candidats qui restent à passer — les oraux marqués « Passé » (voir ci-dessous) disparaissent alors de la liste.
+
+Le tableau réordonne aussi automatiquement les lignes : dès qu'un minuteur est démarré, la ligne correspondante remonte en haut de la liste, pour repérer d'un coup d'œil qui est en train de passer.
+
+### Marquer un candidat comme passé
+
+Chaque ligne dispose d'un bouton **Marquer passé** : cliquez dessus une fois le candidat envoyé en salle. Le bouton devient **✓ Passé** (cliquez à nouveau pour annuler). Cette information est enregistrée en base — elle ne disparaît donc pas au bout de 24h comme l'état des minuteurs, et reste disponible même après un rechargement de la page ou une reconnexion.
+
+## 5. Autres liens utiles
 
 En bas de page :
 - **Liste des loges** — annuaire de toutes les loges du centre

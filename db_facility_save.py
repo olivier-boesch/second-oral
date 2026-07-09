@@ -98,6 +98,7 @@ SQL_BASE = [
         emargement TEXT NOT NULL DEFAULT '',
         heure_emargement TEXT NOT NULL DEFAULT '',
         hash_emargement TEXT NOT NULL DEFAULT '',
+        passage_loge BOOLEAN NOT NULL DEFAULT FALSE,
         FOREIGN KEY (examinateur) REFERENCES Examinateur (id),
         FOREIGN KEY (candidat) REFERENCES Candidat (id)
     )

@@ -175,3 +175,20 @@ class TestSchemaLogeId:
         db_facility.save_loges([{"id": 1, "nom": "B404", "password_hash": "h"}])
         # Pas d'assertion de contenu (curseur factice) — non-régression : ne
         # doit pas planter avec la nouvelle signature (liste, plus dict).
+
+
+class TestSchemaPassageLoge:
+    """Vue loge : le passage d'un candidat en loge est persisté en base
+    (Oral.passage_loge), contrairement aux minuteurs qui ne vivent que dans
+    Redis avec une expiration de 24h."""
+
+    def _sql_for(self, table_name: str) -> str:
+        marker = f"CREATE TABLE IF NOT EXISTS {table_name} ("
+        for entry in _real_db_facility_save.SQL_BASE:
+            if marker in entry["sql"]:
+                return entry["sql"]
+        raise AssertionError(f"CREATE TABLE {table_name} introuvable dans SQL_BASE")
+
+    def test_oral_has_passage_loge_column(self):
+        sql = self._sql_for("Oral")
+        assert "passage_loge BOOLEAN NOT NULL DEFAULT FALSE" in sql

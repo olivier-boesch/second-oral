@@ -110,6 +110,8 @@ L'interface est en HTML + CSS + JavaScript vanilla. Les interactions dynamiques
 se limitent à :
 - La mise à jour en temps réel via SSE (EventSource natif).
 - Les minuteurs de loge (timer.js, ~100 lignes).
+- L'affichage de la fiche loge : tri dynamique par minuteur déclenché, filtre
+  passés/restants, colonne examinateur masquable (loge_view.js).
 - Le formulaire d'édition d'oral (fetch pour la liste des examinateurs).
 
 Un framework (React, Vue…) aurait introduit une chaîne de build et des dépendances

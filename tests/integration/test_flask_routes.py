@@ -244,6 +244,27 @@ class TestLogeRoutes:
         r = client.get("/loge/Loge%20A", follow_redirects=False)
         assert r.status_code == 200
 
+    def test_loge_page_renders_oraux_with_passage_button(self, client, db_mock):
+        """Régression : SELECT_ORAUX_LOGE renvoie désormais id_oral/passage_loge,
+        utilisés par le template pour le bouton 'Marquer passé'."""
+        db_mock.make_sql_select.side_effect = [
+            [{"salle": "Loge A", "id": 1}],  # SELECT_INFOS_LOGE
+            [{
+                "id_oral": 42, "loge": "Loge A", "candidat": "Dupont Jean",
+                "numero": "0123456789A", "tiers_temps": 0, "salle": "A01",
+                "sujet": "08:00", "maj": False, "oral": "08:15", "fin": "09:15",
+                "passage_loge": False, "matiere": "Maths", "matiere_court": "Ma",
+                "examinateur": "Martin",
+            }],  # SELECT_ORAUX_LOGE
+        ]
+        with client.session_transaction() as sess:
+            sess["loge"] = "Loge A"
+        r = client.get("/loge/Loge%20A", follow_redirects=False)
+        assert r.status_code == 200
+        body = r.get_data(as_text=True)
+        assert "Marquer passé" in body
+        assert 'data-id-oral="42"' in body
+
 
 # ── Authentification candidat ─────────────────────────────────────────────────
 
@@ -1659,6 +1680,43 @@ class TestTimerState:
                         json={"loge": "C107", "numero": "123", "sujet": "08:00",
                               "elapsed": 0, "running": False, "startedAt": None})
         assert r.status_code == 403
+
+
+# ── Passage en loge (persisté en base, contrairement aux minuteurs Redis) ─────
+
+class TestLogePassage:
+    def test_requires_auth(self, client):
+        r = client.post("/loge/Loge%20A/passage/1", json={"passage": True})
+        assert r.status_code == 403
+
+    def test_wrong_loge_forbidden(self, client):
+        """Un surveillant d'une autre loge ne peut pas marquer le passage."""
+        with client.session_transaction() as sess:
+            sess["loge"] = "Loge B"
+        r = client.post("/loge/Loge%20A/passage/1", json={"passage": True})
+        assert r.status_code == 403
+
+    def test_loge_user_can_mark_passage(self, client, db_mock):
+        db_mock.make_sql_update.reset_mock()
+        with client.session_transaction() as sess:
+            sess["loge"] = "Loge A"
+        r = client.post("/loge/Loge%20A/passage/1", json={"passage": True})
+        assert r.status_code == 200
+        assert r.get_json() == {"ok": True, "passage": True}
+        db_mock.make_sql_update.assert_called_once()
+        _, kwargs = db_mock.make_sql_update.call_args
+        assert kwargs == {"id": 1, "loge": "Loge A", "passage_loge": True}
+
+    def test_loge_user_can_unmark_passage(self, client, db_mock):
+        with client.session_transaction() as sess:
+            sess["loge"] = "Loge A"
+        r = client.post("/loge/Loge%20A/passage/1", json={"passage": False})
+        assert r.status_code == 200
+        assert r.get_json() == {"ok": True, "passage": False}
+
+    def test_admin_can_mark_passage(self, admin_client, db_mock):
+        r = admin_client.post("/loge/Loge%20A/passage/1", json={"passage": True})
+        assert r.status_code == 200
 
 
 # ── Validation du déplacement d'oral ────────────────────────────────────────

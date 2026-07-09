@@ -20,23 +20,29 @@
         </a>
     </p>
     {% if data['oraux'] != [] %}
+    <p class="loge-controls">
+        <label><input type="checkbox" id="toggle-examinateurs"> Tout montrer</label>
+        <label><input type="checkbox" id="toggle-passes"> Masquer les passés</label>
+    </p>
     <div class="table-scroll">
-    <table class="table_mobile">
+    <table class="table_mobile" id="oraux-table">
         <tr>
             <th>Candidat (N°)</th>
             <th>Salle</th>
             <th>Matière</th>
-            <th>Examinateur</th>
+            <th class="col-examinateur">Examinateur</th>
             <th>Heure Sujet</th>
             <th>Heure Oral</th>
             <th>Heure Fin</th>
             <th>Minuteur</th>
+            <th>Passé</th>
         </tr>
+    <tbody id="oraux-tbody">
     {%for oral in data['oraux'] %}
         {% if loop.index % 2 == 1 %}
-            <tr class="tr_light">
+            <tr class="tr_light" data-id-oral="{{ oral['id_oral'] }}" data-passage="{{ 'true' if oral['passage_loge'] else 'false' }}">
         {% else %}
-            <tr class="tr_dark">
+            <tr class="tr_dark" data-id-oral="{{ oral['id_oral'] }}" data-passage="{{ 'true' if oral['passage_loge'] else 'false' }}">
         {% endif %}
             {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
                 <a href="{{ url_for('candidat', id_candidat=oral['numero']) }}" target="_blank">{{ oral['candidat'] }}</a> ({{ oral['numero'] }})
@@ -53,7 +59,7 @@
             {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
                 {{ oral['matiere'] }}
             </td>
-            {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
+            {% if oral['maj'] %} <td class="red col-examinateur"> {% else %} <td class="col-examinateur"> {% endif %}
                 <a href="{{ url_for('salle', id_salle=oral['salle']) }}" target="_blank">{{ oral['examinateur'] }}</a>
             </td>
             {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
@@ -80,8 +86,16 @@
             {% else %}
             <td class="timer-cell">—</td>
             {% endif %}
+            <td class="passage-cell">
+                {% if can_use_timers %}
+                <button class="passage-btn{% if oral['passage_loge'] %} is-passed{% endif %}" data-id-oral="{{ oral['id_oral'] }}">{{ '✓ Passé' if oral['passage_loge'] else 'Marquer passé' }}</button>
+                {% else %}
+                {{ '✓' if oral['passage_loge'] else '—' }}
+                {% endif %}
+            </td>
         </tr>
     {% endfor %}
+    </tbody>
     </table>
     </div>
 {% else %}
@@ -97,5 +111,6 @@
     window.CSRF_TOKEN = {{ csrf_token() | tojson }};
 </script>
 <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='timer.js') }}?v={{ sv }}"></script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='loge_view.js') }}?v={{ sv }}"></script>
 </body>
 </html>
