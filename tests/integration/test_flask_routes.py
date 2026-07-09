@@ -1069,6 +1069,117 @@ class TestOdsUploadIntegration:
         assert exam_rows[0]["Etab"] == f"{etab1},{etab2}"
         assert "Etab1" not in exam_rows[0]
 
+    def test_ods_csv_canonical_column_order(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """Les colonnes du CSV sont dans l'ordre canonique même si l'ODS les a dans un ordre différent."""
+        import io as _io, sys
+        from pathlib import Path as _Path
+        from odf.opendocument import OpenDocumentSpreadsheet
+        from odf.table import Table, TableCell, TableRow as OdfRow
+        from odf.text import P
+        sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "webserver"))
+        from ods_handler import CANDIDATS_HEADERS, EXAM_HEADERS, PREPS_HEADERS
+        import app as app_module
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        def add_sheet(doc, name, headers, data_rows):
+            sheet = Table(name=name)
+            hr = OdfRow()
+            for h in headers:
+                c = TableCell(valuetype="string")
+                c.addElement(P(text=h))
+                hr.addElement(c)
+            sheet.addElement(hr)
+            for r in data_rows:
+                tr = OdfRow()
+                for h in headers:
+                    c = TableCell(valuetype="string")
+                    c.addElement(P(text=str(r.get(h, ""))))
+                    tr.addElement(c)
+                sheet.addElement(tr)
+            doc.spreadsheet.addElement(sheet)
+
+        doc = OpenDocumentSpreadsheet()
+        # Colonnes candidats dans l'ordre inversé
+        shuffled = list(reversed(CANDIDATS_HEADERS))
+        cand_row = {"CANDIDAT": "Dupont Jean (111111111AA)", "CHOIX DISCIPLINE 1": "Maths",
+                    "CHOIX DISCIPLINE 2": "SES", "TT": "0", "Etab": "Lycée", "Profs": ""}
+        add_sheet(doc, "candidats", shuffled, [cand_row])
+        add_sheet(doc, "examinateurs", EXAM_HEADERS,
+                  [{"Nom": "Martin", "Disc.poste": "Maths", "Salle": "1",
+                    "Heure mini": "8", "Etab": "Lycée", "Loge": "A"}])
+        add_sheet(doc, "preps", PREPS_HEADERS,
+                  [{"Matiere": "Maths", "Matière court": "Maths",
+                    "Temps preparation (min)": "20", "Duree (min)": "20"}])
+        buf = _io.BytesIO()
+        doc.save(buf)
+
+        r = admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(buf.getvalue()), "data.ods")},
+            content_type="multipart/form-data",
+        )
+        assert r.status_code == 200
+
+        from csv_validator import normalize_csv
+        cand_rows, _ = normalize_csv((tmp_path / "candidats.csv").read_bytes())
+        assert list(cand_rows[0].keys()) == CANDIDATS_HEADERS
+
+    def test_ods_csv_extra_column_ignored(self, admin_client, tmp_path, flask_app, monkeypatch):
+        """Une colonne supplémentaire dans l'ODS n'apparaît pas dans le CSV généré."""
+        import io as _io, sys
+        from pathlib import Path as _Path
+        from odf.opendocument import OpenDocumentSpreadsheet
+        from odf.table import Table, TableCell, TableRow as OdfRow
+        from odf.text import P
+        sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "webserver"))
+        from ods_handler import CANDIDATS_HEADERS, EXAM_HEADERS, PREPS_HEADERS
+        import app as app_module
+        monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+
+        def add_sheet(doc, name, headers, data_rows):
+            sheet = Table(name=name)
+            hr = OdfRow()
+            for h in headers:
+                c = TableCell(valuetype="string")
+                c.addElement(P(text=h))
+                hr.addElement(c)
+            sheet.addElement(hr)
+            for r in data_rows:
+                tr = OdfRow()
+                for h in headers:
+                    c = TableCell(valuetype="string")
+                    c.addElement(P(text=str(r.get(h, ""))))
+                    tr.addElement(c)
+                sheet.addElement(tr)
+            doc.spreadsheet.addElement(sheet)
+
+        doc = OpenDocumentSpreadsheet()
+        extra_headers = CANDIDATS_HEADERS + ["Notes"]
+        cand_row = {"CANDIDAT": "Dupont Jean (111111111AA)", "CHOIX DISCIPLINE 1": "Maths",
+                    "CHOIX DISCIPLINE 2": "SES", "TT": "0", "Etab": "Lycée", "Profs": "",
+                    "Notes": "à ignorer"}
+        add_sheet(doc, "candidats", extra_headers, [cand_row])
+        add_sheet(doc, "examinateurs", EXAM_HEADERS,
+                  [{"Nom": "Martin", "Disc.poste": "Maths", "Salle": "1",
+                    "Heure mini": "8", "Etab": "Lycée", "Loge": "A"}])
+        add_sheet(doc, "preps", PREPS_HEADERS,
+                  [{"Matiere": "Maths", "Matière court": "Maths",
+                    "Temps preparation (min)": "20", "Duree (min)": "20"}])
+        buf = _io.BytesIO()
+        doc.save(buf)
+
+        r = admin_client.post(
+            "/gestion/algo/upload",
+            data={"ods_file": (BytesIO(buf.getvalue()), "data.ods")},
+            content_type="multipart/form-data",
+        )
+        assert r.status_code == 200
+
+        from csv_validator import normalize_csv
+        cand_rows, _ = normalize_csv((tmp_path / "candidats.csv").read_bytes())
+        assert "Notes" not in cand_rows[0]
+        assert list(cand_rows[0].keys()) == CANDIDATS_HEADERS
+
 
 # ── Candidat (route protégée) ─────────────────────────────────────────────────
 

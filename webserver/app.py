@@ -3339,18 +3339,21 @@ def algo_upload_csv() -> ResponseReturnValue:
             return jsonify({"ok": False, "uploaded": [],
                             "errors": ["ods_file : extension .ods requise"],
                             "validation": {}})
-        from ods_handler import parse_ods
+        from ods_handler import (
+            parse_ods,
+            CANDIDATS_HEADERS, EXAM_HEADERS, PREPS_HEADERS,
+        )
         try:
             sheets = parse_ods(ods_file.read())
         except ValueError as e:
             return jsonify({"ok": False, "uploaded": [], "errors": [str(e)], "validation": {}})
 
         sheet_map = {
-            "candidats":    ("candidats.csv",    normalize_csv),
-            "examinateurs": ("examinateurs.csv",  normalize_csv),
-            "preps":        ("preps.csv",         normalize_csv),
+            "candidats":    ("candidats.csv",    CANDIDATS_HEADERS),
+            "examinateurs": ("examinateurs.csv", EXAM_HEADERS),
+            "preps":        ("preps.csv",         PREPS_HEADERS),
         }
-        for sheet_key, (target_name, _) in sheet_map.items():
+        for sheet_key, (target_name, canonical_headers) in sheet_map.items():
             rows = sheets.get(sheet_key)
             if rows is None:
                 upload_errors.append(f"Feuille '{sheet_key}' absente du fichier ODS.")
@@ -3361,8 +3364,8 @@ def algo_upload_csv() -> ResponseReturnValue:
                 upload_errors.append(f"Feuille '{sheet_key}' vide dans le fichier ODS.")
                 continue
             buf = _io.StringIO()
-            writer = _csv.DictWriter(buf, fieldnames=list(rows[0].keys()), delimiter=";",
-                                     lineterminator="\n")
+            writer = _csv.DictWriter(buf, fieldnames=canonical_headers, delimiter=";",
+                                     lineterminator="\n", extrasaction="ignore")
             writer.writeheader()
             writer.writerows(rows)
             raw = ("﻿" + buf.getvalue()).encode("utf-8")  # BOM UTF-8
