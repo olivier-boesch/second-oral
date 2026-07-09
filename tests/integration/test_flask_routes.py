@@ -1741,6 +1741,75 @@ class TestGestionLoges:
         remaining = app_module._load_credentials()
         assert "B404" not in remaining.get("loges", {})
 
+    # ── Renommage (sûr depuis la FK loge_id — cf. incident 2026-07-08) ────────
+
+    def test_rename_requires_admin(self, client):
+        r = client.post("/gestion/loge/1/rename", data={"nom": "B405"},
+                        follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login" in r.headers["Location"]
+
+    def test_rename_unknown_loge_returns_404(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = []
+        r = admin_client.post("/gestion/loge/999/rename", data={"nom": "B405"},
+                              follow_redirects=False)
+        assert r.status_code == 404
+
+    def test_rename_empty_name_rejected(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [
+            {"id": 1, "nom": "B404", "nb_examinateurs": 2},
+        ]
+        db_mock.make_sql_update.reset_mock()
+        r = admin_client.post("/gestion/loge/1/rename", data={"nom": "  "},
+                              follow_redirects=False)
+        assert r.status_code == 400
+        db_mock.make_sql_update.assert_not_called()
+
+    def test_rename_to_existing_name_rejected(self, admin_client, db_mock):
+        db_mock.make_sql_select.side_effect = [
+            [{"id": 1, "nom": "B404", "nb_examinateurs": 2}],  # SELECT_LOGE_USAGE
+            [{"id": 2, "nom": "B405"}],                         # SELECT_LOGE_BY_NOM (déjà pris)
+        ]
+        db_mock.make_sql_update.reset_mock()
+        r = admin_client.post("/gestion/loge/1/rename", data={"nom": "B405"},
+                              follow_redirects=False)
+        assert r.status_code == 400
+        db_mock.make_sql_update.assert_not_called()
+
+    def test_rename_same_name_is_noop(self, admin_client, db_mock):
+        """Soumettre le même nom ne doit ni toucher la DB ni régénérer le papillon."""
+        db_mock.make_sql_select.return_value = [
+            {"id": 1, "nom": "B404", "nb_examinateurs": 2},
+        ]
+        db_mock.make_sql_update.reset_mock()
+        r = admin_client.post("/gestion/loge/1/rename", data={"nom": "B404"},
+                              follow_redirects=False)
+        assert r.status_code == 302
+        db_mock.make_sql_update.assert_not_called()
+
+    def test_rename_ok_updates_db_and_credentials_key(self, admin_client, db_mock, monkeypatch):
+        """Le renommage met à jour la DB et fait suivre la clé du mot de passe
+        en clair dans le store chiffré (sinon orpheline pour le papillon)."""
+        import app as app_module
+        app_module._save_credentials({"examinateurs": {}, "loges": {"B404": "secret"}})
+        db_mock.make_sql_select.side_effect = [
+            [{"id": 1, "nom": "B404", "nb_examinateurs": 2}],  # SELECT_LOGE_USAGE
+            [],                                                  # SELECT_LOGE_BY_NOM (libre)
+            [{"id": 1, "nom": "B405"}],                          # SELECT_ALL_LOGES_FOR_RENEWAL
+        ]
+        db_mock.make_sql_update.reset_mock()
+        monkeypatch.setattr(app_module.reports, "liste_papillons_loges",
+                            lambda *a, **kw: None)
+        r = admin_client.post("/gestion/loge/1/rename", data={"nom": "B405"},
+                              follow_redirects=False)
+        assert r.status_code == 302
+        db_mock.make_sql_update.assert_called_once()
+        _, kwargs = db_mock.make_sql_update.call_args
+        assert kwargs == {"id": 1, "nom": "B405"}
+        remaining = app_module._load_credentials()
+        assert "B404" not in remaining.get("loges", {})
+        assert remaining["loges"]["B405"] == "secret"
+
 
 class TestDeleteExaminateurPurgeCredentials:
     """La suppression d'un examinateur doit purger son mot de passe en clair

@@ -25,7 +25,15 @@
         {% for loge in loges %}
             <tr class="{{ loop.cycle("tr_light", "tr_dark") }}">
                 <td>
-                    {{ loge['nom'] }}
+                    <form method="post" action="{{ url_for('rename_loge', id_loge=loge['id']) }}" style="margin:0; display:flex; gap:.3em;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="text" name="nom" value="{{ loge['nom'] }}" required
+                               style="width:8em; font-size:.85rem; padding:.1em .3em;">
+                        <button type="submit" class="outline" style="font-size:.8rem; padding:.2em .6em;"
+                                onclick="return confirm('Renommer la loge {{ loge['nom'] }} ? Le papillon sera regénéré.')">
+                            Renommer
+                        </button>
+                    </form>
                 </td>
                 <td>
                     <a href="{{ url_for('loge', id_loge=loge['nom']) }}" target="_blank">

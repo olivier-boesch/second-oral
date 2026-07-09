@@ -431,6 +431,10 @@ UPDATE_LOGE_PASSWORD = """
 UPDATE Loge SET password_hash = %(password_hash)s WHERE id = %(id)s
 """
 
+UPDATE_LOGE_NOM = """
+UPDATE Loge SET nom = %(nom)s WHERE id = %(id)s
+"""
+
 INSERT_LOGE = """
 INSERT INTO Loge (nom, password_hash)
 VALUES (%(nom)s, %(password_hash)s)

@@ -1760,6 +1760,41 @@ def delete_loge(id_loge: int) -> ResponseReturnValue:
     return redirect(url_for('gestion_loges'))
 
 
+@app.route('/gestion/loge/<int:id_loge>/rename', methods=['POST'])
+@admin_required
+@nocache
+def rename_loge(id_loge: int) -> ResponseReturnValue:
+    """Renomme une loge.
+
+    Sûr depuis le passage à une vraie FK `Examinateur.loge_id -> Loge.id`
+    (2026-07-09) : le mot de passe est salé par l'id de la loge, pas par son
+    nom, donc un renommage n'invalide plus l'authentification (cf. incident
+    2026-07-08). `Examinateur.loge_id` n'a pas besoin d'être touché.
+    """
+    # #2 — Action mutante : POST + CSRF (cf. delete_loge — même raisonnement).
+    lignes = db_get(db_facility_web.SELECT_LOGE_USAGE, id_loge, no_list_auto=False)
+    if not lignes:
+        abort(404, "Loge introuvable")
+    ancien_nom = lignes[0]['nom']
+    nouveau_nom = (request.form.get('nom') or '').strip()
+    if not nouveau_nom:
+        abort(400, "Le nom de la loge ne peut pas être vide.")
+    if nouveau_nom != ancien_nom:
+        existante = db_get(db_facility_web.SELECT_LOGE_BY_NOM, nouveau_nom, no_list_auto=False)
+        if existante:
+            abort(400, f"Une loge « {nouveau_nom} » existe déjà.")
+        db_update(db_facility_web.UPDATE_LOGE_NOM, id=id_loge, nom=nouveau_nom)
+        # Le mot de passe en clair du store chiffré est indexé par nom : la clé
+        # doit suivre le renommage, sinon _regenerer_papillons_loges() ne la
+        # retrouve plus (cf. SELECT_ORAUX_LOGE, filtrage par nom).
+        creds = _load_credentials()
+        if ancien_nom in creds.get("loges", {}):
+            creds["loges"][nouveau_nom] = creds["loges"].pop(ancien_nom)
+            _save_credentials(creds)
+        _regenerer_papillons_loges(request.host_url.rstrip('/'))
+    return redirect(url_for('gestion_loges'))
+
+
 @app.route('/gestion/liste-candidats')
 @admin_required
 @nocache
