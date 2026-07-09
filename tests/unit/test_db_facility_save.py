@@ -126,3 +126,52 @@ class TestSaveAllParallelHashing:
 
         assert [c.idx for c in algo.liste_candidats] == list(range(1, 6))
         assert [e.idx for e in algo.liste_examinateurs] == list(range(1, 3))
+
+
+class TestSchemaLogeId:
+    """Refonte 2026-07-09 : Examinateur.loge devient loge_id (FK vers Loge.id)
+    au lieu d'un texte libre dupliqué — un renommage de loge n'invalide plus
+    l'authentification ni le papillon (cf. incident 2026-07-08)."""
+
+    def _sql_for(self, table_name: str) -> str:
+        marker = f"CREATE TABLE IF NOT EXISTS {table_name} ("
+        for entry in _real_db_facility_save.SQL_BASE:
+            if marker in entry["sql"]:
+                return entry["sql"]
+        raise AssertionError(f"CREATE TABLE {table_name} introuvable dans SQL_BASE")
+
+    def test_loge_created_before_examinateur(self):
+        """Examinateur.loge_id référence Loge.id : Loge doit déjà exister."""
+        noms_tables = [
+            entry["sql"].split("CREATE TABLE IF NOT EXISTS ")[1].split(" ")[0]
+            for entry in _real_db_facility_save.SQL_BASE
+            if "CREATE TABLE IF NOT EXISTS" in entry["sql"]
+        ]
+        assert noms_tables.index("Loge") < noms_tables.index("Examinateur")
+
+    def test_examinateur_loge_id_foreign_key(self):
+        sql = self._sql_for("Examinateur")
+        assert "loge_id" in sql
+        assert "loge TEXT" not in sql
+        assert "FOREIGN KEY (loge_id) REFERENCES Loge (id)" in sql
+
+    def test_loge_nom_unique(self):
+        sql = self._sql_for("Loge")
+        assert "UNIQUE" in sql
+
+    def test_sql_insert_loges_requires_explicit_id(self):
+        """Pas d'AUTO_INCREMENT ici : l'id est assigné en Python (comme pour
+        Matiere/Candidat/Examinateur/Oral) pour être connu avant le hash du
+        mot de passe, qui l'utilise comme sel."""
+        assert "%(id)s" in _real_db_facility_save.SQL_INSERT_LOGES
+
+    def test_sql_insert_examinateurs_uses_loge_id(self):
+        assert "loge_id" in _real_db_facility_save.SQL_INSERT_EXAMINATEURS
+        assert "%(loge)s" not in _real_db_facility_save.SQL_INSERT_EXAMINATEURS
+
+    def test_save_loges_before_save_all(self, db_facility, monkeypatch):
+        """save_loges() doit pouvoir être appelée avant save_all() sans lever
+        (executemany sur une liste de dicts id/nom/password_hash)."""
+        db_facility.save_loges([{"id": 1, "nom": "B404", "password_hash": "h"}])
+        # Pas d'assertion de contenu (curseur factice) — non-régression : ne
+        # doit pas planter avec la nouvelle signature (liste, plus dict).

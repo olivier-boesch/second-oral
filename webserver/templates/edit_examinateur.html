@@ -43,7 +43,17 @@
         </p>
         <p>
             <label for="loge">Loge: </label>
-            <input type="text" name="loge" value="{{ donnees_examinateur['loge'] }}">
+            <select name="loge" id="loge" onchange="onLogeChange(this)">
+                {% for loge in liste_loges %}
+                <option value="{{ loge['nom'] }}"
+                    {% if loge['nom'] == donnees_examinateur['loge'] %}selected{% endif %}>
+                    {{ loge['nom'] }}
+                </option>
+                {% endfor %}
+                <option value="__nouvelle_loge__">➕ Nouvelle loge…</option>
+            </select>
+            <input type="text" name="nouvelle_loge" id="nouvelle_loge"
+                   placeholder="Nom de la nouvelle loge" style="display:none;">
         </p>
         <p><span>Nombre d'oraux:</span><span>{{ donnees_examinateur['nb_oraux'] }}</span></p>
         <p class="centered">
@@ -53,6 +63,12 @@
         </p>
     </fieldset>
 </form>
+<script nonce="{{ csp_nonce }}">
+function onLogeChange(select) {
+    document.getElementById('nouvelle_loge').style.display =
+        select.value === '__nouvelle_loge__' ? 'inline' : 'none';
+}
+</script>
     <table class="table_oraux">
         <tr>
             <th>

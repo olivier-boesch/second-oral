@@ -67,15 +67,23 @@ SQL_BASE = [
     )
     """},
     {"sql": """
+    CREATE TABLE IF NOT EXISTS Loge (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        nom VARCHAR(190) NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL
+    )
+    """},
+    {"sql": """
     CREATE TABLE IF NOT EXISTS Examinateur (
         id INT PRIMARY KEY AUTO_INCREMENT,
         nom TEXT NOT NULL,
         etablissements TEXT NOT NULL,
         matiere INT NOT NULL,
         salle TEXT NOT NULL,
-        loge TEXT NOT NULL,
+        loge_id INT NOT NULL,
         password_hash TEXT NOT NULL,
-        FOREIGN KEY (matiere) REFERENCES Matiere (id)
+        FOREIGN KEY (matiere) REFERENCES Matiere (id),
+        FOREIGN KEY (loge_id) REFERENCES Loge (id)
     )
     """},
     {"sql": """
@@ -92,13 +100,6 @@ SQL_BASE = [
         hash_emargement TEXT NOT NULL DEFAULT '',
         FOREIGN KEY (examinateur) REFERENCES Examinateur (id),
         FOREIGN KEY (candidat) REFERENCES Candidat (id)
-    )
-    """},
-    {"sql": """
-    CREATE TABLE IF NOT EXISTS Loge (
-        id INT PRIMARY KEY AUTO_INCREMENT,
-        nom TEXT NOT NULL,
-        password_hash TEXT NOT NULL
     )
     """},
     {"sql": """
@@ -158,7 +159,7 @@ SQL_BASE = [
             JSON_OBJECT('id', NEW.id, 'nom', NEW.nom,
                         'etablissements', NEW.etablissements,
                         'matiere', NEW.matiere, 'salle', NEW.salle,
-                        'loge', NEW.loge)
+                        'loge_id', NEW.loge_id)
         ), 'Examinateur');
     END
     """},
@@ -215,11 +216,11 @@ SQL_BASE = [
             'data_new', JSON_OBJECT('id', NEW.id, 'nom', NEW.nom,
                         'etablissements', NEW.etablissements,
                         'matiere', NEW.matiere, 'salle', NEW.salle,
-                        'loge', NEW.loge),
+                        'loge_id', NEW.loge_id),
             'data_old', JSON_OBJECT('id', OLD.id, 'nom', OLD.nom,
                         'etablissements', OLD.etablissements,
                         'matiere', OLD.matiere, 'salle', OLD.salle,
-                        'loge', OLD.loge)
+                        'loge_id', OLD.loge_id)
         ), 'Examinateur');
     END
     """},
@@ -277,7 +278,7 @@ SQL_BASE = [
             JSON_OBJECT('id', OLD.id, 'nom', OLD.nom,
                         'etablissements', OLD.etablissements,
                         'matiere', OLD.matiere, 'salle', OLD.salle,
-                        'loge', OLD.loge)
+                        'loge_id', OLD.loge_id)
         ), 'Examinateur');
     END
     """},
@@ -325,9 +326,9 @@ VALUES (%(id)s, %(nom)s, %(numero)s, %(etablissement)s, %(choix1)s, %(choix2)s,
 """
 
 SQL_INSERT_EXAMINATEURS = """
-INSERT INTO Examinateur (id, nom, etablissements, matiere, salle, loge, password_hash)
+INSERT INTO Examinateur (id, nom, etablissements, matiere, salle, loge_id, password_hash)
 VALUES (%(id)s, %(nom)s, %(etablissements)s, %(matiere)s, %(salle)s,
-        %(loge)s, %(password_hash)s)
+        %(loge_id)s, %(password_hash)s)
 """
 
 SQL_INSERT_ORAUX = """
@@ -337,8 +338,8 @@ VALUES (%(id)s, %(examinateur)s, %(candidat)s, %(heure_sujet)s,
 """
 
 SQL_INSERT_LOGES = """
-INSERT INTO Loge (nom, password_hash)
-VALUES (%(nom)s, %(password_hash)s)
+INSERT INTO Loge (id, nom, password_hash)
+VALUES (%(id)s, %(nom)s, %(password_hash)s)
 """
 
 
@@ -413,13 +414,14 @@ class DbFacility:
             c.executemany(SQL_INSERT_ORAUX, oraux)
         self.conn.commit()
 
-    def save_loges(self, loges: dict):
-        """Enregistre les mots de passe des loges. loges = {nom: password_hash}."""
+    def save_loges(self, loges: list[dict]):
+        """Enregistre les loges (id, nom, password_hash).
+
+        Doit être appelé avant save_all() : Examinateur.loge_id référence
+        Loge.id (FK) — Loge doit donc déjà exister en base.
+        """
         if not loges:
             return
         with self.conn.cursor() as c:
-            c.executemany(
-                SQL_INSERT_LOGES,
-                [{'nom': nom, 'password_hash': password_hash} for nom, password_hash in loges.items()],
-            )
+            c.executemany(SQL_INSERT_LOGES, loges)
         self.conn.commit()

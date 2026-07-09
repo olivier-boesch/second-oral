@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Liste des loges</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky body-admin">
+{% include 'auth_icon.html' %}
+{% include 'admin_nav.html' %}
+    <h1>Liste des Loges</h1>
+    <p>
+        <small>Une loge ne peut être supprimée que si aucun examinateur ne lui est
+        rattaché — pour en libérer une, réassignez d'abord ses examinateurs vers
+        une autre loge depuis <a href="{{ url_for('liste_examinateurs') }}">la liste des examinateurs</a>.</small>
+    </p>
+    <table class="table_oraux">
+        <tr>
+            <th>Nom</th>
+            <th>Fiche loge</th>
+            <th>Examinateurs rattachés</th>
+            <th>Identifiants</th>
+            <th>Supprimer</th>
+        </tr>
+        {% for loge in loges %}
+            <tr class="{{ loop.cycle("tr_light", "tr_dark") }}">
+                <td>
+                    {{ loge['nom'] }}
+                </td>
+                <td>
+                    <a href="{{ url_for('loge', id_loge=loge['nom']) }}" target="_blank">
+                        <img src="{{ url_for('static', filename='pdf.png') }}">
+                    </a>
+                </td>
+                <td>
+                    {{ loge['nb_examinateurs'] }}
+                </td>
+                <td>
+                    <form method="post" action="{{ url_for('renew_loge', nom=loge['nom']) }}" style="margin:0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="link_back" value="{{ url_of_page }}">
+                        <button type="submit" class="outline" style="font-size:.8rem; padding:.2em .6em;"
+                                onclick="return confirm('Renouveler le mot de passe de la loge {{ loge['nom'] }} ? Le papillon sera regénéré.')">
+                            ↺ Renouveler
+                        </button>
+                    </form>
+                </td>
+                <td>
+                    {% if loge['nb_examinateurs'] == 0 %}
+                    <div class="tooltip">
+                        <form method="post" action="{{ url_for('delete_loge', id_loge=loge['id']) }}" style="display:inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="link-button" style="padding:0;"
+                                    onclick="return confirm('Supprimer la loge {{ loge['nom'] }} ?')">
+                                <img src="{{ url_for('static', filename='delete.png') }}">
+                            </button>
+                        </form>
+                        <span class="tooltiptext">Supprimer cette loge</span>
+                    </div>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+    {% include 'footer.html' %}
+</body>
+</html>

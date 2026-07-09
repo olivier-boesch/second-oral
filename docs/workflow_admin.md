@@ -396,6 +396,14 @@ sans adaptation possible (rien à adapter).
 
 **Renouvellement individuel depuis les listes :** `/gestion/liste-candidats` et `/gestion/liste-examinateurs` disposent chacune d'une colonne **Identifiants** avec un bouton "↺ Renouveler" par ligne. C'est un raccourci vers la même action que ci-dessus, sans quitter la liste : l'admin reste sur la page après renouvellement, avec un message en haut de page pointant vers le fichier de lot regénéré (même bandeau que sur `/gestion/credentials`).
 
+### Gestion des loges
+
+Depuis le 09/07/2026, `Examinateur.loge_id` est une vraie clé étrangère vers `Loge.id` (avant : texte libre dupliqué, non lié à la table `Loge`). Conséquences pratiques :
+
+- **Champ « Loge » d'add/edit-examinateur** : liste déroulante des loges existantes, plus une option **➕ Nouvelle loge…** qui révèle un champ texte — crée la loge (mot de passe généré, hash stocké, `credentials.enc` mis à jour, papillon régénéré) sans quitter le formulaire. Impossible d'assigner un nom de loge qui n'a pas de compte associé.
+- **Page `/gestion/liste-loges`** (icône dédiée dans la barre latérale admin) : liste chaque loge avec son nombre d'examinateurs rattachés, un bouton de renouvellement de mot de passe, et un bouton de suppression **actif uniquement si ce nombre est nul**. Pour libérer une loge à supprimer, réassigner d'abord tous ses examinateurs vers une autre loge depuis `/gestion/liste-examinateurs`.
+- **Renommer une loge** n'est pas exposé dans l'UI : le mot de passe est salé avec l'`id` de la loge (stable), pas son nom, donc un renommage seul (`UPDATE Loge SET nom = ...`) ne casse plus l'authentification — mais reste à faire à la main en base si besoin ; il n'y a pas de bouton dédié.
+
 ---
 
 ## 5. Jour des épreuves

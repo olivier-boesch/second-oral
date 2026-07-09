@@ -66,6 +66,17 @@
     </svg>
   </a>
 
+  <a href="{{ url_for('gestion_loges') }}"
+     class="admin-sidebar__item {% if ep == 'gestion_loges' %}active{% endif %}"
+     data-tip="Loges">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 21h18"/>
+      <path d="M6 21V8l6-4 6 4v13"/>
+      <path d="M10 21v-6h4v6"/>
+    </svg>
+  </a>
+
   <div class="admin-sidebar__sep"></div>
 
   <a href="{{ url_for('index_gestion') }}"

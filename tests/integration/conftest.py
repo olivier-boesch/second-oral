@@ -142,6 +142,25 @@ def _reset_db_mock():
     _db_mock.make_sql_update.return_value = None
 
 
+@pytest.fixture(autouse=True)
+def _isolate_credentials_store(tmp_path, monkeypatch):
+    """Redirige le store credentials.enc vers tmp_path pour chaque test.
+
+    _DATA_DIR/_CREDENTIALS_FILE sont des constantes calculées une seule fois,
+    à l'import d'app.py, à partir d'app.root_path — donc figées pour toute la
+    session de test, quel que soit le test. Sans cette isolation, tout test
+    qui déclenche _save_credentials() (renouvellement de mot de passe, ajout
+    d'examinateur...) sans le monkeypatcher lui-même écrit pour de vrai sur
+    le disque à cet emplacement fixe, potentiellement hors du repo selon la
+    résolution de root_path par Flask/pytest (déjà arrivé : écriture réelle
+    dans ~/data/credentials.enc lors d'un run de la suite).
+    """
+    import app as app_module
+    monkeypatch.setattr(app_module, "_DATA_DIR", tmp_path)
+    monkeypatch.setattr(app_module, "_CREDENTIALS_FILE", tmp_path / "credentials.enc")
+    monkeypatch.setattr(app_module, "_CREDENTIALS_TMP_FILE", tmp_path / "credentials_new.json")
+
+
 @pytest.fixture()
 def client(flask_app):
     """Client de test Flask (session isolée par test)."""

@@ -1050,3 +1050,43 @@ class TestCacheDonneesWorker:
         )
         assert len(alg.liste_candidats) == 1
         assert len(alg.liste_examinateurs) == 2
+
+
+class TestSaveLogeId:
+    """AlgoOne.save() : un id stable est assigné par loge et utilisé comme sel
+    du hash de mot de passe (au lieu du nom, mutable) — cf. refonte 2026-07-09,
+    Examinateur.loge_id devient une FK vers Loge.id."""
+
+    def test_loge_id_assigne_et_sauvegarde_avant_save_all(self, tmp_path, monkeypatch):
+        import algo as algo_module
+        monkeypatch.setattr(algo_module, "DbFacility", MagicMock())
+        # save() référence _Path (module global) — normalement défini par le
+        # bloc `if __name__ == '__main__':` d'algo.py, jamais exécuté quand le
+        # module est importé (cas des tests) : bug préexistant, hors du scope
+        # de cette modif, contourné ici plutôt que corrigé dans algo.py.
+        monkeypatch.setattr(algo_module, "_Path", Path, raising=False)
+
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand("Cand0", "5000000000")],
+            exams=[
+                "Prof Maths;Maths;A101;8;;LogeB",
+                "Prof Philo;Philo;B101;8;;LogeA",
+            ],
+        )
+        alg.resoudre()
+        alg.save()
+
+        db = algo_module.DbFacility.return_value
+        db.save_loges.assert_called_once()
+        loges_arg = db.save_loges.call_args[0][0]
+        assert {d['nom']: d['id'] for d in loges_arg} == {"LogeA": 1, "LogeB": 2}
+        assert all(d['password_hash'] for d in loges_arg)
+
+        assert {e.loge: e.loge_id for e in alg.liste_examinateurs} == {
+            "LogeA": 1, "LogeB": 2,
+        }
+
+        # save_loges doit précéder save_all (Examinateur.loge_id référence Loge.id)
+        method_names = [c[0] for c in db.method_calls]
+        assert method_names.index("save_loges") < method_names.index("save_all")

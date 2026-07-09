@@ -41,7 +41,14 @@
         </p>
         <p>
             <label for="loge">Loge: </label>
-            <input type="text" name="loge" placeholder="Loge correspondante">
+            <select name="loge" id="loge" onchange="onLogeChange(this)">
+                {% for loge in liste_loges %}
+                <option value="{{ loge['nom'] }}">{{ loge['nom'] }}</option>
+                {% endfor %}
+                <option value="__nouvelle_loge__">➕ Nouvelle loge…</option>
+            </select>
+            <input type="text" name="nouvelle_loge" id="nouvelle_loge"
+                   placeholder="Nom de la nouvelle loge" style="display:none;">
         </p>
         <p class="centered">
             <button type="submit" class="button">Valider</button>
@@ -50,6 +57,12 @@
         </p>
     </fieldset>
 </form>
+<script nonce="{{ csp_nonce }}">
+function onLogeChange(select) {
+    document.getElementById('nouvelle_loge').style.display =
+        select.value === '__nouvelle_loge__' ? 'inline' : 'none';
+}
+</script>
 {% include 'footer.html' %}
 </body>
 </html>

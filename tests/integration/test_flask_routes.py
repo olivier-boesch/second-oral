@@ -1276,13 +1276,17 @@ class TestAddExaminateur:
                             lambda *a, **kw: None)
 
         db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.side_effect = [
+            [{"id": 1, "nom": "L1"}],  # SELECT_LOGE_BY_NOM('L1') -> déjà existante
+            [],                         # SELECT_ALL_EXAMINATEURS_FOR_RENEWAL (papillon examinateurs)
+        ]
         r = admin_client.post("/gestion/add-examinateur",
                               data={"nom": "Martin Sophie", "salle": "B02",
                                     "matiere": "1", "loge": "L1",
                                     "etablissements": "Lycée Test"})
         assert r.status_code == 302
         calls = db_mock.make_sql_update.call_args_list
-        assert len(calls) >= 1
+        assert len(calls) == 1  # seul l'INSERT_EXAMINATEUR (loge déjà existante)
         _, kwargs = calls[0]
         assert kwargs.get("password_hash"), "password_hash doit être non vide"
         assert kwargs.get("nom") == "Martin Sophie"
@@ -1297,12 +1301,66 @@ class TestAddExaminateur:
                             raising=False)
         monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
                             lambda *a, **kw: None)
+        db_mock.make_sql_select.side_effect = [
+            [{"id": 1, "nom": "L1"}],  # SELECT_LOGE_BY_NOM('L1') -> déjà existante
+            [],                         # SELECT_ALL_EXAMINATEURS_FOR_RENEWAL
+        ]
         r = admin_client.post("/gestion/add-examinateur",
                               data={"nom": "Durand Paul", "salle": "C03",
                                     "matiere": "1", "loge": "L1",
                                     "etablissements": ""})
         assert r.status_code == 302
         assert "new_papillon" in r.headers["Location"]
+
+    def test_post_creates_missing_loge(self, admin_client, db_mock, monkeypatch,
+                                        tmp_path):
+        """Ajouter un examinateur avec un nom de loge inédit doit créer son
+        compte (table Loge) et régénérer papillons_loges.pdf — sinon la
+        connexion échoue silencieusement (incident 2026-07-08)."""
+        import app as app_module
+        (tmp_path / "generated").mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(app_module, "root_path", str(tmp_path), raising=False)
+        monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
+                            lambda *a, **kw: None)
+        monkeypatch.setattr(app_module.reports, "liste_papillons_loges",
+                            lambda *a, **kw: None)
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_update.return_value = 42  # id auto-incrémenté simulé pour la loge
+        db_mock.make_sql_select.side_effect = [
+            [],                 # SELECT_LOGE_BY_NOM('B404') -> inexistante
+            [],                 # SELECT_ALL_EXAMINATEURS_FOR_RENEWAL (papillon examinateurs)
+            [{"nom": "B404"}],  # SELECT_ALL_LOGES_FOR_RENEWAL (régén. papillon loges)
+        ]
+        r = admin_client.post("/gestion/add-examinateur",
+                              data={"nom": "Martin Sophie", "salle": "B02",
+                                    "matiere": "1", "loge": "B404",
+                                    "etablissements": ""})
+        assert r.status_code == 302
+        kwargs_list = [c.kwargs for c in db_mock.make_sql_update.call_args_list]
+        assert any(k.get("nom") == "B404" for k in kwargs_list), \
+            "la loge B404 doit être insérée en base"
+        assert any(k.get("id") == 42 and k.get("password_hash") for k in kwargs_list), \
+            "son mot de passe doit être haché et posé après coup (id connu)"
+
+    def test_post_existing_loge_not_recreated(self, admin_client, db_mock,
+                                               monkeypatch, tmp_path):
+        """Si la loge existe déjà, aucun nouveau compte/mot de passe n'est créé."""
+        import app as app_module
+        (tmp_path / "generated").mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(app_module, "root_path", str(tmp_path), raising=False)
+        monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
+                            lambda *a, **kw: None)
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.side_effect = [
+            [{"id": 1, "nom": "L1"}],  # SELECT_LOGE_BY_NOM('L1') -> déjà existante
+            [],                         # SELECT_ALL_EXAMINATEURS_FOR_RENEWAL
+        ]
+        r = admin_client.post("/gestion/add-examinateur",
+                              data={"nom": "Martin Sophie", "salle": "B02",
+                                    "matiere": "1", "loge": "L1",
+                                    "etablissements": ""})
+        assert r.status_code == 302
+        db_mock.make_sql_update.assert_called_once()  # seul l'INSERT_EXAMINATEUR
 
 
 # ── Édition d'un examinateur ──────────────────────────────────────────────────
@@ -1320,7 +1378,7 @@ class TestEditExaminateur:
         examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
                        "loge": "L1", "matiere": "Maths", "etablissements": "",
                        "nb_oraux": 0}
-        db_mock.make_sql_select.side_effect = [[examinateur], []]
+        db_mock.make_sql_select.side_effect = [[examinateur], [], []]
         r = admin_client.get("/gestion/edit-examinateur?id_examinateur=10")
         assert r.status_code == 200
         assert "Nombre d'oraux:</span><span>0</span>" in r.data.decode()
@@ -1349,7 +1407,7 @@ class TestEditExaminateur:
             "heure_sujet": timedelta(hours=9), "heure_oral": timedelta(hours=9, minutes=15),
             "heure_fin": timedelta(hours=9, minutes=30), "maj": 0,
         }
-        db_mock.make_sql_select.side_effect = [[examinateur], [oral]]
+        db_mock.make_sql_select.side_effect = [[examinateur], [oral], []]
         r = admin_client.get("/gestion/edit-examinateur?id_examinateur=10")
         assert r.status_code == 200
         body = r.data.decode()
@@ -1370,7 +1428,7 @@ class TestEditExaminateur:
             "heure_sujet": "09:00:00", "heure_oral": "09:15:00",
             "heure_fin": "09:30:00", "maj": 0,
         }
-        db_mock.make_sql_select.side_effect = [[examinateur], [oral]]
+        db_mock.make_sql_select.side_effect = [[examinateur], [oral], []]
         r = admin_client.get("/gestion/edit-examinateur?id_examinateur=10")
         assert r.status_code == 200
         body = r.data.decode()
@@ -1380,6 +1438,80 @@ class TestEditExaminateur:
         assert "09:00" in body
         assert "09:15" in body
         assert "09:30" in body
+
+    def test_post_creates_missing_loge(self, admin_client, db_mock, monkeypatch):
+        """Régression 2026-07-08 : réaffecter un examinateur vers un nom de loge
+        inédit doit créer son compte (table Loge) et régénérer
+        papillons_loges.pdf. Sinon, la connexion échoue silencieusement (0
+        ligne Loge pour ce nom) et le papillon continue d'afficher l'ancien
+        nom, seul encore présent en table."""
+        import app as app_module
+        monkeypatch.setattr(app_module.reports, "liste_papillons_loges",
+                            lambda *a, **kw: None)
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_update.return_value = 42  # id auto-incrémenté simulé pour la loge
+        db_mock.make_sql_select.side_effect = [
+            [],                 # SELECT_LOGE_BY_NOM('B404') -> inexistante
+            [{"nom": "B404"}],  # SELECT_ALL_LOGES_FOR_RENEWAL (régén. papillon)
+        ]
+        r = admin_client.post("/gestion/edit-examinateur", data={
+            "id": "10", "nom": "Martin Sophie", "salle": "A01", "loge": "B404",
+            "etablissements": "",
+        }, follow_redirects=False)
+        assert r.status_code == 302
+        kwargs_list = [c.kwargs for c in db_mock.make_sql_update.call_args_list]
+        assert any(k.get("nom") == "B404" for k in kwargs_list), \
+            "la loge B404 doit être insérée en base"
+        assert any(k.get("id") == 42 and k.get("password_hash") for k in kwargs_list), \
+            "son mot de passe doit être haché et posé après coup (id connu)"
+
+    def test_post_existing_loge_not_recreated(self, admin_client, db_mock):
+        """Si la loge existe déjà, aucun nouveau compte/mot de passe n'est créé
+        (pas de second appel db_update)."""
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.return_value = [{"id": 3, "nom": "A01"}]  # loge déjà existante
+        r = admin_client.post("/gestion/edit-examinateur", data={
+            "id": "10", "nom": "Martin Sophie", "salle": "A01", "loge": "A01",
+            "etablissements": "",
+        }, follow_redirects=False)
+        assert r.status_code == 302
+        db_mock.make_sql_update.assert_called_once()  # seul l'UPDATE_EXAMINATEUR_INFOS
+
+
+# ── _assurer_loge : création à la volée d'une loge manquante ──────────────────
+
+class TestAssurerLoge:
+    """Régression 2026-07-08 : un examinateur réaffecté à une loge dont le nom
+    n'a jamais existé en base laissait la connexion et le papillon
+    désynchronisés (table Loge non tenue à jour). _assurer_loge comble ce
+    trou, appelée depuis add-examinateur et edit-examinateur."""
+
+    def test_creates_loge_when_missing(self, db_mock):
+        import app as app_module
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_update.return_value = 7  # id auto-incrémenté simulé
+        db_mock.make_sql_select.return_value = []  # aucune loge "B404" en base
+        loge_id, created = app_module._assurer_loge("B404")
+        assert created is True
+        assert loge_id == 7
+        # INSERT_LOGE (hash placeholder) puis UPDATE_LOGE_PASSWORD (hash salé par id)
+        assert db_mock.make_sql_update.call_count == 2
+        insert_kwargs = db_mock.make_sql_update.call_args_list[0].kwargs
+        assert insert_kwargs["nom"] == "B404"
+        update_kwargs = db_mock.make_sql_update.call_args_list[1].kwargs
+        assert update_kwargs["id"] == 7
+        assert update_kwargs["password_hash"]
+        creds = app_module._load_credentials()
+        assert "B404" in creds["loges"]
+
+    def test_noop_when_loge_already_exists(self, db_mock):
+        import app as app_module
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.return_value = [{"id": 3, "nom": "B404"}]
+        loge_id, created = app_module._assurer_loge("B404")
+        assert created is False
+        assert loge_id == 3
+        db_mock.make_sql_update.assert_not_called()
 
 
 # ── Liste des examinateurs — suppression ──────────────────────────────────────
@@ -1421,6 +1553,61 @@ class TestListeExaminateursDelete:
         body = r.data.decode()
         assert "delete_examinateur" not in body
         assert "Supprimer cet examinateur" not in body
+
+
+class TestGestionLoges:
+    """Page de gestion des loges (`/gestion/liste-loges`) : liste avec nombre
+    d'examinateurs rattachés, et suppression uniquement si ce nombre est nul."""
+
+    def test_get_requires_admin(self, client):
+        r = client.get("/gestion/liste-loges", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login" in r.headers["Location"]
+
+    def test_get_admin_renders_list_with_usage(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [
+            {"id": 1, "nom": "B404", "nb_examinateurs": 2},
+            {"id": 2, "nom": "B405", "nb_examinateurs": 0},
+        ]
+        r = admin_client.get("/gestion/liste-loges")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "B404" in body
+        assert "B405" in body
+
+    def test_delete_requires_admin(self, client):
+        r = client.post("/gestion/loge/1/delete", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login" in r.headers["Location"]
+
+    def test_delete_unknown_loge_returns_404(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = []
+        r = admin_client.post("/gestion/loge/999/delete", follow_redirects=False)
+        assert r.status_code == 404
+
+    def test_delete_blocked_when_still_used(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [
+            {"id": 1, "nom": "B404", "nb_examinateurs": 2},
+        ]
+        db_mock.make_sql_update.reset_mock()
+        r = admin_client.post("/gestion/loge/1/delete", follow_redirects=False)
+        assert r.status_code == 400
+        db_mock.make_sql_update.assert_not_called()
+
+    def test_delete_ok_when_orphan(self, admin_client, db_mock, monkeypatch):
+        import app as app_module
+        app_module._save_credentials({"examinateurs": {}, "loges": {"B404": "secret"}})
+        db_mock.make_sql_select.return_value = [
+            {"id": 1, "nom": "B404", "nb_examinateurs": 0},
+        ]
+        db_mock.make_sql_update.reset_mock()
+        r = admin_client.post("/gestion/loge/1/delete", follow_redirects=False)
+        assert r.status_code == 302
+        db_mock.make_sql_update.assert_called_once()
+        _, kwargs = db_mock.make_sql_update.call_args
+        assert kwargs["id"] == 1
+        remaining = app_module._load_credentials()
+        assert "B404" not in remaining.get("loges", {})
 
 
 class TestDeleteExaminateurPurgeCredentials:
@@ -1655,7 +1842,7 @@ class TestCredentialRenewal:
 
     CANDIDAT = {"id": 1, "nom": "Dupont Jean", "numero": "0123456789A"}
     EXAMINATEUR = {"id": 10, "nom": "Martin Sophie", "salle": "A01"}
-    LOGE = {"nom": "Loge A"}
+    LOGE = {"id": 5, "nom": "Loge A"}
 
     # ── Page de gestion ──────────────────────────────────────────────────────
 
@@ -1801,7 +1988,8 @@ class TestCredentialRenewal:
         import app as app_module
         db_mock.make_sql_update.reset_mock()
         db_mock.make_sql_select.side_effect = [
-            [self.LOGE],   # SELECT_LOGE_BY_NOM (validation existence)
+            [self.LOGE],   # SELECT_LOGE_BY_NOM (route : validation existence)
+            [self.LOGE],   # SELECT_LOGE_BY_NOM (_renew_loge : résolution de l'id pour le sel)
             [self.LOGE],   # SELECT_ALL_LOGES_FOR_RENEWAL (_regenerer_papillons_loges)
         ]
         monkeypatch.setattr(app_module.reports, "liste_papillons_loges",
@@ -1811,14 +1999,14 @@ class TestCredentialRenewal:
         assert r.status_code == 302
         db_mock.make_sql_update.assert_called_once()
         _, kwargs = db_mock.make_sql_update.call_args
-        assert kwargs["nom"] == "Loge A"
+        assert kwargs["id"] == 5
         assert "password_hash" in kwargs
 
     def test_renew_all_loges(self, admin_client, db_mock, monkeypatch):
         """Renouveler toutes les loges appelle db_update une fois par loge."""
         import app as app_module
         db_mock.make_sql_update.reset_mock()
-        loges = [{"nom": "Loge A"}, {"nom": "Loge B"}]
+        loges = [{"id": 1, "nom": "Loge A"}, {"id": 2, "nom": "Loge B"}]
         db_mock.make_sql_select.return_value = loges
         monkeypatch.setattr(app_module.reports, "liste_papillons_loges",
                             lambda *a, **kw: None)

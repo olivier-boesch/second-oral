@@ -70,9 +70,10 @@ ORDER BY Examinateur.salle
 
 SELECT_INFOS_SALLE = """
 SELECT Examinateur.id AS id, Examinateur.nom AS nom, Examinateur.salle AS salle,
-       Examinateur.loge AS loge, Matiere.nom AS matiere
+       Loge.nom AS loge, Matiere.nom AS matiere
 FROM Examinateur
     JOIN Matiere ON Examinateur.matiere = Matiere.id
+    JOIN Loge ON Examinateur.loge_id = Loge.id
 WHERE Examinateur.salle = %s
 """
 
@@ -116,19 +117,21 @@ ORDER BY nom, heure
 # ---------- Loge
 
 SELECT_LISTE_LOGES = """
-SELECT DISTINCT Examinateur.loge AS salle
+SELECT DISTINCT Loge.nom AS salle
 FROM Examinateur
-ORDER BY Examinateur.loge
+    JOIN Loge ON Examinateur.loge_id = Loge.id
+ORDER BY Loge.nom
 """
 
 SELECT_INFOS_LOGE = """
-SELECT DISTINCT Examinateur.loge AS salle
+SELECT DISTINCT Loge.nom AS salle
 FROM Examinateur
-WHERE Examinateur.loge = %s
+    JOIN Loge ON Examinateur.loge_id = Loge.id
+WHERE Loge.nom = %s
 """
 
 SELECT_ORAUX_LOGE = """
-SELECT Examinateur.loge AS loge, Candidat.nom AS candidat, Candidat.numero AS numero,
+SELECT Loge.nom AS loge, Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Examinateur.salle AS salle,
        Oral.heure_sujet AS sujet, Oral.mis_a_jour AS maj, Oral.heure_oral AS oral,
        Oral.heure_fin AS fin,
@@ -138,7 +141,8 @@ FROM Oral
     JOIN Candidat ON Oral.candidat = Candidat.id
     JOIN Examinateur ON Oral.examinateur = Examinateur.id
     JOIN Matiere ON Examinateur.matiere = Matiere.id
-WHERE Examinateur.loge = %s
+    JOIN Loge ON Examinateur.loge_id = Loge.id
+WHERE Loge.nom = %s
 ORDER BY sujet, candidat
 """
 
@@ -330,11 +334,12 @@ WHERE Oral.id = %s
 SELECT_LISTE_EXAMINATEURS = """
 SELECT Examinateur.id AS id, Examinateur.nom AS nom,
        Examinateur.etablissements AS etablissements,
-       Examinateur.salle AS salle, Examinateur.loge AS loge,
+       Examinateur.salle AS salle, Loge.nom AS loge,
        Matiere.nom AS matiere, COUNT(Oral.id) AS nb_oraux,
        MAX(Oral.heure_fin) AS heure_fin_journee
 FROM Examinateur
     JOIN Matiere ON Matiere.id = Examinateur.matiere
+    JOIN Loge ON Examinateur.loge_id = Loge.id
     LEFT OUTER JOIN Oral ON Oral.examinateur = Examinateur.id
 GROUP BY Examinateur.nom
 ORDER BY Examinateur.nom
@@ -343,11 +348,12 @@ ORDER BY Examinateur.nom
 SELECT_EXAMINATEUR_INFOS = """
 SELECT Examinateur.id AS id, Examinateur.nom AS nom,
        Examinateur.etablissements AS etablissements,
-       Examinateur.salle AS salle, Examinateur.loge AS loge,
+       Examinateur.salle AS salle, Loge.nom AS loge,
        Matiere.nom AS matiere, COUNT(Oral.id) AS nb_oraux
 FROM Examinateur
     LEFT OUTER JOIN Oral ON Oral.examinateur = Examinateur.id
     JOIN Matiere ON Examinateur.matiere = Matiere.id
+    JOIN Loge ON Examinateur.loge_id = Loge.id
 WHERE Examinateur.id = %s
 GROUP BY Examinateur.nom
 """
@@ -373,13 +379,13 @@ UPDATE Examinateur SET
     Examinateur.nom = %(nom)s,
     Examinateur.etablissements = %(etablissements)s,
     Examinateur.salle = %(salle)s,
-    Examinateur.loge = %(loge)s
+    Examinateur.loge_id = %(loge_id)s
 WHERE Examinateur.id = %(id)s
 """
 
 INSERT_EXAMINATEUR = """
-INSERT INTO Examinateur (nom, etablissements, matiere, salle, loge, password_hash)
-VALUES (%(nom)s, %(etablissements)s, %(matiere)s, %(salle)s, %(loge)s, %(password_hash)s)
+INSERT INTO Examinateur (nom, etablissements, matiere, salle, loge_id, password_hash)
+VALUES (%(nom)s, %(etablissements)s, %(matiere)s, %(salle)s, %(loge_id)s, %(password_hash)s)
 """
 
 # ---------- Renouvellement des identifiants
@@ -406,15 +412,42 @@ UPDATE Examinateur SET password_hash = %(password_hash)s WHERE id = %(id)s
 """
 
 SELECT_ALL_LOGES_FOR_RENEWAL = """
-SELECT nom FROM Loge ORDER BY nom
+SELECT id, nom FROM Loge ORDER BY nom
 """
 
 SELECT_LOGE_BY_NOM = """
-SELECT nom FROM Loge WHERE nom = %s
+SELECT id, nom FROM Loge WHERE nom = %s
 """
 
 UPDATE_LOGE_PASSWORD = """
-UPDATE Loge SET password_hash = %(password_hash)s WHERE nom = %(nom)s
+UPDATE Loge SET password_hash = %(password_hash)s WHERE id = %(id)s
+"""
+
+INSERT_LOGE = """
+INSERT INTO Loge (nom, password_hash)
+VALUES (%(nom)s, %(password_hash)s)
+"""
+
+# ---------- Gestion des loges (page dédiée) ──────────────────────────────────
+
+SELECT_LISTE_LOGES_GESTION = """
+SELECT Loge.id AS id, Loge.nom AS nom, COUNT(Examinateur.id) AS nb_examinateurs
+FROM Loge
+    LEFT OUTER JOIN Examinateur ON Examinateur.loge_id = Loge.id
+GROUP BY Loge.id, Loge.nom
+ORDER BY Loge.nom
+"""
+
+SELECT_LOGE_USAGE = """
+SELECT Loge.id AS id, Loge.nom AS nom, COUNT(Examinateur.id) AS nb_examinateurs
+FROM Loge
+    LEFT OUTER JOIN Examinateur ON Examinateur.loge_id = Loge.id
+WHERE Loge.id = %s
+GROUP BY Loge.id, Loge.nom
+"""
+
+DELETE_LOGE = """
+DELETE FROM Loge WHERE id = %(id)s
 """
 
 # ---------- Documents PDF
@@ -431,9 +464,10 @@ ORDER BY Candidat.nom, Oral.heure_sujet
 
 SELECT_DOC_LISTE_SALLES = """
 SELECT Examinateur.id AS id, Examinateur.nom AS nom, Examinateur.salle AS salle,
-       Examinateur.loge AS loge, Matiere.nom AS matiere
+       Loge.nom AS loge, Matiere.nom AS matiere
 FROM Examinateur
     JOIN Matiere ON Matiere.id = Examinateur.matiere
+    JOIN Loge ON Examinateur.loge_id = Loge.id
 ORDER BY Examinateur.salle
 """
 

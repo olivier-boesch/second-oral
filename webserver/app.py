@@ -1718,6 +1718,48 @@ def liste_examinateurs() -> ResponseReturnValue:
     )
 
 
+@app.route('/gestion/liste-loges')
+@admin_required
+@nocache
+def gestion_loges() -> ResponseReturnValue:
+    """Liste des loges avec leur nombre d'examinateurs rattachés — permet de
+    supprimer celles qui ne sont reliées à aucune salle."""
+    loges = db_get(db_facility_web.SELECT_LISTE_LOGES_GESTION, no_list_auto=False)
+    return render_template(
+        'liste_loges.html',
+        centre=CENTRE_EXAMEN,
+        loges=loges,
+        url_of_page=request.url,
+        username=get_username(),
+        authenticated=is_authenticated(),
+    )
+
+
+@app.route('/gestion/loge/<int:id_loge>/delete', methods=['POST'])
+@admin_required
+@nocache
+def delete_loge(id_loge: int) -> ResponseReturnValue:
+    """Supprime une loge non rattachée à aucun examinateur.
+
+    :param id_loge: Identifiant DB de la loge (table Loge).
+    """
+    # #2 — Action mutante : POST + CSRF (cf. reload_pages — une suppression ne
+    # doit jamais être déclenchable par un simple lien).
+    lignes = db_get(db_facility_web.SELECT_LOGE_USAGE, id_loge, no_list_auto=False)
+    if not lignes:
+        abort(404, "Loge introuvable")
+    loge = lignes[0]
+    if loge['nb_examinateurs']:
+        abort(400, f"La loge « {loge['nom']} » est encore rattachée à "
+                    f"{loge['nb_examinateurs']} examinateur(s).")
+    db_update(db_facility_web.DELETE_LOGE, id=id_loge)
+    # Purge du mot de passe en clair dans le store chiffré (cf. delete_examinateur)
+    creds = _load_credentials()
+    if creds.get("loges", {}).pop(loge['nom'], None) is not None:
+        _save_credentials(creds)
+    return redirect(url_for('gestion_loges'))
+
+
 @app.route('/gestion/liste-candidats')
 @admin_required
 @nocache
@@ -1818,14 +1860,22 @@ def edit_candidat() -> ResponseReturnValue:
 def edit_examinateur() -> ResponseReturnValue:
     """Édition des informations d'un examinateur (nom, salle, loge, établissements)."""
     if request.method == "POST":
+        loge = _loge_soumise(request.form)
+        loge_id, loge_creee = _assurer_loge(loge)
         d = {
             'id': request.form.get('id'),
             'nom': request.form.get('nom'),
             'salle': request.form.get('salle'),
-            'loge': request.form.get('loge'),
+            'loge_id': loge_id,
             'etablissements': ','.join(request.form.getlist('etablissements')),
         }
         db_update(db_facility_web.UPDATE_EXAMINATEUR_INFOS, **d)
+        # Loge inédite : son compte vient d'être créé par _assurer_loge —
+        # régénérer le papillon groupé pour qu'elle y apparaisse (cf.
+        # incident 2026-07-08, une loge renommée sans mise à jour de la
+        # table Loge).
+        if loge_creee:
+            _regenerer_papillons_loges(request.host_url.rstrip('/'))
         url = _safe_redirect_url(request.form.get('link_back'))
         return redirect(url or url_for('liste_examinateurs'))
 
@@ -1838,6 +1888,7 @@ def edit_examinateur() -> ResponseReturnValue:
     liste_oraux = db_get(
         db_facility_web.SELECT_ORAUX_EXAMINATEUR, id_examinateur, no_list_auto=False
     )
+    liste_loges = db_get(db_facility_web.SELECT_ALL_LOGES_FOR_RENEWAL, no_list_auto=False)
     etablissements_actuels = set(
         e.strip() for e in (donnees_examinateur.get('etablissements') or '').split(',') if e.strip()
     )
@@ -1848,6 +1899,7 @@ def edit_examinateur() -> ResponseReturnValue:
         etablissements_actuels=etablissements_actuels,
         liste_lycees=_LYCEES_DISPLAY,
         liste_oraux=liste_oraux,
+        liste_loges=liste_loges,
         url_of_page=request.url,
         link_back=url,
         username=get_username(),
@@ -2646,22 +2698,26 @@ def add_examinateur() -> ResponseReturnValue:
         salle = (request.form.get('salle') or '').strip()
         if not nom or not salle:
             liste_matieres = db_get(db_facility_web.SELECT_LISTE_MATIERES, no_list_auto=False)
+            liste_loges = db_get(db_facility_web.SELECT_ALL_LOGES_FOR_RENEWAL, no_list_auto=False)
             return render_template(
                 "add_examinateur.html",
                 centre=CENTRE_EXAMEN,
                 liste_matieres=liste_matieres,
                 liste_lycees=_LYCEES_DISPLAY,
+                liste_loges=liste_loges,
                 url_of_page=request.url,
                 username=get_username(),
                 erreur="Le nom et le numéro de salle sont obligatoires.",
             ), 400
 
         password = generate_password()
+        loge = _loge_soumise(request.form)
+        loge_id, loge_creee = _assurer_loge(loge)
         d = {
             'nom': nom,
             'salle': salle,
             'matiere': request.form.get('matiere'),
-            'loge': request.form.get('loge'),
+            'loge_id': loge_id,
             'etablissements': ','.join(request.form.getlist('etablissements')),
             'password_hash': hash_password(password, salle),
         }
@@ -2675,6 +2731,10 @@ def add_examinateur() -> ResponseReturnValue:
         base_url = request.host_url.rstrip('/')
         papillon_filename = 'papillons_examinateurs.pdf'
         _regenerer_papillons_examinateurs(base_url)
+        # Loge inédite : son compte vient d'être créé par _assurer_loge —
+        # régénérer le papillon groupé pour qu'elle y apparaisse.
+        if loge_creee:
+            _regenerer_papillons_loges(base_url)
         # Renfort inédit : un examinateur nouvellement ajouté avec une matière
         # peut recevoir dès maintenant une partie des oraux déjà en cours
         # pour cette matière (cf. docs/workflow_admin.md) — suggestion, pas
@@ -2689,11 +2749,13 @@ def add_examinateur() -> ResponseReturnValue:
 
     # GET
     liste_matieres = db_get(db_facility_web.SELECT_LISTE_MATIERES, no_list_auto=False)
+    liste_loges = db_get(db_facility_web.SELECT_ALL_LOGES_FOR_RENEWAL, no_list_auto=False)
     return render_template(
         "add_examinateur.html",
         centre=CENTRE_EXAMEN,
         liste_matieres=liste_matieres,
         liste_lycees=_LYCEES_DISPLAY,
+        liste_loges=liste_loges,
         url_of_page=request.url,
         username=get_username(),
     )
@@ -3536,18 +3598,67 @@ def _renew_loge(nom_loge: str) -> str:
     """Génère un nouveau mot de passe pour une loge, met à jour DB et store chiffré.
 
     Le mot de passe d'une loge est partagé entre tous les agents de surveillance
-    de cette loge. La clé dans le store chiffré est le nom de la loge.
+    de cette loge. La clé dans le store chiffré est le nom de la loge ; le sel
+    du hash est l'id de la loge (stable — un renommage ultérieur ne l'invalide
+    pas), pas son nom.
 
-    :param nom_loge: Nom de la loge (clé primaire de la table Loge).
+    :param nom_loge: Nom de la loge (table Loge).
     :returns: Nouveau mot de passe en clair (pour génération du papillon).
     """
+    loge_id = db_get(db_facility_web.SELECT_LOGE_BY_NOM, nom_loge, no_list_auto=False)[0]['id']
     new_password = generate_password()
-    new_hash = hash_password(new_password, nom_loge)
-    db_update(db_facility_web.UPDATE_LOGE_PASSWORD, nom=nom_loge, password_hash=new_hash)
+    new_hash = hash_password(new_password, str(loge_id))
+    db_update(db_facility_web.UPDATE_LOGE_PASSWORD, id=loge_id, password_hash=new_hash)
     creds = _load_credentials()
     creds.setdefault("loges", {})[nom_loge] = new_password
     _save_credentials(creds)
     return new_password
+
+
+_LOGE_NOUVELLE_SENTINEL = "__nouvelle_loge__"
+
+
+def _loge_soumise(form) -> str:
+    """Résout le nom de loge soumis par add/edit-examinateur.
+
+    Le select propose les loges existantes plus une option sentinelle
+    (:data:`_LOGE_NOUVELLE_SENTINEL`) qui bascule sur le champ texte
+    `nouvelle_loge` (révélé en JS) — permet de créer une loge inédite sans
+    quitter le formulaire.
+    """
+    loge = (form.get('loge') or '').strip()
+    if loge == _LOGE_NOUVELLE_SENTINEL:
+        loge = (form.get('nouvelle_loge') or '').strip()
+    return loge
+
+
+def _assurer_loge(nom_loge: str) -> tuple[int, bool]:
+    """Retourne l'id de la loge nom_loge, en la créant en base si besoin.
+
+    Sans cela, un examinateur peut être rattaché (via add/edit-examinateur) à un
+    nom de loge qui n'a jamais de compte associé : la connexion échoue alors
+    silencieusement (0 ligne en base) et papillons_loges.pdf ne le liste jamais,
+    puisqu'il est généré depuis la table Loge et non depuis Examinateur.loge_id.
+
+    Le sel du mot de passe est l'id de la loge (stable), pas son nom (mutable) —
+    un renommage ultérieur n'invalide donc pas son authentification. L'id
+    n'étant connu qu'après l'INSERT (AUTO_INCREMENT), le hash est calculé et
+    posé dans un second temps.
+
+    :param nom_loge: Nom de la loge tel que saisi sur le formulaire examinateur.
+    :returns: (id de la loge, True si elle vient d'être créée — papillon à régénérer).
+    """
+    existante = db_get(db_facility_web.SELECT_LOGE_BY_NOM, nom_loge, no_list_auto=False)
+    if existante:
+        return existante[0]['id'], False
+    loge_id = db_update(db_facility_web.INSERT_LOGE, nom=nom_loge, password_hash='')
+    password = generate_password()
+    db_update(db_facility_web.UPDATE_LOGE_PASSWORD, id=loge_id,
+              password_hash=hash_password(password, str(loge_id)))
+    creds = _load_credentials()
+    creds.setdefault("loges", {})[nom_loge] = password
+    _save_credentials(creds)
+    return loge_id, True
 
 
 def _regenerer_papillons_examinateurs(base_url: str) -> None:

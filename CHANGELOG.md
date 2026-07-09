@@ -4,6 +4,14 @@
 
 ### Changed
 
+**Loges — `Examinateur.loge_id` devient une clé étrangère vers `Loge.id`**
+- Remplace `Examinateur.loge` (texte libre dupliqué, sans lien avec la table `Loge`) — cause racine de l'incident 2026-07-08 (loge renommée → authentification cassée + papillon désynchronisé, cf. Fixed ci-dessous). `Loge.nom` passe en `VARCHAR(190) UNIQUE` (`TEXT` sans contrainte auparavant — deux loges de même nom pouvaient coexister sans avertissement).
+- **Le sel du hash du mot de passe de loge est désormais l'`id`** (stable) au lieu du `nom` (mutable) : `hash_password(pw, str(id))`. Un renommage (`UPDATE Loge SET nom = ...`) n'invalide donc plus l'authentification — contrairement à avant, où la connexion cassait même en gardant le bon mot de passe.
+- `algo.py` (`AlgoOne.save()`) : un id est désormais assigné à chaque loge (ordre alphabétique des noms, comme `idx` pour Matiere/Candidat/Examinateur/Oral) *avant* la sauvegarde en base, puisque `Examinateur.loge_id` (FK) doit référencer une ligne `Loge` déjà insérée — `db.save_loges(...)` est donc appelé avant `db.save_all(...)` (ordre inverse de avant).
+- `webserver/app.py` : `_assurer_loge()` insère la loge avec un hash provisoire vide, récupère l'id auto-incrémenté (`db_update` renvoie `cursor.lastrowid`), puis pose le hash définitif salé par cet id (`UPDATE_LOGE_PASSWORD`) ; `_renew_loge()` résout de même l'id avant de recalculer le hash.
+- Toutes les requêtes lisant `Examinateur.loge` (`db_facility_web.py`) passent par un `JOIN Loge ON Examinateur.loge_id = Loge.id`, en gardant l'alias `AS loge` — aucun changement côté lecture dans `app.py` (`exam['loge']` continue de fonctionner).
+- **Effectif au prochain lancement complet d'`algo.py`** (qui recrée tout le schéma) — aucune migration de la base en cours n'est nécessaire ni prévue.
+
 **UX — navigation admin et fusion Jour J / Monitoring**
 - Réorganisation de l'ordre des icônes de la barre latérale admin (`admin_nav.html`) selon la chronologie de préparation : **Algorithme → Identifiants → Documents** (configuration technique — le placement génère les identifiants, repris dans les documents/papillons), puis **Candidats → Examinateurs** (référentiels), puis **Oraux → Jour J** (pilotage en direct). Auparavant, l'ordre mélangeait référentiels et configuration sans logique explicite (Monitoring rangé avec Documents/Algorithme/Identifiants alors qu'il s'agit de supervision technique, pas de configuration).
 - **Fusion de `/gestion/monitoring` dans `/gestion/jour-j`** : la page Monitoring (requêtes HTTP, activité 24 h, sessions actives, échecs d'authentification, rappel de purge des PDFs) devient une section « 📊 Supervision technique » repliable (`<details>`) en bas du hub Jour J, pour ne pas polluer les actions rapides de pilotage (état algo/pause méridienne, disponibilité examinateur, changement de matière) tout en évitant une entrée de navigation séparée pour deux tableaux de bord consultés au même moment le jour de l'épreuve. Le polling AJAX (10 s, route JSON `/gestion/monitoring/data` inchangée) et l'ancien script sont fusionnés dans un seul bloc `<script nonce>` — l'ancien `<script>` de `jour_j.html` n'avait pas de nonce et était donc potentiellement bloqué par la CSP (`strict-dynamic` ignore `unsafe-inline` en présence d'un nonce), corrigé au passage.
@@ -20,6 +28,10 @@
 - `cp_timeout` (délai max du solveur CP-SAT, `/gestion/algo`) : plafond relevé de 600s à 1200s (20 min), backend et champ du formulaire.
 
 ### Added
+
+**Gestion des loges**
+- Nouvelle page `/gestion/liste-loges` (icône dédiée dans la barre latérale admin) : liste chaque loge avec son nombre d'examinateurs rattachés, un bouton "↺ Renouveler" et un bouton de suppression **actif uniquement si ce nombre est nul** (`SELECT_LOGE_USAGE`/`DELETE_LOGE`) — purge aussi l'entrée correspondante dans `credentials.enc` (même principe que `delete_examinateur`).
+- `/gestion/add-examinateur` et `/gestion/edit-examinateur` : le champ « Loge » passe d'un texte libre à une liste déroulante des loges existantes, avec une option **➕ Nouvelle loge…** qui révèle un champ texte (petit script `<script nonce>`, pattern déjà utilisé ailleurs pour les selects dépendants) — permet de créer une loge inédite sans quitter le formulaire, tout en rendant impossible d'assigner un nom de loge sans compte associé (cf. Changed ci-dessus).
 
 **Algorithme de placement (suite 5) — heure de fin de journée**
 - Nouvelle colonne **Fin de journée** sur `/gestion/liste-examinateurs` : heure de fin du dernier oral de chaque examinateur (`MAX(Oral.heure_fin)` ajouté à `SELECT_LISTE_EXAMINATEURS`), `—` si l'examinateur n'a aucun oral
@@ -256,6 +268,19 @@
 
 **Tests (suite 16)**
 - `tests/integration/test_flask_routes.py::TestDeleteExaminateurPurgeCredentials` : la suppression d'un examinateur ayant une entrée dans le vault la retire bien ; aucun plantage si l'examinateur n'y avait jamais eu d'entrée
+
+- **Loge inédite via `/gestion/add-examinateur` ou `/gestion/edit-examinateur` (incident 2026-07-08)** : le champ « Loge » est un texte libre qui écrit directement `Examinateur.loge`, sans jamais toucher à la table `Loge` (source de vérité de l'authentification et de `papillons_loges.pdf`, qui la lit indépendamment de `Examinateur.loge`). Assigner un nom de loge inédit laissait donc la connexion échouer silencieusement (0 ligne `Loge` correspondante) et le papillon continuer d'afficher l'ancien nom, seul encore présent en table. Nouvelle fonction `_assurer_loge()` (`app.py`), appelée depuis les deux routes : crée la ligne `Loge` + son mot de passe (haché, salé avec le nouveau nom) si elle n'existe pas déjà, met à jour `credentials.enc` et régénère `papillons_loges.pdf`. Ne couvre pas le renommage d'une loge existante (ex. `Examinateur.loge` modifié directement en base) — la ligne `Loge` orpheline doit encore être renommée à la main puis renouvelée via `/gestion/credentials` ; documenté dans `docs/workflow_admin.md`.
+- **Tests d'intégration écrivant pour de vrai sur disque** : plusieurs tests déclenchant `_save_credentials()` (`TestAddExaminateur`, `TestCredentialRenewal::test_renew_loge_updates_db`/`test_renew_all_loges`, `test_renew_examinateur_updates_db`/`test_renew_all_examinateurs`) ne mockaient pas `_CREDENTIALS_FILE` — `_DATA_DIR` est une constante calculée une seule fois à l'import d'`app.py` à partir d'`app.root_path`, donc figée pour toute la session de test quel que soit le test qui s'exécute. Un run de la suite écrivait ainsi un vrai `credentials.enc` (chiffré avec la clé de test) hors du repo, à un chemin déterminé par la résolution de root_path de Flask/pytest — constaté concrètement dans `~/data/credentials.enc`. Nouvelle fixture autouse `_isolate_credentials_store` (`tests/integration/conftest.py`) qui redirige `_DATA_DIR`/`_CREDENTIALS_FILE`/`_CREDENTIALS_TMP_FILE` vers `tmp_path` pour chaque test, sans avoir à y penser test par test.
+
+**Tests (suite 19)**
+- `tests/integration/test_flask_routes.py::TestAssurerLoge` : crée la loge (DB + `credentials.enc`) quand son nom est inédit ; ne fait rien si elle existe déjà
+- `tests/integration/test_flask_routes.py::TestAddExaminateur::test_post_creates_missing_loge`/`test_post_existing_loge_not_recreated` : câblage de `_assurer_loge()` depuis `/gestion/add-examinateur`
+- `tests/integration/test_flask_routes.py::TestEditExaminateur::test_post_creates_missing_loge`/`test_post_existing_loge_not_recreated` : idem depuis `/gestion/edit-examinateur`
+
+**Tests (suite 20) — `Examinateur.loge_id` (FK)**
+- `tests/unit/test_db_facility_save.py::TestSchemaLogeId` : `Loge` créée avant `Examinateur` dans `SQL_BASE`, FK `loge_id → Loge(id)` présente, `Loge.nom UNIQUE`, `SQL_INSERT_LOGES`/`SQL_INSERT_EXAMINATEURS` utilisent bien un id explicite
+- `tests/unit/test_algo.py::TestSaveLogeId` : id assigné par loge (ordre alphabétique), `Examinateur.loge_id` correctement posé, `save_loges()` appelé avant `save_all()`, mots de passe hachés (non vides)
+- `tests/integration/test_flask_routes.py::TestGestionLoges` : page `/gestion/liste-loges` (auth admin, affichage du nombre d'examinateurs) ; suppression bloquée si encore utilisée (400), 404 si inconnue, purge de `credentials.enc` si orpheline
 
 ### Removed
 

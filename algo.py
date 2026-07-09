@@ -380,6 +380,7 @@ class Examinateur:
         self.oraux: list[Union["Oral", None, CreneauInterdit]] = [None] * max_creneaux_journee
         self.salle: str = salle
         self.loge = loge
+        self.loge_id: int | None = None  # assigné par AlgoOne.save() avant to_dict()
         self.heure_debut: time = heure_debut
         self.idx = None
         self.etablissements = etablissements.split(',')
@@ -408,7 +409,7 @@ class Examinateur:
             'nom': self.nom,
             'matiere': self.matiere.idx,
             'salle': self.salle,
-            'loge': self.loge,
+            'loge_id': self.loge_id,
             'etablissements': ','.join(self.etablissements),
             'password_hash': hash_password(self.mot_de_passe, self.salle),
         }
@@ -801,8 +802,39 @@ class AlgoOne:
                 if e.salle in existing_exam_pw:
                     e.mot_de_passe = existing_exam_pw[e.salle]
 
+        # ── Loges : un mot de passe + un id uniques par loge ───────────────────
+        # Le sel du hash est désormais l'id (stable), pas le nom (mutable) :
+        # renommer une loge après coup n'invalide plus son authentification.
+        # Assigné ici, avant save_all(), car Examinateur.loge_id (FK) doit
+        # référencer une ligne Loge déjà en base.
+        existing_loge_pw: dict[str, str] = existing_store.get("loges", {})
+        loges_mdp: dict[str, str] = {}
+        for examinateur in self.liste_examinateurs:
+            loge = examinateur.loge
+            if loge not in loges_mdp:
+                loges_mdp[loge] = (
+                    existing_loge_pw[loge]
+                    if loge in existing_loge_pw
+                    else generate_password()
+                )
+        loge_ids: dict[str, int] = {nom: i + 1 for i, nom in enumerate(sorted(loges_mdp))}
+        for examinateur in self.liste_examinateurs:
+            examinateur.loge_id = loge_ids[examinateur.loge]
+        # hash_password() (scrypt) relâche le GIL — un pool de threads parallélise
+        # ces appels indépendants (cf. commentaire équivalent dans save_all()).
+        with ThreadPoolExecutor() as pool:
+            loges_hashes = dict(pool.map(
+                lambda kv: (kv[0], hash_password(kv[1], str(loge_ids[kv[0]]))),
+                loges_mdp.items(),
+            ))
+
         # ── Recréer les tables et insérer toutes les données ───────────────────
+        # Loge avant save_all() (Examinateur.loge_id référence Loge.id).
         db = DbFacility()
+        db.save_loges([
+            {'id': loge_ids[nom], 'nom': nom, 'password_hash': h}
+            for nom, h in loges_hashes.items()
+        ])
         db.save_all(self)
 
         # ── Examinateurs : (salle, nom, mot_de_passe) ──────────────────────────
@@ -817,25 +849,6 @@ class AlgoOne:
             key=lambda d: d['nom'],
         )
 
-        # ── Loges : un mot de passe unique par loge ────────────────────────────
-        existing_loge_pw: dict[str, str] = existing_store.get("loges", {})
-        loges_mdp: dict[str, str] = {}
-        for examinateur in self.liste_examinateurs:
-            loge = examinateur.loge
-            if loge not in loges_mdp:
-                loges_mdp[loge] = (
-                    existing_loge_pw[loge]
-                    if loge in existing_loge_pw
-                    else generate_password()
-                )
-        # hash_password() (scrypt) relâche le GIL — un pool de threads parallélise
-        # ces appels indépendants (cf. commentaire équivalent dans save_all()).
-        with ThreadPoolExecutor() as pool:
-            loges_hashes = dict(pool.map(
-                lambda kv: (kv[0], hash_password(kv[1], kv[0])),
-                loges_mdp.items(),
-            ))
-        db.save_loges(loges_hashes)
         liste_loges = sorted(
             [(nom, mdp) for nom, mdp in loges_mdp.items()],
             key=lambda t: t[0],
