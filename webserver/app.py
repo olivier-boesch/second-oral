@@ -1797,26 +1797,6 @@ def rename_loge(id_loge: int) -> ResponseReturnValue:
     return redirect(url_for('gestion_loges'))
 
 
-@app.route('/gestion/liste-candidats')
-@admin_required
-@nocache
-def liste_candidats() -> ResponseReturnValue:
-    """Liste des candidats avec accès à l'édition de leurs informations."""
-    candidats = db_get(db_facility_web.SELECT_ALL_CANDIDATS, no_list_auto=False)
-    _raw = request.args.get('new_papillon', '')
-    # Valider le nom de fichier (même règle que la route /download — anti path-traversal)
-    new_papillon = _raw if re.match(r'^[\w\-. ]+\.pdf$', _raw) else ''
-    return render_template(
-        'liste_candidats.html',
-        centre=CENTRE_EXAMEN,
-        candidats=candidats,
-        url_of_page=request.url,
-        username=get_username(),
-        authenticated=is_authenticated(),
-        new_papillon=new_papillon,
-    )
-
-
 @app.route('/gestion/edit-candidat', methods=['GET', 'POST'])
 @admin_required
 @nocache
@@ -1873,7 +1853,7 @@ def edit_candidat() -> ResponseReturnValue:
             telephone=telephone,
         )
         url = _safe_redirect_url(request.form.get('link_back'))
-        return redirect(url or url_for('liste_candidats'))
+        return redirect(url or url_for('index_gestion'))
 
     # GET
     id_candidat_arg = request.args.get('id', None)

@@ -54,7 +54,7 @@
             suivants chez ses deux examinateurs pour ne jamais les chevaucher — mêmes
             notifications que via
             <a href="{{ url_for('declarer_tiers_temps_candidat', id_candidat=donnees_candidat['id']) }}">⏱️ Déclarer/Retirer</a>
-            sur la liste des candidats.
+            sur la page de gestion des oraux.
         </small>
     </p>
     <div style="display:flex; gap:.6em; justify-content:center; align-items:center; margin-top:1.5em;">
@@ -64,11 +64,18 @@
             Reset
         </button>
         <button type="button" class="outline"
-                onclick="document.location='{% if link_back %}{{ link_back }}{% else %}{{ url_for('liste_candidats') }}{% endif %}';">
+                onclick="document.location='{% if link_back %}{{ link_back }}{% else %}{{ url_for('index_gestion') }}{% endif %}';">
             Annuler
         </button>
     </div>
 </form>
+
+{% if donnees_candidat.get('matiere1') and donnees_candidat.get('matiere2') %}
+<p style="margin-top:1.5em; padding-top:1em; border-top:1px solid var(--border, #ddd);">
+    <strong>Matières choisies :</strong> {{ donnees_candidat['matiere1'] }}, {{ donnees_candidat['matiere2'] }}<br>
+    <a href="{{ url_for('changer_matiere_candidat', id_candidat=donnees_candidat['id']) }}">🔄 Changer une matière</a>
+</p>
+{% endif %}
 </div>
 <script>
 function onTiersTempsChange(checkbox) {

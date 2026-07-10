@@ -1233,23 +1233,38 @@ class TestCandidatRoutes:
         assert "telephone" not in dfw.SELECT_INFOS_CANDIDAT.lower()
 
 
-class TestListeCandidatsTelephone:
-    """Le numéro de mobile est visible dans /gestion/liste-candidats (admin
-    uniquement, cf. docs/securite.md#rgpd)."""
+class TestIndexGestionFusionCandidatOraux:
+    """Vue fusionnée candidat + oraux (2026-07-09) : /gestion affiche désormais
+    nom/numéro/téléphone/tiers-temps + les 2 oraux, /gestion/liste-candidats
+    (page séparée) a été supprimée."""
 
-    def test_get_requires_admin(self, client):
-        r = client.get("/gestion/liste-candidats", follow_redirects=False)
-        assert r.status_code == 302
-        assert "/login" in r.headers["Location"]
+    ORAUX_CANDIDAT_UNIQUE = [
+        {"id_oral": 10, "id_candidat": 1, "nom": "Dupont Jean", "numero": "111111111AA",
+         "tiers_temps": 0, "telephone": "0612345678", "matiere": "Maths",
+         "heure": "08:00", "heure_sujet": "08:00", "heure_oral": "08:15",
+         "heure_fin": "09:15", "salle": "A01", "maj": 0},
+        {"id_oral": 11, "id_candidat": 1, "nom": "Dupont Jean", "numero": "111111111AA",
+         "tiers_temps": 0, "telephone": "0612345678", "matiere": "Philo",
+         "heure": "10:00", "heure_sujet": "10:00", "heure_oral": "10:15",
+         "heure_fin": "11:15", "salle": "B02", "maj": 0},
+    ]
 
-    def test_telephone_displayed(self, admin_client, db_mock):
-        db_mock.make_sql_select.return_value = [
-            {"id": 1, "nom": "Dupont Jean", "numero": "111111111AA",
-             "tiers_temps": 0, "telephone": "0612345678"},
-        ]
-        r = admin_client.get("/gestion/liste-candidats")
+    def test_liste_candidats_endpoint_removed(self, flask_app):
+        assert "liste_candidats" not in flask_app.view_functions
+
+    def test_telephone_and_edit_link_displayed(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = self.ORAUX_CANDIDAT_UNIQUE
+        r = admin_client.get("/gestion")
         assert r.status_code == 200
-        assert "0612345678" in r.data.decode()
+        body = r.data.decode()
+        assert "0612345678" in body
+        assert "111111111AA" in body
+        assert "/gestion/edit-candidat?id=1" in body
+
+    def test_no_link_to_removed_liste_candidats(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = self.ORAUX_CANDIDAT_UNIQUE
+        r = admin_client.get("/gestion")
+        assert "/gestion/liste-candidats" not in r.data.decode()
 
 
 # ── Archive de fin de session (zip) ───────────────────────────────────────────

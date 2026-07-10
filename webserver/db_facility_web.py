@@ -35,8 +35,11 @@ WHERE Candidat.numero = %s
 SELECT_INFOS_CANDIDAT_BY_ID = """
 SELECT Candidat.id AS id, Candidat.nom AS nom, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Candidat.login_key AS login_key,
-       Candidat.telephone AS telephone
+       Candidat.telephone AS telephone, Candidat.choix1 AS choix1, Candidat.choix2 AS choix2,
+       m1.nom AS matiere1, m2.nom AS matiere2
 FROM Candidat
+    JOIN Matiere m1 ON Candidat.choix1 = m1.id
+    JOIN Matiere m2 ON Candidat.choix2 = m2.id
 WHERE Candidat.id = %s
 """
 
@@ -108,6 +111,7 @@ SELECT id, nom, password_hash FROM Loge WHERE nom = %s
 SELECT_LISTE_ORAUX = """
 SELECT Oral.id AS id_oral, Candidat.id AS id_candidat, Candidat.nom AS nom,
        Candidat.numero AS numero, Candidat.tiers_temps AS tiers_temps,
+       Candidat.telephone AS telephone,
        Matiere.nom AS matiere, Oral.heure_sujet AS heure,
        Oral.heure_sujet AS heure_sujet, Oral.heure_oral AS heure_oral,
        Oral.heure_fin AS heure_fin,

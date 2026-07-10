@@ -85,8 +85,7 @@ second_oral/
         ├── loge.html            Fiche loge + minuteurs
         ├── liste.html           Liste générale (grand écran)
         ├── sign.html            Signature dématérialisée
-        ├── index_gestion.html   Liste des oraux (admin)
-        ├── liste_candidats.html Liste des candidats (admin)
+        ├── index_gestion.html   Vue candidats + oraux fusionnée (admin)
         ├── liste_examinateurs.html
         ├── gestion_algo.html    Upload + paramètres + lancement algo
         ├── gestion_documents.html  Téléchargement centralisé des PDFs

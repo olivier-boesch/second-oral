@@ -117,6 +117,25 @@ class TestEditCandidatTelephone:
         assert "0612345678" in r.data.decode()
 
 
+class TestEditCandidatMatieres:
+    """Fusion vue candidat/oraux (2026-07-09) : la fiche d'édition expose
+    aussi les matières actuelles + un lien vers changer_matiere_candidat,
+    remplaçant le bouton '🔄 Changer' de l'ancienne liste des candidats."""
+
+    def test_get_renders_matieres_and_change_link(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [{
+            "id": 100, "nom": "Cand Test", "numero": "N100", "tiers_temps": 0,
+            "login_key": "k", "telephone": "", "choix1": 1, "choix2": 2,
+            "matiere1": "Maths", "matiere2": "Philo",
+        }]
+        r = admin_client.get("/gestion/edit-candidat?id=100")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "Maths" in body
+        assert "Philo" in body
+        assert "/gestion/candidat/changer-matiere?id_candidat=100" in body
+
+
 class TestEditCandidatDeclareTiersTemps:
     def test_cocher_declenche_la_cascade(self, admin_client, db_mock, monkeypatch):
         import app as app_module

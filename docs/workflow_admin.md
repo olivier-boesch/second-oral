@@ -119,7 +119,7 @@ Leroy Sophie (1122334455C);Mana;Droit Eco;0;Cézanne;Dupont,Bernard;
 - La colonne `Profs` peut être vide (laisser le champ vide, pas d'espace)
 - Un candidat avec tiers-temps (`TT=1`) bénéficie automatiquement d'un temps de préparation majoré d'un tiers
 - La colonne `Etab` empêche l'algorithme d'assigner un examinateur du même établissement que le candidat
-- La colonne `Téléphone` est optionnelle (peut être absente du fichier ou vide) : visible et modifiable uniquement par l'administrateur depuis `/gestion/liste-candidats` → éditer, jamais transmise au candidat, aux examinateurs ni à l'archive zip de fin de session (cf. [securite.md](securite.md#rgpd))
+- La colonne `Téléphone` est optionnelle (peut être absente du fichier ou vide) : visible et modifiable uniquement par l'administrateur depuis `/gestion` → clic sur le nom du candidat, jamais transmise au candidat, aux examinateurs ni à l'archive zip de fin de session (cf. [securite.md](securite.md#rgpd))
 
 ---
 
@@ -324,7 +324,7 @@ Ces deux résolutions poussées peuvent être relancées successivement depuis l
 
 ### Changement de matière d'un candidat en cours de journée
 
-`/gestion/liste-candidats` → bouton **🔄 Changer** sur la ligne du candidat concerné.
+`/gestion` → clic sur le nom du candidat (page d'édition) → lien **🔄 Changer une matière**.
 
 Permet de traiter le cas d'un élève qui change de matière le jour J, après que l'algorithme a déjà placé les oraux : un des deux oraux du candidat (choix1 ou choix2) doit être remplacé par un oral dans la nouvelle matière, avec un nouvel examinateur et potentiellement un nouvel horaire.
 
@@ -339,8 +339,9 @@ Le flux se déroule en 3 étapes, sur le même modèle que la disponibilité exa
 
 ### Déclaration (ou retrait) de tiers-temps d'un candidat en cours de journée
 
-`/gestion/liste-candidats` → bouton **⏱️ Déclarer** (ou **⏱️ Retirer** si le candidat a déjà un
-tiers-temps) sur la ligne du candidat concerné.
+`/gestion` → clic sur le nom du candidat (page d'édition) → case à cocher **Tiers temps**
+(bascule immédiate avec confirmation), ou lien **⏱️ Déclarer/Retirer** pour l'écran de
+prévisualisation détaillé décrit ci-dessous.
 
 Permet de traiter le cas d'un élève qui déclare un tiers-temps le jour J, après que l'algorithme a
 déjà placé les oraux — ou l'inverse, si un tiers-temps a été posé par erreur. Ses deux oraux voient
@@ -396,7 +397,7 @@ sans adaptation possible (rien à adapter).
 
 > **Cas d'usage :** un examinateur perd son papillon → aller sur `/gestion/credentials`, cliquer "Renouveler" sur la ligne de cet examinateur → un nouveau papillon PDF est regénéré et disponible au téléchargement.
 
-**Renouvellement individuel depuis les listes :** `/gestion/liste-candidats` et `/gestion/liste-examinateurs` disposent chacune d'une colonne **Identifiants** avec un bouton "↺ Renouveler" par ligne. C'est un raccourci vers la même action que ci-dessus, sans quitter la liste : l'admin reste sur la page après renouvellement, avec un message en haut de page pointant vers le fichier de lot regénéré (même bandeau que sur `/gestion/credentials`).
+**Renouvellement individuel depuis la liste des examinateurs :** `/gestion/liste-examinateurs` dispose d'une colonne **Identifiants** avec un bouton "↺ Renouveler" par ligne — raccourci vers la même action que ci-dessus, sans quitter la liste. Pour les candidats, ce raccourci n'existe pas dans la vue fusionnée `/gestion` (nom/numéro/téléphone/tiers-temps/oraux) — le renouvellement individuel se fait depuis `/gestion/credentials`.
 
 ### Gestion des loges
 
