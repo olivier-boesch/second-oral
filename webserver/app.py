@@ -1801,22 +1801,19 @@ def rename_loge(id_loge: int) -> ResponseReturnValue:
 @admin_required
 @nocache
 def edit_candidat() -> ResponseReturnValue:
-    """Édition des informations d'un candidat (nom, numéro, tiers temps, téléphone).
+    """Édition des informations d'un candidat (nom, numéro, téléphone).
 
-    Cocher/décocher « Tiers temps » pour un candidat dont l'état change
-    déclenche la même adaptation d'horaires que /gestion/candidat/tiers-temps
-    (extension — ou réduction — de préparation des deux oraux + cascade sur
-    les oraux suivants des deux examinateurs concernés) — cf.
-    docs/workflow_admin.md. Si le candidat n'a pas encore d'oral publié
-    (avant tout lancement d'algo), la case ne fait que poser/retirer le
-    flag, sans adaptation possible (rien à adapter).
+    Le tiers temps ne se modifie plus depuis ce formulaire — le lien
+    ⏱️ Déclarer/Retirer renvoie vers /gestion/candidat/tiers-temps, seule
+    route qui applique l'adaptation d'horaires (extension/réduction de
+    préparation + cascade sur les oraux suivants) avec prévisualisation —
+    cf. docs/workflow_admin.md.
     """
     if request.method == 'POST':
         id_candidat_str = request.form.get('id')
         nom = (request.form.get('nom') or '').strip()
         numero = (request.form.get('numero') or '').strip()
         telephone = (request.form.get('telephone') or '').strip()
-        nouveau_tiers_temps = 1 if request.form.get('tiers_temps') == 'on' else 0
         if not nom or not numero or not id_candidat_str:
             abort(400, "Nom et numéro sont obligatoires")
         id_candidat = int(id_candidat_str)
@@ -1824,33 +1821,11 @@ def edit_candidat() -> ResponseReturnValue:
         candidat_actuel = db_get(db_facility_web.SELECT_CANDIDAT_TIERS_TEMPS, id_candidat)
         if not candidat_actuel:
             abort(404, "Candidat introuvable")
-        tiers_temps_change = bool(nouveau_tiers_temps) != bool(candidat_actuel['tiers_temps'])
-
-        if tiers_temps_change:
-            plan = _calculer_plan_tiers_temps(id_candidat, activer=bool(nouveau_tiers_temps))
-            if plan is not None and plan.conflit_bloquant:
-                url = _safe_redirect_url(request.form.get('link_back'))
-                donnees_candidat = dict(candidat_actuel)
-                donnees_candidat['nom'] = nom
-                donnees_candidat['numero'] = numero
-                donnees_candidat['telephone'] = telephone
-                return render_template(
-                    'edit_candidat.html',
-                    centre=CENTRE_EXAMEN,
-                    donnees_candidat=donnees_candidat,
-                    url_of_page=request.url,
-                    link_back=url,
-                    username=get_username(),
-                    authenticated=is_authenticated(),
-                    error_msg=plan.conflit_bloquant,
-                ), 400
-            if plan is not None:
-                _appliquer_oraux_tiers_temps(plan)
 
         db_update(
             db_facility_web.UPDATE_CANDIDAT_INFOS,
-            id=id_candidat, nom=nom, numero=numero, tiers_temps=nouveau_tiers_temps,
-            telephone=telephone,
+            id=id_candidat, nom=nom, numero=numero,
+            tiers_temps=candidat_actuel['tiers_temps'], telephone=telephone,
         )
         url = _safe_redirect_url(request.form.get('link_back'))
         return redirect(url or url_for('index_gestion'))
@@ -1860,7 +1835,7 @@ def edit_candidat() -> ResponseReturnValue:
     if id_candidat_arg is None:
         abort(404, "Pas de candidat avec cet identifiant")
     donnees_candidat = db_get(db_facility_web.SELECT_INFOS_CANDIDAT_BY_ID, id_candidat_arg)
-    if donnees_candidat is None:
+    if not donnees_candidat:
         abort(404, "Candidat introuvable")
     url = _safe_redirect_url(request.args.get('link_back'))
     return render_template(

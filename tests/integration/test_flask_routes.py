@@ -1279,6 +1279,16 @@ class TestIndexGestionFusionCandidatOraux:
         r = admin_client.get("/gestion")
         assert "/gestion/liste-candidats" not in r.data.decode()
 
+    def test_quick_tiers_temps_button_present(self, admin_client, db_mock):
+        """Le bouton rapide tiers-temps, un temps retiré lors de la fusion des
+        vues, a été remis dans la liste (en plus de la case à cocher sur la
+        fiche d'édition) — cf. project_fusion_vue_candidat_oraux."""
+        db_mock.make_sql_select.return_value = self.ORAUX_CANDIDAT_UNIQUE
+        r = admin_client.get("/gestion")
+        body = r.data.decode()
+        assert "/gestion/candidat/tiers-temps?id_candidat=1" in body
+        assert "⏱️ Déclarer" in body
+
 
 # ── Archive de fin de session (zip) ───────────────────────────────────────────
 

@@ -53,16 +53,22 @@
                     {{ oral['numero'] }}
                 </td>
                 <td rowspan="2">
-                    {{ oral['telephone'] or '—' }}
+                    {% if oral['telephone'] %}
+                        <a href="tel:{{ oral['telephone'] }}">{{ oral['telephone'] }}</a>
+                    {% else %}
+                        —
+                    {% endif %}
                 </td>
                 <td rowspan="2">
                     {% if oral['tiers_temps'] %}
                         <div class="tooltip">🔴
                             <span class="tooltiptext">aménagement d'épreuves</span>
                         </div>
-                    {% else %}
-                        —
                     {% endif %}
+                    <button type="button" class="outline btn-sm"
+                            onclick="document.location='{{ url_for('declarer_tiers_temps_candidat', id_candidat=oral['id_candidat']) }}';">
+                        {% if oral['tiers_temps'] %}⏱️ Retirer{% else %}⏱️ Déclarer{% endif %}
+                    </button>
                 </td>
             {% endif %}
             {% if oral['maj'] %}

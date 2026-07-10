@@ -339,9 +339,9 @@ Le flux se déroule en 3 étapes, sur le même modèle que la disponibilité exa
 
 ### Déclaration (ou retrait) de tiers-temps d'un candidat en cours de journée
 
-`/gestion` → clic sur le nom du candidat (page d'édition) → case à cocher **Tiers temps**
-(bascule immédiate avec confirmation), ou lien **⏱️ Déclarer/Retirer** pour l'écran de
-prévisualisation détaillé décrit ci-dessous.
+`/gestion` → bouton **⏱️ Déclarer/Retirer** sur la ligne du candidat concerné, ou depuis sa fiche
+d'édition (clic sur le nom) → même bouton. Les deux mènent à l'écran de prévisualisation détaillé
+ci-dessous (aucune bascule directe sans prévisualisation).
 
 Permet de traiter le cas d'un élève qui déclare un tiers-temps le jour J, après que l'algorithme a
 déjà placé les oraux — ou l'inverse, si un tiers-temps a été posé par erreur. Ses deux oraux voient

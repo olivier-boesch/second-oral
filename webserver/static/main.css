@@ -254,6 +254,12 @@ button.outline:hover {
     background: var(--primary-lt);
 }
 
+/* petit bouton d'action inline dans un tableau (ex. déclarer/retirer tiers-temps) */
+button.btn-sm {
+    font-size: 0.7rem;
+    padding: 0.15em 0.5em;
+}
+
 /* bouton afficher/masquer mot de passe */
 .toggle-pwd {
     background: transparent;
