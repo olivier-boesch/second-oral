@@ -471,8 +471,9 @@ def liste_pdf(title: str, headers: list, data: list, subtitle: str | None = None
 
     # En-tête
     story += _header_band(W,
-        title=f"{title}{' — ' + subtitle if subtitle else ''}",
+        title=title,
         right_text=centre_examen,
+        subtitle=subtitle or '',
     )
     story.append(Spacer(1, 5 * mm))
 
