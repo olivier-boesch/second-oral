@@ -84,6 +84,20 @@ def _ps(name: str, **kw) -> ParagraphStyle:
     return ParagraphStyle(name, **kw)
 
 
+def _cell(value, font_size: int = 10, alignment=TA_CENTER) -> Paragraph:
+    """Enveloppe une valeur de cellule de tableau dans un Paragraph.
+
+    ReportLab ne fait passer le texte à la ligne (word-wrap) que pour des
+    flowables Paragraph — une cellule contenant une simple str déborde ou
+    est tronquée si elle dépasse la largeur de colonne (colWidths est déjà
+    fixé partout). Les cellules déjà construites (Paragraph, Image
+    d'émargement...) passent inchangées.
+    """
+    if isinstance(value, (Paragraph, Image)):
+        return value
+    return Paragraph(str(value), _ps('cell', fontSize=font_size, alignment=alignment))
+
+
 # ── Canvas avec footer ────────────────────────────────────────────────────────
 
 class PageNumCanvas(canvas.Canvas):
@@ -278,8 +292,12 @@ def fiche_candidat(infos_candidat: dict, tempdirname: str, file_dir: str = '.',
 
     # Identité
     story.append(Paragraph(
-        f"{infos_candidat['nom']} (N° candidat : {infos_candidat['numero']})",
-        _ps('h1', fontSize=18, leading=22, spaceAfter=2 * mm),
+        infos_candidat['nom'],
+        _ps('h1', fontSize=18, leading=22, spaceAfter=1 * mm),
+    ))
+    story.append(Paragraph(
+        f"N° candidat : {infos_candidat['numero']}",
+        _ps('numero', fontSize=10, textColor=C_TEXT_MD, spaceAfter=2 * mm),
     ))
     story.append(Paragraph(
         f"Établissement : {infos_candidat['etablissement']}",
@@ -308,9 +326,9 @@ def fiche_candidat(infos_candidat: dict, tempdirname: str, file_dir: str = '.',
 
     # Tableau des oraux (Matière / Salle / Heure)
     col_w = W / 3.0
-    data = [["Matière", "Salle", "Heure"]]
+    data = [[_cell(h) for h in ("Matière", "Salle", "Heure")]]
     for o in infos_candidat['oraux']:
-        data.append([o['matiere'], o['salle'], o['heure']])
+        data.append([_cell(o['matiere']), _cell(o['salle']), _cell(o['heure'])])
 
     t = LongTable(data, colWidths=[col_w, col_w, col_w], repeatRows=1)
     t.setStyle(_table_style_base(len(data) - 1))
@@ -431,6 +449,7 @@ def liste_pdf(title: str, headers: list, data: list, subtitle: str | None = None
     W_page = pagesize[0]
     W = W_page - 30 * mm
     font_size = 16 if pagesize == pagesizes.landscape(pagesizes.A3) else 10
+    data = [[_cell(v, font_size=font_size) for v in row] for row in data]
 
     doc = SimpleDocTemplate(
         buffer,
