@@ -56,7 +56,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | **IPs de session (monitoring)** | Stockées en Redis (TTL 8 h, supprimées au logout) — admin uniquement, intérêt légitime art. 6.1.f RGPD |
 | **Logs gunicorn** | Format `%({x-forwarded-for}i)s` — affiche l'IP réelle du client |
 | **Tokens signature** | Usage unique, expiration 5 min, canal `sign_<token>` dédié |
-| **Token QR connexion candidat** | Usage unique, distinct du `login_key` réel (révocable sans reset de compte), expiration configurable (défaut 48h — imprimé à l'avance sur le papillon/la fiche PDF) ; invalidé automatiquement au renouvellement du mot de passe candidat ; repli vers la connexion classique si expiré/déjà utilisé |
+| **Token QR connexion candidat** | Usage unique, distinct du `login_key` réel (révocable sans reset de compte), expiration configurable (défaut 48h — imprimé à l'avance sur la fiche PDF) ; invalidé automatiquement au renouvellement du mot de passe candidat ; repli vers la connexion classique si expiré/déjà utilisé |
 | **DB privilèges** | Compte applicatif limité à `SELECT, INSERT, UPDATE, DELETE` — pas de `DROP`/`ALTER` |
 | **Docker** | Conteneur exécuté en tant qu'utilisateur non-root `appuser` (UID 1000) |
 | **Dépendances** | Versions épinglées dans `requirements.txt` ; `pip-audit` exécuté à chaque CI |

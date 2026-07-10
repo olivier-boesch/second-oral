@@ -3121,16 +3121,8 @@ def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseRetu
         return jsonify({"url": url_for('download', filename='liste_oraux.pdf')})
 
     if type_doc == 'fiches_candidats':
-        infos = db_get(db_facility_web.SELECT_DOC_LISTE_CANDIDATS, no_list_auto=False)
-        for c in infos:
-            c['oraux'] = db_get(
-                db_facility_web.SELECT_DOC_LISTE_CANDIDATS_ORAUX,
-                c['id'], no_list_auto=False,
-            )
-            c['token'] = _get_or_create_login_token(c['numero'])
-        reports.liste_fiches_candidats(infos, file_dir='generated',
-                                       filename_root='candidat_',
-                                       centre_examen=CENTRE_EXAMEN)
+        duree_qr_heures = request.args.get('duree_qr_heures', 48, type=int)
+        _regenerer_fiches_candidats(duree_heures=duree_qr_heures)
         return jsonify({"url": url_for('download', filename='liste_candidats.pdf')})
 
     if type_doc == 'fiches_salles':
@@ -3154,12 +3146,6 @@ def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseRetu
         reports.liste_loge_oraux(infos, 'generated', 'loge',
                                  centre_examen=CENTRE_EXAMEN)
         return jsonify({"url": url_for('download', filename='liste_loges.pdf')})
-
-    if type_doc == 'papillons_candidats':
-        base_url = request.host_url.rstrip('/')
-        duree_qr_heures = request.args.get('duree_qr_heures', 48, type=int)
-        _regenerer_papillons_candidats(base_url, duree_heures=duree_qr_heures)
-        return jsonify({"url": url_for('download', filename='papillons_candidats.pdf')})
 
     abort(404)
 
@@ -3795,23 +3781,28 @@ def _regenerer_papillons_loges(base_url: str) -> None:
         )
 
 
-def _regenerer_papillons_candidats(base_url: str, duree_heures: int = 48) -> None:
-    """Regénère papillons_candidats.pdf avec tous les candidats en DB.
+def _regenerer_fiches_candidats(duree_heures: int = 48) -> None:
+    """Regénère liste_candidats.pdf (fiches individuelles concaténées) avec
+    tous les candidats en DB.
 
-    Le login_key des candidats est stocké en clair dans la DB, donc aucun
-    accès au store chiffré n'est nécessaire. Chaque candidat reçoit un token
-    de connexion QR (réutilisé s'il en a déjà un valide, cf.
-    _get_or_create_login_token) encodé dans le QR du papillon.
+    Remplace l'ancien papillon en lot (10 par page, retiré le 2026-07-10 car
+    doublon à l'usage avec cette fiche — mêmes identifiants + QR de
+    connexion, en plus des horaires). Le login_key des candidats est stocké
+    en clair dans la DB, donc aucun accès au store chiffré n'est nécessaire.
+    Chaque candidat reçoit un token de connexion QR (réutilisé s'il en a
+    déjà un valide, cf. _get_or_create_login_token).
     """
-    candidats = db_get(db_facility_web.SELECT_ALL_CANDIDATS_PAPILLONS, no_list_auto=False)
+    candidats = db_get(db_facility_web.SELECT_DOC_LISTE_CANDIDATS, no_list_auto=False)
     if candidats:
         for c in candidats:
+            c['oraux'] = db_get(
+                db_facility_web.SELECT_DOC_LISTE_CANDIDATS_ORAUX,
+                c['id'], no_list_auto=False,
+            )
             c['token'] = _get_or_create_login_token(c['numero'], duree_heures)
-        reports.liste_papillons_candidats(
-            candidats,
-            filename=str(Path(app.root_path) / 'generated' / 'papillons_candidats.pdf'),
-            base_url=base_url,
-            centre_examen=CENTRE_EXAMEN,
+        reports.liste_fiches_candidats(
+            candidats, file_dir='generated',
+            filename_root='candidat_', centre_examen=CENTRE_EXAMEN,
         )
 
 
@@ -3854,7 +3845,7 @@ def gestion_credentials() -> ResponseReturnValue:
 @nocache
 def renew_candidat(id: int) -> ResponseReturnValue:
     """Renouvelle les identifiants d'un candidat (login_key + password_hash)
-    et regénère le PDF groupé papillons_candidats.pdf.
+    et regénère le PDF groupé liste_candidats.pdf (fiches individuelles).
 
     :param id: Identifiant DB du candidat.
     :returns: Redirection vers link_back si fourni, sinon /gestion/credentials.
@@ -3867,13 +3858,12 @@ def renew_candidat(id: int) -> ResponseReturnValue:
         # le leur (cf. _get_or_create_login_token, appelé juste après).
         db_update(db_facility_web.DELETE_TOKEN_LOGIN_CANDIDAT_NUMERO,
                   numero=candidat_avant['numero'])
-    base_url = request.host_url.rstrip('/')
-    papillon_filename = 'papillons_candidats.pdf'
-    _regenerer_papillons_candidats(base_url)
+    fiches_filename = 'liste_candidats.pdf'
+    _regenerer_fiches_candidats()
     url = _safe_redirect_url(request.form.get('link_back'))
     if url:
-        return redirect(_add_query_param(url, new_papillon=papillon_filename))
-    return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
+        return redirect(_add_query_param(url, new_papillon=fiches_filename))
+    return redirect(url_for('gestion_credentials', new_papillon=fiches_filename))
 
 
 @app.route("/gestion/credentials/candidats", methods=["POST"])
@@ -3885,15 +3875,14 @@ def renew_candidats() -> ResponseReturnValue:
     :returns: Redirection vers /gestion/credentials.
     """
     tous = db_get(db_facility_web.SELECT_ALL_CANDIDATS_FOR_RENEWAL, no_list_auto=False)
-    base_url = request.host_url.rstrip('/')
     for c in tous:
         _renew_candidat(c['id'])
-        # Tous les login_key changent : tous les tokens QR (papillons déjà
-        # imprimés) doivent devenir invalides.
+        # Tous les login_key changent : tous les tokens QR (déjà imprimés
+        # sur une fiche) doivent devenir invalides.
         db_update(db_facility_web.DELETE_TOKEN_LOGIN_CANDIDAT_NUMERO, numero=c['numero'])
-    papillon_filename = 'papillons_candidats.pdf'
-    _regenerer_papillons_candidats(base_url)
-    return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))
+    fiches_filename = 'liste_candidats.pdf'
+    _regenerer_fiches_candidats()
+    return redirect(url_for('gestion_credentials', new_papillon=fiches_filename))
 
 
 @app.route("/gestion/credentials/examinateur/<int:id>", methods=["POST"])

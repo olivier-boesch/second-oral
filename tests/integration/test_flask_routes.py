@@ -2288,20 +2288,23 @@ class TestEditOralValidation:
 
 class TestGenerateDocBatchFichesCandidatsToken:
     """Régression production (2026-07-10) : /generate-doc-batch/fiches_candidats-0
-    (fiches individuelles concaténées, distinct du lot papillons) plantait en
-    500 (KeyError 'token') — troisième point d'appel de reports.fiche_candidat
-    oublié en même temps que la fiche individuelle à la demande."""
+    plantait en 500 (KeyError 'token') — un point d'appel de
+    reports.fiche_candidat oublié en même temps que la fiche individuelle à
+    la demande. Depuis, le papillon en lot (10/page) a été retiré (doublon à
+    l'usage) : cette fiche est désormais le seul document candidat en lot, et
+    porte la durée de validité configurable du QR (défaut 48h)."""
+
+    CANDIDAT = {"id": 1, "nom": "Dupont Jean", "numero": "111111111AA",
+               "tiers_temps": 0, "etablissement": "Lycée Test", "login_key": "key"}
 
     def test_does_not_crash_and_attaches_token(self, admin_client, db_mock, monkeypatch):
         import app as app_module
         import db_facility_web as dfw
-        candidat = {"id": 1, "nom": "Dupont Jean", "numero": "111111111AA",
-                   "tiers_temps": 0, "etablissement": "Lycée Test", "login_key": "key"}
         db_mock.make_sql_update.reset_mock()
         db_mock.make_sql_select.side_effect = [
-            [candidat],  # SELECT_DOC_LISTE_CANDIDATS
-            [],          # SELECT_DOC_LISTE_CANDIDATS_ORAUX
-            [],          # SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO
+            [self.CANDIDAT],  # SELECT_DOC_LISTE_CANDIDATS
+            [],               # SELECT_DOC_LISTE_CANDIDATS_ORAUX
+            [],               # SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO
         ]
         monkeypatch.setattr(app_module.reports, "liste_fiches_candidats",
                             lambda *a, **kw: "generated/liste_candidats.pdf")
@@ -2313,24 +2316,14 @@ class TestGenerateDocBatchFichesCandidatsToken:
             for c in db_mock.make_sql_update.call_args_list
         )
 
-
-class TestGenerateDocBatchPapillonsCandidatsQrDuree:
-    """Durée de validité du token QR configurable au moment de la génération
-    du lot de papillons (défaut 48h, cf. gestion_documents.html)."""
-
-    CANDIDAT_PAPILLON = {"nom": "Dupont Jean", "numero": "111111111AA", "login_key": "key"}
-
     def test_default_duration_is_48h(self, admin_client, db_mock, monkeypatch):
         import app as app_module
         import db_facility_web as dfw
         db_mock.make_sql_update.reset_mock()
-        db_mock.make_sql_select.side_effect = [
-            [self.CANDIDAT_PAPILLON],  # SELECT_ALL_CANDIDATS_PAPILLONS
-            [],                         # SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO
-        ]
-        monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
+        db_mock.make_sql_select.side_effect = [[self.CANDIDAT], [], []]
+        monkeypatch.setattr(app_module.reports, "liste_fiches_candidats",
                             lambda *a, **kw: None)
-        r = admin_client.get("/generate-doc-batch/papillons_candidats-0",
+        r = admin_client.get("/generate-doc-batch/fiches_candidats-0",
                              follow_redirects=False)
         assert r.status_code == 200
         insert_call = next(
@@ -2346,14 +2339,11 @@ class TestGenerateDocBatchPapillonsCandidatsQrDuree:
         import app as app_module
         import db_facility_web as dfw
         db_mock.make_sql_update.reset_mock()
-        db_mock.make_sql_select.side_effect = [
-            [self.CANDIDAT_PAPILLON],
-            [],
-        ]
-        monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
+        db_mock.make_sql_select.side_effect = [[self.CANDIDAT], [], []]
+        monkeypatch.setattr(app_module.reports, "liste_fiches_candidats",
                             lambda *a, **kw: None)
         r = admin_client.get(
-            "/generate-doc-batch/papillons_candidats-0?duree_qr_heures=5",
+            "/generate-doc-batch/fiches_candidats-0?duree_qr_heures=5",
             follow_redirects=False,
         )
         assert r.status_code == 200
@@ -2365,6 +2355,17 @@ class TestGenerateDocBatchPapillonsCandidatsQrDuree:
         limit = datetime.fromisoformat(insert_call.kwargs["time_limit"])
         delta_hours = (limit - datetime.now()).total_seconds() / 3600
         assert 4 < delta_hours <= 5
+
+
+class TestPapillonsCandidatsRemoved:
+    """Le papillon candidat en lot (10/page) a été retiré le 2026-07-10 —
+    doublon à l'usage avec la fiche individuelle (mêmes identifiants + QR,
+    en plus des horaires). La route ne doit plus répondre."""
+
+    def test_papillons_candidats_batch_route_gone(self, admin_client, db_mock):
+        r = admin_client.get("/generate-doc-batch/papillons_candidats-0",
+                             follow_redirects=False)
+        assert r.status_code == 404
 
 
 # ── Renouvellement des identifiants ──────────────────────────────────────────
@@ -2412,10 +2413,11 @@ class TestCredentialRenewal:
         db_mock.make_sql_select.side_effect = [
             [self.CANDIDAT],   # SELECT_INFOS_CANDIDAT_BY_ID (candidat_avant, pour invalider le token)
             [self.CANDIDAT],   # SELECT_INFOS_CANDIDAT_BY_ID (dans _renew_candidat)
-            [self.CANDIDAT],   # SELECT_ALL_CANDIDATS_PAPILLONS (regénération)
+            [self.CANDIDAT],   # SELECT_DOC_LISTE_CANDIDATS (regénération de la fiche en lot)
+            [],                # SELECT_DOC_LISTE_CANDIDATS_ORAUX
             [],                # SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO (aucun token existant)
         ]
-        monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
+        monkeypatch.setattr(app_module.reports, "liste_fiches_candidats",
                             lambda *a, **kw: None)
         r = admin_client.post("/gestion/credentials/candidat/1",
                               follow_redirects=False)
@@ -2427,7 +2429,7 @@ class TestCredentialRenewal:
         assert "login_key" in creds_call.kwargs
         assert "password_hash" in creds_call.kwargs
         assert creds_call.kwargs["login_key"] != ""
-        # Le token QR de ce candidat doit être invalidé (papillon déjà imprimé).
+        # Le token QR de ce candidat doit être invalidé (déjà imprimé sur une fiche).
         assert any(
             c.args[0] is dfw.DELETE_TOKEN_LOGIN_CANDIDAT_NUMERO
             and c.kwargs.get("numero") == self.CANDIDAT["numero"]
@@ -2440,20 +2442,20 @@ class TestCredentialRenewal:
         import app as app_module
         db_mock.make_sql_update.reset_mock()
         db_mock.make_sql_select.side_effect = [
-            [self.CANDIDAT], [self.CANDIDAT], [self.CANDIDAT], [],
+            [self.CANDIDAT], [self.CANDIDAT], [self.CANDIDAT], [], [],
         ]
-        monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
+        monkeypatch.setattr(app_module.reports, "liste_fiches_candidats",
                             lambda *a, **kw: None)
         r = admin_client.post("/gestion/credentials/candidat/1",
                               data={"link_back": "/gestion/liste-candidats"},
                               follow_redirects=False)
         assert r.status_code == 302
-        assert r.headers["Location"] == "/gestion/liste-candidats?new_papillon=papillons_candidats.pdf"
+        assert r.headers["Location"] == "/gestion/liste-candidats?new_papillon=liste_candidats.pdf"
 
     def test_renew_all_candidats(self, admin_client, db_mock, monkeypatch):
         """Renouveler tous les candidats appelle UPDATE_CANDIDAT_CREDENTIALS une
         fois par candidat, invalide le token QR de chacun, et regénère
-        papillons_candidats.pdf."""
+        liste_candidats.pdf (fiches individuelles)."""
         import app as app_module
         import db_facility_web as dfw
         db_mock.make_sql_update.reset_mock()
@@ -2461,21 +2463,24 @@ class TestCredentialRenewal:
             {"id": 1, "nom": "Dupont Jean", "numero": "0001"},
             {"id": 2, "nom": "Martin Paul", "numero": "0002"},
         ]
-        candidats_papillons = [
-            {"nom": "Dupont Jean", "numero": "0001", "login_key": "key1"},
-            {"nom": "Martin Paul", "numero": "0002", "login_key": "key2"},
+        candidats_fiches = [
+            {"id": 1, "nom": "Dupont Jean", "numero": "0001", "login_key": "key1"},
+            {"id": 2, "nom": "Martin Paul", "numero": "0002", "login_key": "key2"},
         ]
         # SELECT_ALL_CANDIDATS_FOR_RENEWAL, SELECT_INFOS_CANDIDAT × 2,
-        # SELECT_ALL_CANDIDATS_PAPILLONS, puis SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO × 2
+        # SELECT_DOC_LISTE_CANDIDATS, puis par candidat :
+        # SELECT_DOC_LISTE_CANDIDATS_ORAUX + SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO
         db_mock.make_sql_select.side_effect = [
             candidats,                 # liste initiale
             [candidats[0]],            # infos candidat 1
             [candidats[1]],            # infos candidat 2
-            candidats_papillons,       # SELECT_ALL_CANDIDATS_PAPILLONS (regénération)
+            candidats_fiches,          # SELECT_DOC_LISTE_CANDIDATS (regénération)
+            [],                        # oraux candidat 1
             [],                        # token candidat 1 (aucun existant)
+            [],                        # oraux candidat 2
             [],                        # token candidat 2 (aucun existant)
         ]
-        monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
+        monkeypatch.setattr(app_module.reports, "liste_fiches_candidats",
                             lambda *a, **kw: None)
         r = admin_client.post("/gestion/credentials/candidats",
                               follow_redirects=False)

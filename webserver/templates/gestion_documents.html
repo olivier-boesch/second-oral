@@ -47,23 +47,6 @@
 
 <div class="doc-grid">
 
-    {# Papillons candidats : regénérable (login_key en clair en base) #}
-    <div class="doc-card" id="card-papillons-candidats">
-        <span class="doc-title">🎫 Papillons candidats</span>
-        <span class="doc-note">N° candidat + mot de passe + QR de connexion directe, 10 par page A4</span>
-        <label style="font-size:.8em; display:flex; align-items:center; gap:.4em;">
-            Validité du QR (heures) :
-            <input type="number" id="duree-qr-candidats" value="48" min="1" style="width:4.5em;">
-        </label>
-        <div class="doc-actions">
-            <button class="btn-gen"
-                    onclick="generer('papillons_candidats', 'card-papillons-candidats')">
-                ⚙ Générer et télécharger
-            </button>
-            <span class="doc-spinner">⏳ Génération…</span>
-        </div>
-    </div>
-
     {# Papillons examinateurs : regénérable via credentials.enc #}
     <div class="doc-card" id="card-papillons-exam">
         <span class="doc-title">🎫 Papillons examinateurs</span>
@@ -82,10 +65,14 @@
         </div>
     </div>
 
-    {# Fiches candidats (lot) #}
+    {# Fiches candidats (lot) : identifiants + QR de connexion directe #}
     <div class="doc-card" id="card-fiches-candidats">
         <span class="doc-title">📋 Fiches candidats (lot)</span>
-        <span class="doc-note">Toutes les fiches en un seul PDF</span>
+        <span class="doc-note">Toutes les fiches en un seul PDF — horaires + identifiants + QR de connexion directe</span>
+        <label style="font-size:.8em; display:flex; align-items:center; gap:.4em;">
+            Validité du QR (heures) :
+            <input type="number" id="duree-qr-candidats" value="48" min="1" style="width:4.5em;">
+        </label>
         <div class="doc-actions">
             <button class="btn-gen"
                     onclick="generer('fiches_candidats', 'card-fiches-candidats')">
@@ -149,7 +136,7 @@ function generer(type, cardId) {
     const card = document.getElementById(cardId);
     card.classList.add('loading');
     let url = `${BATCH_BASE}${type}-0`;
-    if (type === 'papillons_candidats') {
+    if (type === 'fiches_candidats') {
         const duree = document.getElementById('duree-qr-candidats').value || 48;
         url += `?duree_qr_heures=${encodeURIComponent(duree)}`;
     }

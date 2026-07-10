@@ -254,11 +254,16 @@ Sur la page `/gestion/documents` (accueil admin → bloc **Préparation** → Do
 | Document | Action | À faire |
 |---|---|---|
 | Papillons examinateurs | Télécharger | Distribuer aux examinateurs avant le jour J |
-| Papillons candidats | Générer + télécharger (durée du QR configurable, défaut 48h) | Distribuer aux candidats avant le jour J |
 | Papillons loges | Télécharger | Distribuer aux surveillants de loge |
+| Fiches candidats (lot) | Générer + télécharger (durée du QR configurable, défaut 48h) | Distribuer aux candidats avant le jour J |
 | Fiches salles (lot) | Générer + télécharger | Afficher ou distribuer aux examinateurs |
 | Fiches loges (lot) | Générer + télécharger | Remettre aux surveillants de loge |
 | Liste générale | Générer + télécharger | Affichage public ou usage interne |
+
+> Le papillon candidat en lot (10 par page A4) a été retiré le 2026-07-10 : à
+> l'usage, il faisait doublon avec la fiche individuelle (mêmes identifiants
+> + QR de connexion, en plus des horaires) — un seul document candidat
+> désormais, plus complet.
 
 > À la fin d'un run réussi, la page `/gestion/algo` affiche deux raccourcis : **→ Vérifier les oraux** et **→ Documents** pour enchaîner directement sur l'étape suivante.
 
@@ -389,13 +394,13 @@ sans adaptation possible (rien à adapter).
 
 | Catégorie | Granularité | Effet |
 |---|---|---|
-| **Candidats** | Un ou tous | Génère un nouveau `login_key` + hash en DB + regénère le fichier de lot papillons_candidats.pdf |
+| **Candidats** | Un ou tous | Génère un nouveau `login_key` + hash en DB + regénère le fichier de lot liste_candidats.pdf (fiches individuelles) |
 | **Examinateurs** | Un ou tous | Génère un nouveau mot de passe + hash en DB + regénère le papillon PDF |
 | **Loges** | Une ou toutes | Génère un nouveau mot de passe + hash en DB + regénère le papillon PDF |
 
 **Stockage sécurisé :** les mots de passe en clair des examinateurs et des loges sont chiffrés (AES-256-GCM) dans `data/credentials.enc`. Ce store est initialisé automatiquement à la fin de chaque lancement de l'algorithme, et mis à jour à chaque renouvellement.
 
-**QR de connexion directe (candidats)** : le papillon et la fiche PDF individuelle d'un candidat contiennent un QR code qui, une fois scanné, le connecte directement (plus besoin de taper numéro + mot de passe) — pratique pour la connexion du matin. Techniquement, c'est un token à usage unique, distinct du `login_key`, valable par défaut 48h (réglable au moment de générer le lot de papillons, cf. `/gestion/documents`). Renouveler le mot de passe d'un candidat invalide automatiquement son ancien QR — un papillon perdu redevient inoffensif dès le renouvellement. Voir [securite.md](securite.md) pour le détail du mécanisme.
+**QR de connexion directe (candidats)** : la fiche PDF d'un candidat (individuelle ou dans le lot) contient un QR code qui, une fois scanné, le connecte directement (plus besoin de taper numéro + mot de passe) — pratique pour la connexion du matin. Techniquement, c'est un token à usage unique, distinct du `login_key`, valable par défaut 48h (réglable au moment de générer le lot de fiches, cf. `/gestion/documents`). Renouveler le mot de passe d'un candidat invalide automatiquement son ancien QR — une fiche perdue redevient inoffensive dès le renouvellement. Voir [securite.md](securite.md) pour le détail du mécanisme.
 
 > **Cas d'usage :** un examinateur perd son papillon → aller sur `/gestion/credentials`, cliquer "Renouveler" sur la ligne de cet examinateur → un nouveau papillon PDF est regénéré et disponible au téléchargement.
 
