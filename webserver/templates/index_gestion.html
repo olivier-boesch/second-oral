@@ -103,7 +103,12 @@
             <td>
                 <a href="{{ url_for('edit_oral', oral=oral['id_oral']) }}">
                     <div class="tooltip">
-                        <img alt="Editer oral" src="{{ url_for('static', filename='edit.png') }}">
+                        <svg class="icon-edit" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                             aria-label="Editer oral" role="img">
+                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                            <path d="m15 5 4 4"/>
+                        </svg>
                         <span class="tooltiptext">éditer</span>
                     </div>
                 </a>
