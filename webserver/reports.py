@@ -236,7 +236,7 @@ def _header_band(W: float, title: str, right_text: str = '',
             ('TOPPADDING',    (0, 0), (-1, -1), 2 * mm),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 2 * mm),
             ('LEFTPADDING',   (0, 0), (-1, -1), 6 * mm),
-            ('LINEBELOW',     (0, 0), (-1, -1), 0.7, C_BORDER_DK),
+            ('BOX',           (0, 0), (-1, -1), 0.7, C_BORDER_DK),
             ('ROUNDEDCORNERS', [0, 0, 3 * mm, 3 * mm]),
         ]))
         items.append(sub)
