@@ -569,7 +569,10 @@ ORDER BY Examinateur.salle, Oral.heure_oral
 # ---------- SSE — résolution des canaux
 
 SELECT_SALLE_LOGE_FROM_EXAMINATEUR = """
-SELECT salle, loge FROM Examinateur WHERE id = %s
+SELECT Examinateur.salle AS salle, Loge.nom AS loge
+FROM Examinateur
+    JOIN Loge ON Examinateur.loge_id = Loge.id
+WHERE Examinateur.id = %s
 """
 
 # ---------- Logs

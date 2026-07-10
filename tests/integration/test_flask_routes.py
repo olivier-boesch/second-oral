@@ -287,7 +287,20 @@ class TestLogeRoutes:
         assert 'data-id-oral="42"' in body
 
 
-# ── Authentification candidat ─────────────────────────────────────────────────
+class TestSelectSalleLogeFromExaminateur:
+    """Régression production (2026-07-10) : cette requête sélectionnait encore
+    `Examinateur.loge` (colonne supprimée par le refactor FK loge_id du
+    2026-07-09, cf. project_loge_credentials) — jamais détecté par la suite
+    car le mock DB des tests d'intégration n'exécute pas de vrai SQL. Provoquait
+    une 500 (Unknown column 'loge' in 'SELECT') à chaque déclaration/retrait de
+    tiers-temps ou changement de matière touchant un oral déjà publié
+    (_appliquer_changement_oral -> _appliquer_oraux_tiers_temps)."""
+
+    def test_no_longer_references_dropped_examinateur_loge_column(self):
+        import db_facility_web as dfw
+        sql = dfw.SELECT_SALLE_LOGE_FROM_EXAMINATEUR
+        assert "Examinateur.loge_id = Loge.id" in sql
+        assert "Loge.nom AS loge" in sql
 
 class TestLoginCandidat:
     def test_wrong_password_redirects_to_login_candidat(self, client, db_mock):
