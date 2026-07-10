@@ -37,10 +37,15 @@ _WEBSERVER_DIR = str(_Path(__file__).resolve().parent)
 if _WEBSERVER_DIR not in _sys.path:
     _sys.path.insert(0, _WEBSERVER_DIR)
 
+import pytz
+
 import app_secrets as _app_secrets
 from theme import derive_palette
 
 ACCENT_COLOR: str = getattr(_app_secrets, 'ACCENT_COLOR', '#6c63ff')
+# Horodatage des PDF (footer "Édité le ...") — datetime.now() naïf renvoie
+# l'heure du serveur (UTC en conteneur Docker), pas l'heure de Paris.
+TIMEZONE = getattr(_app_secrets, 'TIMEZONE', pytz.timezone('Europe/Paris'))
 
 _FONT_DIR = Path(__file__).resolve().parent / 'static'
 _ICON_PATH = str(_FONT_DIR / 'icon.png')
@@ -112,7 +117,7 @@ class PageNumCanvas(canvas.Canvas):
     def __init__(self, *args, **kwargs):
         canvas.Canvas.__init__(self, *args, **kwargs)
         self.pages: list = []
-        self.today = datetime.datetime.now().strftime("Édité le %d/%m/%Y à %H:%M")
+        self.today = datetime.datetime.now(TIMEZONE).strftime("Édité le %d/%m/%Y à %H:%M")
 
     def showPage(self):
         """Sauvegarde l'état de la page courante avant d'en démarrer une nouvelle."""
@@ -827,7 +832,7 @@ def _draw_papillon_footer(c_canvas, W: float, H: float,
     icon_s = 5 * mm
     fy = 8 * mm
     lx = 15 * mm
-    today = datetime.datetime.now().strftime("Édité le %d/%m/%Y à %H:%M")
+    today = datetime.datetime.now(TIMEZONE).strftime("Édité le %d/%m/%Y à %H:%M")
 
     try:
         c_canvas.drawImage(_ICON_PATH, lx, fy, width=icon_s, height=icon_s,
