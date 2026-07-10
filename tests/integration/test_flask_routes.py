@@ -2286,6 +2286,34 @@ class TestEditOralValidation:
         db_mock.make_sql_update.assert_called_once()
 
 
+class TestGenerateDocBatchFichesCandidatsToken:
+    """Régression production (2026-07-10) : /generate-doc-batch/fiches_candidats-0
+    (fiches individuelles concaténées, distinct du lot papillons) plantait en
+    500 (KeyError 'token') — troisième point d'appel de reports.fiche_candidat
+    oublié en même temps que la fiche individuelle à la demande."""
+
+    def test_does_not_crash_and_attaches_token(self, admin_client, db_mock, monkeypatch):
+        import app as app_module
+        import db_facility_web as dfw
+        candidat = {"id": 1, "nom": "Dupont Jean", "numero": "111111111AA",
+                   "tiers_temps": 0, "etablissement": "Lycée Test", "login_key": "key"}
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.side_effect = [
+            [candidat],  # SELECT_DOC_LISTE_CANDIDATS
+            [],          # SELECT_DOC_LISTE_CANDIDATS_ORAUX
+            [],          # SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO
+        ]
+        monkeypatch.setattr(app_module.reports, "liste_fiches_candidats",
+                            lambda *a, **kw: "generated/liste_candidats.pdf")
+        r = admin_client.get("/generate-doc-batch/fiches_candidats-0",
+                             follow_redirects=False)
+        assert r.status_code == 200
+        assert any(
+            c.args[0] is dfw.INSERT_TOKEN_LOGIN_CANDIDAT
+            for c in db_mock.make_sql_update.call_args_list
+        )
+
+
 class TestGenerateDocBatchPapillonsCandidatsQrDuree:
     """Durée de validité du token QR configurable au moment de la génération
     du lot de papillons (défaut 48h, cf. gestion_documents.html)."""

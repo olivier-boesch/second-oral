@@ -3127,6 +3127,7 @@ def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseRetu
                 db_facility_web.SELECT_DOC_LISTE_CANDIDATS_ORAUX,
                 c['id'], no_list_auto=False,
             )
+            c['token'] = _get_or_create_login_token(c['numero'])
         reports.liste_fiches_candidats(infos, file_dir='generated',
                                        filename_root='candidat_',
                                        centre_examen=CENTRE_EXAMEN)
