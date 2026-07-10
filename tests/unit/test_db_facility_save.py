@@ -227,3 +227,22 @@ class TestSchemaCandidatTelephone:
             sql = self._trigger_sql(trigger)
             assert "telephone" not in sql, f"{trigger} ne doit pas logger 'telephone'"
             assert "NEW.nom" in sql or "OLD.nom" in sql  # sanity : le trigger loggue bien autre chose
+
+
+class TestSchemaTokenLoginCandidat:
+    """QR de connexion automatique candidat (2026-07-10) : token opaque à
+    usage unique, distinct du login_key, sur le modèle de TokenSignature
+    (émargement sur un autre appareil)."""
+
+    def _sql_for(self, table_name: str) -> str:
+        marker = f"CREATE TABLE IF NOT EXISTS {table_name} ("
+        for entry in _real_db_facility_save.SQL_BASE:
+            if marker in entry["sql"]:
+                return entry["sql"]
+        raise AssertionError(f"CREATE TABLE {table_name} introuvable dans SQL_BASE")
+
+    def test_table_exists_with_expected_columns(self):
+        sql = self._sql_for("TokenLoginCandidat")
+        assert "token TEXT NOT NULL" in sql
+        assert "time_limit TEXT NOT NULL" in sql
+        assert "numero TEXT NOT NULL" in sql

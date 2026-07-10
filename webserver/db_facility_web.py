@@ -327,6 +327,29 @@ WHERE oral IN (
 )
 """
 
+# ---------- Token de connexion QR candidat (papillon / fiche individuelle) ───
+
+INSERT_TOKEN_LOGIN_CANDIDAT = """
+INSERT INTO TokenLoginCandidat (token, time_limit, numero)
+VALUES (%(token)s, %(time_limit)s, %(numero)s)
+"""
+
+SELECT_TOKEN_LOGIN_CANDIDAT = """
+SELECT * FROM TokenLoginCandidat WHERE token = %s
+"""
+
+SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO = """
+SELECT * FROM TokenLoginCandidat WHERE numero = %s
+"""
+
+DELETE_TOKEN_LOGIN_CANDIDAT = """
+DELETE FROM TokenLoginCandidat WHERE token = %(token)s
+"""
+
+DELETE_TOKEN_LOGIN_CANDIDAT_NUMERO = """
+DELETE FROM TokenLoginCandidat WHERE numero = %(numero)s
+"""
+
 UPDATE_SIGNATURE_ORAL = """
 UPDATE Oral SET
     emargement = %(signature)s,

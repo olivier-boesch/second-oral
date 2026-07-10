@@ -45,6 +45,14 @@ SQL_BASE = [
     )
     """},
     {"sql": """
+    CREATE TABLE IF NOT EXISTS TokenLoginCandidat (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        token TEXT NOT NULL,
+        time_limit TEXT NOT NULL,
+        numero TEXT NOT NULL
+    )
+    """},
+    {"sql": """
     CREATE TABLE IF NOT EXISTS Matiere (
         id INT PRIMARY KEY,
         nom TEXT NOT NULL,

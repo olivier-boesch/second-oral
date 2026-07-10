@@ -350,13 +350,14 @@ def fiche_candidat(infos_candidat: dict, tempdirname: str, file_dir: str = '.',
     story.append(instr)
     story.append(Spacer(1, 5 * mm))
 
-    # QR code
-    url_candidat = url_for('candidat_court',
-                           id_candidat=infos_candidat['numero'], _external=True)
+    # QR code — connexion automatique (token à usage unique, cf. app.py
+    # _get_or_create_login_token) plutôt qu'un simple lien de navigation.
+    url_candidat = url_for('login_candidat_qr',
+                           token=infos_candidat['token'], _external=True)
     story.append(Image(make_qr_image(url_candidat, tempdirname, dpi=500),
                        width=36 * mm, height=36 * mm, useDPI=True))
     story.append(Paragraph(
-        f"Adresse pour consulter les mises à jour : {url_candidat}",
+        "Scannez pour vous connecter directement (usage unique).",
         _ps('url', fontSize=8, textColor=C_TEXT_MD, spaceBefore=2 * mm,
             spaceAfter=4 * mm),
     ))
@@ -849,7 +850,10 @@ def liste_papillons_candidats(candidats: list,
                                base_url: str = '', centre_examen: str = '') -> None:
     """Génère les papillons de connexion pour les candidats.
 
-    :param candidats:     Liste de dicts {'nom', 'numero', 'login_key'}.
+    :param candidats:     Liste de dicts {'nom', 'numero', 'login_key', 'token'}.
+        Le QR encode une connexion automatique via 'token' (cf. app.py
+        _get_or_create_login_token / route login_candidat_qr), pas un simple
+        lien de navigation.
     :param filename:      Chemin du PDF de sortie.
     :param base_url:      URL de base du site.
     :param centre_examen: Nom du centre affiché sur chaque papillon.
@@ -863,7 +867,7 @@ def liste_papillons_candidats(candidats: list,
         get_id=lambda d: d['numero'],
         get_name=lambda d: d['nom'],
         get_pwd=lambda d: d['login_key'],
-        get_url=lambda d: f"{base_url}/c/{d['numero']}" if base_url else "",
+        get_url=lambda d: f"{base_url}/login-candidat/qr/{d['token']}" if base_url else "",
     )
 
 

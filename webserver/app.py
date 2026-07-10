@@ -680,6 +680,54 @@ def clear_outdated_tokens(id_oral=None):
             app.logger.info(f"Token: oral {id_oral} supprimé ({_redact_token(res['token'])})")
 
 
+def _get_or_create_login_token(numero, duree_heures=48):
+    """Renvoie un token de connexion QR valide pour ce candidat.
+
+    Réutilise un token existant non expiré plutôt que d'en recréer un à
+    chaque appel — sinon reproduire le PDF ou recharger une page
+    invaliderait silencieusement un papillon déjà imprimé. Purge au passage
+    les tokens expirés de ce candidat (pas de tâche de fond dans ce projet,
+    même logique paresseuse que `clear_outdated_tokens`).
+    """
+    results = db_get(db_facility_web.SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO,
+                     numero, no_list_auto=False)
+    valid = None
+    for res in results:
+        if datetime.fromisoformat(res['time_limit']) > datetime.now():
+            valid = res['token']
+        else:
+            db_update(db_facility_web.DELETE_TOKEN_LOGIN_CANDIDAT, token=res['token'])
+    if valid is not None:
+        return valid
+    tk = token_urlsafe(16)
+    d = {
+        'token': tk,
+        'time_limit': (datetime.now() + timedelta(hours=duree_heures)).isoformat(),
+        'numero': numero,
+    }
+    db_update(db_facility_web.INSERT_TOKEN_LOGIN_CANDIDAT, **d)
+    app.logger.info(f"Token login candidat: généré ({_redact_token(tk)}) pour {numero}")
+    return tk
+
+
+def _check_login_token(token):
+    """Vérifie un token de connexion QR candidat.
+
+    Supprime le token après vérification (usage unique). Renvoie le
+    `numero` du candidat si le token est valide, sinon `None`.
+    """
+    results = db_get(db_facility_web.SELECT_TOKEN_LOGIN_CANDIDAT, token, no_list_auto=False)
+    if len(results) != 1:
+        return None
+    row = results[0]
+    valid = datetime.fromisoformat(row['time_limit']) > datetime.now()
+    db_update(db_facility_web.DELETE_TOKEN_LOGIN_CANDIDAT, token=token)
+    app.logger.info(
+        f"Token login candidat: vérifié et supprimé ({_redact_token(token)}), valide={valid}"
+    )
+    return row['numero'] if valid else None
+
+
 def image_normalize(img, size=(300, 300)):
     """Redimensionne une image base64 et la renvoie au format PNG base64."""
     if img == '':
@@ -934,18 +982,21 @@ def generate_screen_one() -> ResponseReturnValue:
 def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturnValue:
     """Génère un PDF individuel (fiche candidat, salle ou loge)."""
     if type_doc == 'fiche_candidat':
-        # Auth obligatoire : IDOR — sans contrôle, les noms complets sont
-        # énumérables par ID séquentiel sans authentification.
-        if not is_any_authenticated():
-            abort(403)
         info_candidat = db_get(db_facility_web.SELECT_DOC_INFOS_CANDIDAT,
                                id_doc, no_list_auto=False)
         if not info_candidat:
             abort(404)
         info_candidat = info_candidat[0]
+        # Ce PDF contient le login_key en clair (et désormais un QR de
+        # connexion automatique) : réservé à l'admin ou au candidat
+        # lui-même, comme show_credentials sur la fiche web candidat.html —
+        # pas à n'importe quel personnel authentifié (IDOR sur id_doc sinon).
+        if not (is_admin_user() or is_student_user(info_candidat['numero'])):
+            abort(403)
         info_candidat['oraux'] = db_get(
             db_facility_web.SELECT_DOC_INFOS_CANDIDATS_ORAUX, id_doc, no_list_auto=False
         )
+        info_candidat['token'] = _get_or_create_login_token(info_candidat['numero'])
         app.logger.debug(f"Document: fiche candidat {id_doc}")
         with tempfile.TemporaryDirectory() as tmpdir:
             filename = reports.fiche_candidat(
@@ -1290,6 +1341,26 @@ def login_candidat() -> ResponseReturnValue:
     app.logger.warning(f"Candidat {numero}: échec connexion")
     _record_auth_failure("candidat", numero)
     return redirect(url_for('login_candidat', message='Numéro ou mot de passe incorrect'))
+
+
+@app.route('/login-candidat/qr/<token>')
+@nocache
+@limiter.limit("10 per minute")
+def login_candidat_qr(token: str) -> ResponseReturnValue:
+    """Connexion candidat par QR de papillon — token opaque à usage unique.
+
+    Repli propre vers le formulaire de connexion classique si le token est
+    invalide, expiré ou déjà utilisé (jamais de blocage).
+    """
+    numero = _check_login_token(token)
+    if numero is None:
+        return redirect(url_for('login_candidat', message='QR invalide ou expiré'))
+    session.clear()
+    session['candidat'] = numero
+    session['_ts'] = __import__('time').time()
+    _online_set('cand', numero)
+    app.logger.info(f"Candidat {numero}: connecté via QR")
+    return redirect(url_for('candidat', id_candidat=numero))
 
 
 @app.route('/logout-candidat')
@@ -3084,14 +3155,9 @@ def generate_doc_batch(type_doc: str, id_doc: str | None = None) -> ResponseRetu
         return jsonify({"url": url_for('download', filename='liste_loges.pdf')})
 
     if type_doc == 'papillons_candidats':
-        infos = db_get(db_facility_web.SELECT_ALL_CANDIDATS_PAPILLONS, no_list_auto=False)
         base_url = request.host_url.rstrip('/')
-        reports.liste_papillons_candidats(
-            infos,
-            filename='generated/papillons_candidats.pdf',
-            base_url=base_url,
-            centre_examen=CENTRE_EXAMEN,
-        )
+        duree_qr_heures = request.args.get('duree_qr_heures', 48, type=int)
+        _regenerer_papillons_candidats(base_url, duree_heures=duree_qr_heures)
         return jsonify({"url": url_for('download', filename='papillons_candidats.pdf')})
 
     abort(404)
@@ -3728,14 +3794,18 @@ def _regenerer_papillons_loges(base_url: str) -> None:
         )
 
 
-def _regenerer_papillons_candidats(base_url: str) -> None:
+def _regenerer_papillons_candidats(base_url: str, duree_heures: int = 48) -> None:
     """Regénère papillons_candidats.pdf avec tous les candidats en DB.
 
     Le login_key des candidats est stocké en clair dans la DB, donc aucun
-    accès au store chiffré n'est nécessaire.
+    accès au store chiffré n'est nécessaire. Chaque candidat reçoit un token
+    de connexion QR (réutilisé s'il en a déjà un valide, cf.
+    _get_or_create_login_token) encodé dans le QR du papillon.
     """
     candidats = db_get(db_facility_web.SELECT_ALL_CANDIDATS_PAPILLONS, no_list_auto=False)
     if candidats:
+        for c in candidats:
+            c['token'] = _get_or_create_login_token(c['numero'], duree_heures)
         reports.liste_papillons_candidats(
             candidats,
             filename=str(Path(app.root_path) / 'generated' / 'papillons_candidats.pdf'),
@@ -3788,7 +3858,14 @@ def renew_candidat(id: int) -> ResponseReturnValue:
     :param id: Identifiant DB du candidat.
     :returns: Redirection vers link_back si fourni, sinon /gestion/credentials.
     """
+    candidat_avant = db_get(db_facility_web.SELECT_INFOS_CANDIDAT_BY_ID, id)
     _renew_candidat(id)
+    if candidat_avant:
+        # Le login_key de ce candidat change : son ancien token QR (papillon
+        # déjà imprimé) doit devenir invalide. Les autres candidats gardent
+        # le leur (cf. _get_or_create_login_token, appelé juste après).
+        db_update(db_facility_web.DELETE_TOKEN_LOGIN_CANDIDAT_NUMERO,
+                  numero=candidat_avant['numero'])
     base_url = request.host_url.rstrip('/')
     papillon_filename = 'papillons_candidats.pdf'
     _regenerer_papillons_candidats(base_url)
@@ -3810,6 +3887,9 @@ def renew_candidats() -> ResponseReturnValue:
     base_url = request.host_url.rstrip('/')
     for c in tous:
         _renew_candidat(c['id'])
+        # Tous les login_key changent : tous les tokens QR (papillons déjà
+        # imprimés) doivent devenir invalides.
+        db_update(db_facility_web.DELETE_TOKEN_LOGIN_CANDIDAT_NUMERO, numero=c['numero'])
     papillon_filename = 'papillons_candidats.pdf'
     _regenerer_papillons_candidats(base_url)
     return redirect(url_for('gestion_credentials', new_papillon=papillon_filename))

@@ -50,7 +50,11 @@
     {# Papillons candidats : regénérable (login_key en clair en base) #}
     <div class="doc-card" id="card-papillons-candidats">
         <span class="doc-title">🎫 Papillons candidats</span>
-        <span class="doc-note">N° candidat + mot de passe + QR code, 10 par page A4</span>
+        <span class="doc-note">N° candidat + mot de passe + QR de connexion directe, 10 par page A4</span>
+        <label style="font-size:.8em; display:flex; align-items:center; gap:.4em;">
+            Validité du QR (heures) :
+            <input type="number" id="duree-qr-candidats" value="48" min="1" style="width:4.5em;">
+        </label>
         <div class="doc-actions">
             <button class="btn-gen"
                     onclick="generer('papillons_candidats', 'card-papillons-candidats')">
@@ -144,7 +148,12 @@ const CSRF        = "{{ csrf_token }}";
 function generer(type, cardId) {
     const card = document.getElementById(cardId);
     card.classList.add('loading');
-    fetch(`${BATCH_BASE}${type}-0`)
+    let url = `${BATCH_BASE}${type}-0`;
+    if (type === 'papillons_candidats') {
+        const duree = document.getElementById('duree-qr-candidats').value || 48;
+        url += `?duree_qr_heures=${encodeURIComponent(duree)}`;
+    }
+    fetch(url)
         .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
         .then(d => {
             card.classList.remove('loading');

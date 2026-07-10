@@ -344,6 +344,57 @@ class TestLoginCandidat:
             assert "candidat" not in sess
 
 
+class TestLoginCandidatQr:
+    """QR de connexion automatique candidat (2026-07-10) : token opaque à
+    usage unique embarqué dans le papillon/la fiche PDF — jamais le
+    login_key réel. Repli propre vers /login-candidat si invalide/expiré."""
+
+    def test_valid_token_creates_session_and_redirects(self, client, db_mock):
+        from datetime import datetime, timedelta
+        import db_facility_web as dfw
+        future = (datetime.now() + timedelta(hours=1)).isoformat()
+        db_mock.make_sql_select.return_value = [
+            {"token": "abc123", "time_limit": future, "numero": "111111111AA"},
+        ]
+        db_mock.make_sql_update.reset_mock()
+        r = client.get("/login-candidat/qr/abc123", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/candidat/111111111AA" in r.headers["Location"]
+        with client.session_transaction() as sess:
+            assert sess.get("candidat") == "111111111AA"
+        # Usage unique : le token est supprimé après vérification.
+        args, kwargs = db_mock.make_sql_update.call_args
+        assert args[0] is dfw.DELETE_TOKEN_LOGIN_CANDIDAT
+        assert kwargs["token"] == "abc123"
+
+    def test_expired_token_redirects_to_login_form(self, client, db_mock):
+        from datetime import datetime, timedelta
+        past = (datetime.now() - timedelta(hours=1)).isoformat()
+        db_mock.make_sql_select.return_value = [
+            {"token": "expired", "time_limit": past, "numero": "111111111AA"},
+        ]
+        r = client.get("/login-candidat/qr/expired", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-candidat" in r.headers["Location"]
+        with client.session_transaction() as sess:
+            assert "candidat" not in sess
+
+    def test_unknown_token_redirects_to_login_form(self, client, db_mock):
+        db_mock.make_sql_select.return_value = []
+        r = client.get("/login-candidat/qr/does-not-exist", follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login-candidat" in r.headers["Location"]
+
+    def test_token_cannot_be_reused(self, client, db_mock):
+        """Rejouer la même URL après un premier scan doit échouer (usage unique) :
+        une fois consommé, le token n'est plus en base pour une 2e vérification."""
+        db_mock.make_sql_select.return_value = []  # déjà supprimé par un 1er scan
+        r = client.get("/login-candidat/qr/already-used", follow_redirects=False)
+        assert "/login-candidat" in r.headers["Location"]
+        with client.session_transaction() as sess:
+            assert "candidat" not in sess
+
+
 # ── Routes admin avec session ─────────────────────────────────────────────────
 
 class TestAdminRoutes:
@@ -1244,6 +1295,66 @@ class TestCandidatRoutes:
         requêtes admin (/gestion/*) le sélectionnent."""
         import db_facility_web as dfw
         assert "telephone" not in dfw.SELECT_INFOS_CANDIDAT.lower()
+
+
+class TestGenerateDocOneFicheCandidatAccessControl:
+    """Régression sécurité (2026-07-10) : /generate-doc-one/fiche_candidat-<id>
+    ne vérifiait que is_any_authenticated() — n'importe quel examinateur/loge
+    authentifié pouvait télécharger la fiche PDF de n'importe quel candidat
+    (login_key en clair, id énumérable). Resserré à la même règle que
+    show_credentials sur candidat.html : admin ou le candidat lui-même,
+    d'autant plus critique maintenant que le QR de ce PDF connecte
+    automatiquement (cf. TestLoginCandidatQr)."""
+
+    INFOS = {"id": 5, "nom": "Dupont Jean", "numero": "111111111AA",
+             "tiers_temps": 0, "etablissement": "Lycée Test", "login_key": "secretkey"}
+
+    def test_unauthenticated_forbidden(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [self.INFOS]
+        r = client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
+        assert r.status_code == 403
+
+    def test_examinateur_cannot_access_other_candidat_fiche(self, client, db_mock):
+        """Une session examinateur (non-admin) ne doit plus suffire."""
+        db_mock.make_sql_select.return_value = [self.INFOS]
+        with client.session_transaction() as sess:
+            sess["user"] = "101"
+        r = client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
+        assert r.status_code == 403
+
+    def test_candidat_cannot_access_other_candidat_fiche(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [self.INFOS]
+        with client.session_transaction() as sess:
+            sess["candidat"] = "999999999ZZ"
+        r = client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
+        assert r.status_code == 403
+
+    def test_admin_can_access(self, admin_client, db_mock, monkeypatch):
+        import app as app_module
+        db_mock.make_sql_select.side_effect = [
+            [self.INFOS],   # SELECT_DOC_INFOS_CANDIDAT
+            [],             # SELECT_DOC_INFOS_CANDIDATS_ORAUX
+            [],             # SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO
+        ]
+        monkeypatch.setattr(app_module.reports, "fiche_candidat",
+                            lambda *a, **kw: "candidat_5.pdf")
+        r = admin_client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
+        assert r.status_code == 200
+
+    def test_candidat_can_access_own_fiche(self, client, db_mock, monkeypatch):
+        import app as app_module
+        db_mock.make_sql_select.side_effect = [[self.INFOS], [], []]
+        monkeypatch.setattr(app_module.reports, "fiche_candidat",
+                            lambda *a, **kw: "candidat_5.pdf")
+        with client.session_transaction() as sess:
+            sess["candidat"] = "111111111AA"
+        r = client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
+        assert r.status_code == 200
+
+    def test_unknown_candidat_404(self, client, db_mock):
+        db_mock.make_sql_select.return_value = []
+        r = client.get("/generate-doc-one/fiche_candidat-999", follow_redirects=False)
+        assert r.status_code == 404
 
 
 class TestTelFilter:
@@ -2175,6 +2286,59 @@ class TestEditOralValidation:
         db_mock.make_sql_update.assert_called_once()
 
 
+class TestGenerateDocBatchPapillonsCandidatsQrDuree:
+    """Durée de validité du token QR configurable au moment de la génération
+    du lot de papillons (défaut 48h, cf. gestion_documents.html)."""
+
+    CANDIDAT_PAPILLON = {"nom": "Dupont Jean", "numero": "111111111AA", "login_key": "key"}
+
+    def test_default_duration_is_48h(self, admin_client, db_mock, monkeypatch):
+        import app as app_module
+        import db_facility_web as dfw
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.side_effect = [
+            [self.CANDIDAT_PAPILLON],  # SELECT_ALL_CANDIDATS_PAPILLONS
+            [],                         # SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO
+        ]
+        monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
+                            lambda *a, **kw: None)
+        r = admin_client.get("/generate-doc-batch/papillons_candidats-0",
+                             follow_redirects=False)
+        assert r.status_code == 200
+        insert_call = next(
+            c for c in db_mock.make_sql_update.call_args_list
+            if c.args[0] is dfw.INSERT_TOKEN_LOGIN_CANDIDAT
+        )
+        from datetime import datetime
+        limit = datetime.fromisoformat(insert_call.kwargs["time_limit"])
+        delta_hours = (limit - datetime.now()).total_seconds() / 3600
+        assert 47 < delta_hours <= 48
+
+    def test_custom_duration_is_used(self, admin_client, db_mock, monkeypatch):
+        import app as app_module
+        import db_facility_web as dfw
+        db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_select.side_effect = [
+            [self.CANDIDAT_PAPILLON],
+            [],
+        ]
+        monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
+                            lambda *a, **kw: None)
+        r = admin_client.get(
+            "/generate-doc-batch/papillons_candidats-0?duree_qr_heures=5",
+            follow_redirects=False,
+        )
+        assert r.status_code == 200
+        insert_call = next(
+            c for c in db_mock.make_sql_update.call_args_list
+            if c.args[0] is dfw.INSERT_TOKEN_LOGIN_CANDIDAT
+        )
+        from datetime import datetime
+        limit = datetime.fromisoformat(insert_call.kwargs["time_limit"])
+        delta_hours = (limit - datetime.now()).total_seconds() / 3600
+        assert 4 < delta_hours <= 5
+
+
 # ── Renouvellement des identifiants ──────────────────────────────────────────
 
 class TestCredentialRenewal:
@@ -2215,25 +2379,41 @@ class TestCredentialRenewal:
     def test_renew_candidat_updates_db(self, admin_client, db_mock, monkeypatch):
         """Renouveler un candidat appelle db_update avec login_key et password_hash."""
         import app as app_module
+        import db_facility_web as dfw
         db_mock.make_sql_update.reset_mock()
-        db_mock.make_sql_select.return_value = [self.CANDIDAT]
+        db_mock.make_sql_select.side_effect = [
+            [self.CANDIDAT],   # SELECT_INFOS_CANDIDAT_BY_ID (candidat_avant, pour invalider le token)
+            [self.CANDIDAT],   # SELECT_INFOS_CANDIDAT_BY_ID (dans _renew_candidat)
+            [self.CANDIDAT],   # SELECT_ALL_CANDIDATS_PAPILLONS (regénération)
+            [],                # SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO (aucun token existant)
+        ]
         monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
                             lambda *a, **kw: None)
         r = admin_client.post("/gestion/credentials/candidat/1",
                               follow_redirects=False)
         assert r.status_code == 302
-        db_mock.make_sql_update.assert_called_once()
-        _, kwargs = db_mock.make_sql_update.call_args
-        assert "login_key" in kwargs
-        assert "password_hash" in kwargs
-        assert kwargs["login_key"] != ""
+        creds_call = next(
+            c for c in db_mock.make_sql_update.call_args_list
+            if c.args[0] is dfw.UPDATE_CANDIDAT_CREDENTIALS
+        )
+        assert "login_key" in creds_call.kwargs
+        assert "password_hash" in creds_call.kwargs
+        assert creds_call.kwargs["login_key"] != ""
+        # Le token QR de ce candidat doit être invalidé (papillon déjà imprimé).
+        assert any(
+            c.args[0] is dfw.DELETE_TOKEN_LOGIN_CANDIDAT_NUMERO
+            and c.kwargs.get("numero") == self.CANDIDAT["numero"]
+            for c in db_mock.make_sql_update.call_args_list
+        )
 
     def test_renew_candidat_redirects_to_link_back(self, admin_client, db_mock, monkeypatch):
         """Renouveler un candidat depuis la liste des candidats revient sur cette page,
         avec le nom du fichier de lot regénéré en query string."""
         import app as app_module
         db_mock.make_sql_update.reset_mock()
-        db_mock.make_sql_select.return_value = [self.CANDIDAT]
+        db_mock.make_sql_select.side_effect = [
+            [self.CANDIDAT], [self.CANDIDAT], [self.CANDIDAT], [],
+        ]
         monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
                             lambda *a, **kw: None)
         r = admin_client.post("/gestion/credentials/candidat/1",
@@ -2243,9 +2423,11 @@ class TestCredentialRenewal:
         assert r.headers["Location"] == "/gestion/liste-candidats?new_papillon=papillons_candidats.pdf"
 
     def test_renew_all_candidats(self, admin_client, db_mock, monkeypatch):
-        """Renouveler tous les candidats appelle db_update une fois par candidat
-        et regénère papillons_candidats.pdf."""
+        """Renouveler tous les candidats appelle UPDATE_CANDIDAT_CREDENTIALS une
+        fois par candidat, invalide le token QR de chacun, et regénère
+        papillons_candidats.pdf."""
         import app as app_module
+        import db_facility_web as dfw
         db_mock.make_sql_update.reset_mock()
         candidats = [
             {"id": 1, "nom": "Dupont Jean", "numero": "0001"},
@@ -2256,19 +2438,23 @@ class TestCredentialRenewal:
             {"nom": "Martin Paul", "numero": "0002", "login_key": "key2"},
         ]
         # SELECT_ALL_CANDIDATS_FOR_RENEWAL, SELECT_INFOS_CANDIDAT × 2,
-        # puis SELECT_ALL_CANDIDATS_PAPILLONS pour la regénération groupée
+        # SELECT_ALL_CANDIDATS_PAPILLONS, puis SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO × 2
         db_mock.make_sql_select.side_effect = [
             candidats,                 # liste initiale
             [candidats[0]],            # infos candidat 1
             [candidats[1]],            # infos candidat 2
             candidats_papillons,       # SELECT_ALL_CANDIDATS_PAPILLONS (regénération)
+            [],                        # token candidat 1 (aucun existant)
+            [],                        # token candidat 2 (aucun existant)
         ]
         monkeypatch.setattr(app_module.reports, "liste_papillons_candidats",
                             lambda *a, **kw: None)
         r = admin_client.post("/gestion/credentials/candidats",
                               follow_redirects=False)
         assert r.status_code == 302
-        assert db_mock.make_sql_update.call_count == 2
+        calls = db_mock.make_sql_update.call_args_list
+        assert sum(1 for c in calls if c.args[0] is dfw.UPDATE_CANDIDAT_CREDENTIALS) == 2
+        assert sum(1 for c in calls if c.args[0] is dfw.DELETE_TOKEN_LOGIN_CANDIDAT_NUMERO) == 2
 
     # ── Examinateur ──────────────────────────────────────────────────────────
 

@@ -254,7 +254,7 @@ Sur la page `/gestion/documents` (accueil admin → bloc **Préparation** → Do
 | Document | Action | À faire |
 |---|---|---|
 | Papillons examinateurs | Télécharger | Distribuer aux examinateurs avant le jour J |
-| Papillons candidats | Générer + télécharger | Distribuer aux candidats avant le jour J |
+| Papillons candidats | Générer + télécharger (durée du QR configurable, défaut 48h) | Distribuer aux candidats avant le jour J |
 | Papillons loges | Télécharger | Distribuer aux surveillants de loge |
 | Fiches salles (lot) | Générer + télécharger | Afficher ou distribuer aux examinateurs |
 | Fiches loges (lot) | Générer + télécharger | Remettre aux surveillants de loge |
@@ -394,6 +394,8 @@ sans adaptation possible (rien à adapter).
 | **Loges** | Une ou toutes | Génère un nouveau mot de passe + hash en DB + regénère le papillon PDF |
 
 **Stockage sécurisé :** les mots de passe en clair des examinateurs et des loges sont chiffrés (AES-256-GCM) dans `data/credentials.enc`. Ce store est initialisé automatiquement à la fin de chaque lancement de l'algorithme, et mis à jour à chaque renouvellement.
+
+**QR de connexion directe (candidats)** : le papillon et la fiche PDF individuelle d'un candidat contiennent un QR code qui, une fois scanné, le connecte directement (plus besoin de taper numéro + mot de passe) — pratique pour la connexion du matin. Techniquement, c'est un token à usage unique, distinct du `login_key`, valable par défaut 48h (réglable au moment de générer le lot de papillons, cf. `/gestion/documents`). Renouveler le mot de passe d'un candidat invalide automatiquement son ancien QR — un papillon perdu redevient inoffensif dès le renouvellement. Voir [securite.md](securite.md) pour le détail du mécanisme.
 
 > **Cas d'usage :** un examinateur perd son papillon → aller sur `/gestion/credentials`, cliquer "Renouveler" sur la ligne de cet examinateur → un nouveau papillon PDF est regénéré et disponible au téléchargement.
 

@@ -55,7 +55,6 @@
 {% endif %}
 
 <div class="centered">
-    <img src="{{ url_for('candidat_court', _external=True, id_candidat=data['numero']) | qr(scale=4) }}">
     <a href="#" onclick="open_url('{{ url_for('generate_screen_one', type_doc='fiche_candidat', id_doc=data['id']) }}')"><img src="{{ url_for('static', filename='pdf.png') }}"></a>
 </div>
 

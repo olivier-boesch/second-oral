@@ -43,7 +43,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | **Headers** | `Referrer-Policy: strict-origin-when-cross-origin`, `Cross-Origin-Opener-Policy: same-origin`, `X-Content-Type-Options: nosniff` |
 | **Permissions-Policy** | `camera`, `microphone`, `geolocation`, `payment`, `usb` désactivés |
 | **Open redirect** | Toutes les URLs `link_back` validées : schéma limité à `http`/`https`/vide ; même domaine obligatoire |
-| **IDOR** | `/generate-doc-one` protégé — auth obligatoire ; `/download?filename=candidat_*` requiert une session active ; canaux SSE soumis à autorisation par session |
+| **IDOR** | `/generate-doc-one` protégé — `fiche_candidat` réservé à l'admin ou au candidat lui-même (même règle que `show_credentials`, resserré le 2026-07-10 : contenait déjà `login_key` en clair) ; `fiche_salle`/`fiche_loge` : auth obligatoire ; `/download?filename=candidat_*` requiert une session active ; canaux SSE soumis à autorisation par session |
 | **Path traversal** | `/download` : regex `^[\w\-. ]+\.pdf$` + `send_from_directory` |
 | **PDF générés (accès direct)** | Stockés dans `webserver/generated/`, hors de `webserver/static/` — jamais servis en statique par nginx (ni par le handler `/static/` intégré de Flask) ; seul `/download` (authentifié, cf. IDOR ci-dessus) y donne accès. Volume Docker dédié, non monté dans le conteneur nginx. |
 | **Logs d'audit** | Triggers MariaDB, chaîne de hash SHA-256 + sel côté DB. Les `password_hash` ne sont jamais journalisés. |
@@ -56,6 +56,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | **IPs de session (monitoring)** | Stockées en Redis (TTL 8 h, supprimées au logout) — admin uniquement, intérêt légitime art. 6.1.f RGPD |
 | **Logs gunicorn** | Format `%({x-forwarded-for}i)s` — affiche l'IP réelle du client |
 | **Tokens signature** | Usage unique, expiration 5 min, canal `sign_<token>` dédié |
+| **Token QR connexion candidat** | Usage unique, distinct du `login_key` réel (révocable sans reset de compte), expiration configurable (défaut 48h — imprimé à l'avance sur le papillon/la fiche PDF) ; invalidé automatiquement au renouvellement du mot de passe candidat ; repli vers la connexion classique si expiré/déjà utilisé |
 | **DB privilèges** | Compte applicatif limité à `SELECT, INSERT, UPDATE, DELETE` — pas de `DROP`/`ALTER` |
 | **Docker** | Conteneur exécuté en tant qu'utilisateur non-root `appuser` (UID 1000) |
 | **Dépendances** | Versions épinglées dans `requirements.txt` ; `pip-audit` exécuté à chaque CI |
