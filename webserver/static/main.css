@@ -204,6 +204,9 @@ th {
     font-size: 0.88rem;
     letter-spacing: 0.03em;
     padding: 0.7em 1em;
+    position: sticky;
+    top: var(--header-h);
+    z-index: 2;
 }
 td {
     padding: 0.6em 1em;
