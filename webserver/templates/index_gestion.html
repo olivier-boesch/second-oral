@@ -54,7 +54,7 @@
                 </td>
                 <td rowspan="2">
                     {% if oral['telephone'] %}
-                        <a href="tel:{{ oral['telephone'] }}">{{ oral['telephone'] }}</a>
+                        <a href="tel:{{ oral['telephone'] }}">{{ oral['telephone']|tel }}</a>
                     {% else %}
                         —
                     {% endif %}

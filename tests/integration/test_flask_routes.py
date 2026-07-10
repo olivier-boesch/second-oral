@@ -1246,6 +1246,25 @@ class TestCandidatRoutes:
         assert "telephone" not in dfw.SELECT_INFOS_CANDIDAT.lower()
 
 
+class TestTelFilter:
+    """Filtre Jinja `tel` : formate un numéro par paires de chiffres séparées
+    par des points (affichage /gestion), sans toucher au numéro brut utilisé
+    dans le lien `tel:` (composition depuis mobile/téléphone)."""
+
+    def test_formats_by_pairs(self):
+        import app as app_module
+        assert app_module.tel_filter("0612345678") == "06.12.34.56.78"
+
+    def test_empty_returns_empty(self):
+        import app as app_module
+        assert app_module.tel_filter("") == ""
+        assert app_module.tel_filter(None) == ""
+
+    def test_odd_length_keeps_last_digit_alone(self):
+        import app as app_module
+        assert app_module.tel_filter("123") == "12.3"
+
+
 class TestIndexGestionFusionCandidatOraux:
     """Vue fusionnée candidat + oraux (2026-07-09) : /gestion affiche désormais
     nom/numéro/téléphone/tiers-temps + les 2 oraux, /gestion/liste-candidats
@@ -1270,7 +1289,8 @@ class TestIndexGestionFusionCandidatOraux:
         r = admin_client.get("/gestion")
         assert r.status_code == 200
         body = r.data.decode()
-        assert "0612345678" in body
+        assert 'href="tel:0612345678"' in body
+        assert "06.12.34.56.78" in body
         assert "111111111AA" in body
         assert "/gestion/edit-candidat?id=1" in body
 

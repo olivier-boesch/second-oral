@@ -470,6 +470,15 @@ def heure_filter(td):
     return f"{h:02d}:{m:02d}"
 
 
+@app.template_filter('tel')
+def tel_filter(numero):
+    """Filtre Jinja2 : formate un numéro de téléphone par paires de chiffres
+    séparées par des points (ex. 0612345678 -> 06.12.34.56.78)."""
+    if not numero:
+        return ''
+    return '.'.join(numero[i:i + 2] for i in range(0, len(numero), 2))
+
+
 def nocache(f):
     """Désactive le cache navigateur pour la réponse."""
     @wraps(f)
