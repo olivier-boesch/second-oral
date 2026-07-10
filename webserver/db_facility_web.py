@@ -488,6 +488,25 @@ DELETE_LOGE = """
 DELETE FROM Loge WHERE id = %(id)s
 """
 
+SELECT_LOGE_BY_ID = """
+SELECT id, nom FROM Loge WHERE id = %s
+"""
+
+# ---------- Réaffectation rapide des salles vers une loge (tableau matriciel)
+
+SELECT_MATRICE_SALLES_LOGES = """
+SELECT Examinateur.id AS id, Examinateur.nom AS nom, Examinateur.salle AS salle,
+       Matiere.nom AS matiere, Loge.id AS loge_id, Loge.nom AS loge
+FROM Examinateur
+    JOIN Matiere ON Matiere.id = Examinateur.matiere
+    JOIN Loge ON Examinateur.loge_id = Loge.id
+ORDER BY Examinateur.salle
+"""
+
+UPDATE_EXAMINATEUR_LOGE = """
+UPDATE Examinateur SET loge_id = %(loge_id)s WHERE id = %(id)s
+"""
+
 # ---------- Documents PDF
 
 SELECT_DOC_LISTE_ORAUX = """

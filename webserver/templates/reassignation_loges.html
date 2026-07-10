@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Oraux - {{ centre }} - Réaffectation des salles</title>
+    {% include 'style.html' %}
+</head>
+<body class="body-for-sticky body-admin">
+{% include 'auth_icon.html' %}
+{% include 'admin_nav.html' %}
+    <h1>Réaffectation des salles</h1>
+    <p>
+        <small>Cliquez sur la case d'une loge pour y déplacer une salle — la case
+        cochée est la loge actuelle de chaque salle. La modification est appliquée
+        immédiatement, sans quitter cette page.</small>
+    </p>
+    <div style="overflow-x:auto;">
+    <table id="matrice-loges">
+        <tr>
+            <th style="position:sticky; left:0; z-index:3;">Salle</th>
+            {% for loge in loges %}
+            <th>{{ loge['nom'] }}</th>
+            {% endfor %}
+            <th>
+                <form id="form-nouvelle-loge" style="display:flex; gap:.3em; align-items:center; justify-content:center;">
+                    <input type="text" id="nouvelle-loge-nom" placeholder="Nouvelle loge"
+                           style="width:8em; font-size:.8rem; font-weight:normal; letter-spacing:normal; text-transform:none;">
+                    <button type="submit" class="outline" style="font-size:.8rem; padding:.2em .6em;">
+                        + Ajouter
+                    </button>
+                </form>
+            </th>
+        </tr>
+        {% for ex in examinateurs %}
+        <tr class="{{ loop.cycle("tr_light", "tr_dark") }}" data-examinateur-id="{{ ex['id'] }}">
+            <td style="position:sticky; left:0; z-index:1; background:inherit; text-align:left;">
+                <strong>{{ ex['salle'] }}</strong><br>
+                <small>{{ ex['nom'] }} — {{ ex['matiere'] }}</small>
+            </td>
+            {% for loge in loges %}
+            <td style="text-align:center;">
+                <input type="radio" name="loge_{{ ex['id'] }}" value="{{ loge['id'] }}"
+                       {% if loge['id'] == ex['loge_id'] %}checked{% endif %}
+                       onchange="reassignerLoge({{ ex['id'] }}, {{ loge['id'] }}, this)">
+            </td>
+            {% endfor %}
+            <td></td>
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+{% include 'footer.html' %}
+
+<script nonce="{{ csp_nonce }}">
+    window.CSRF_TOKEN = {{ csrf_token() | tojson }};
+</script>
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='reassignation_loges.js') }}?v={{ sv }}"></script>
+</body>
+</html>

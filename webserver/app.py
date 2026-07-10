@@ -1877,6 +1877,81 @@ def rename_loge(id_loge: int) -> ResponseReturnValue:
     return redirect(url_for('gestion_loges'))
 
 
+@app.route('/gestion/reassignation-loges')
+@admin_required
+@nocache
+def reassignation_loges() -> ResponseReturnValue:
+    """Tableau matriciel salles × loges pour réaffecter rapidement une salle
+    à une autre loge (une case par couple salle/loge, la case cochée est la
+    loge actuelle) — sans repasser par le formulaire d'édition examinateur."""
+    examinateurs = db_get(db_facility_web.SELECT_MATRICE_SALLES_LOGES, no_list_auto=False)
+    loges = db_get(db_facility_web.SELECT_ALL_LOGES_FOR_RENEWAL, no_list_auto=False)
+    return render_template(
+        'reassignation_loges.html',
+        centre=CENTRE_EXAMEN,
+        examinateurs=examinateurs,
+        loges=loges,
+        url_of_page=request.url,
+        username=get_username(),
+    )
+
+
+@app.route('/gestion/reassignation-loges/assign', methods=['POST'])
+@admin_required
+@nocache
+def reassignation_loges_assign() -> ResponseReturnValue:
+    """Réaffecte une salle (examinateur) à une autre loge — appelé en AJAX
+    depuis le tableau matriciel, une case à la fois."""
+    data = request.json or {}
+    try:
+        id_examinateur = int(data.get('id_examinateur') or 0)
+        id_loge = int(data.get('id_loge') or 0)
+    except (TypeError, ValueError):
+        abort(400, "Identifiants invalides")
+
+    lignes = db_get(
+        db_facility_web.SELECT_SALLE_LOGE_FROM_EXAMINATEUR, id_examinateur, no_list_auto=False,
+    )
+    if not lignes:
+        abort(404, "Examinateur introuvable")
+    ancienne_salle, ancienne_loge = lignes[0]['salle'], lignes[0]['loge']
+
+    loge_cible = db_get(db_facility_web.SELECT_LOGE_BY_ID, id_loge, no_list_auto=False)
+    if not loge_cible:
+        abort(404, "Loge introuvable")
+    nouvelle_loge = loge_cible[0]['nom']
+
+    if nouvelle_loge == ancienne_loge:
+        return jsonify({'ok': True, 'loge': nouvelle_loge})
+
+    db_update(db_facility_web.UPDATE_EXAMINATEUR_LOGE, id=id_examinateur, loge_id=id_loge)
+
+    # Notifie en direct les vues loge (ancienne/nouvelle) et salle déjà ouvertes
+    # — même mécanisme que _notifier_salle_loge_examinateur (SSE ciblé par canal).
+    sse.publish(data=None, type="data_updated", channel=f"salle_{ancienne_salle}")
+    sse.publish(data=None, type="data_updated", channel=f"loge_{ancienne_loge}")
+    sse.publish(data=None, type="data_updated", channel=f"loge_{nouvelle_loge}")
+
+    return jsonify({'ok': True, 'loge': nouvelle_loge})
+
+
+@app.route('/gestion/reassignation-loges/nouvelle-loge', methods=['POST'])
+@admin_required
+@nocache
+def reassignation_loges_nouvelle_loge() -> ResponseReturnValue:
+    """Crée une loge à la volée depuis le tableau matriciel (nouvelle colonne),
+    sans passer par le formulaire d'édition examinateur — même mécanisme que
+    l'option ➕ Nouvelle loge… d'add/edit-examinateur (cf. _assurer_loge)."""
+    nom = ((request.json or {}).get('nom') or '').strip()
+    if not nom:
+        abort(400, "Le nom de la loge ne peut pas être vide.")
+    loge_id, creee = _assurer_loge(nom)
+    if not creee:
+        abort(400, f"Une loge « {nom} » existe déjà.")
+    _regenerer_papillons_loges(request.host_url.rstrip('/'))
+    return jsonify({'ok': True, 'id': loge_id, 'nom': nom})
+
+
 @app.route('/gestion/edit-candidat', methods=['GET', 'POST'])
 @admin_required
 @nocache
