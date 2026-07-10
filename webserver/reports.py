@@ -95,7 +95,11 @@ def _cell(value, font_size: int = 10, alignment=TA_CENTER) -> Paragraph:
     """
     if isinstance(value, (Paragraph, Image)):
         return value
-    return Paragraph(str(value), _ps('cell', fontSize=font_size, alignment=alignment))
+    # ParagraphStyle.leading vaut 12pt par défaut, quelle que soit fontSize —
+    # sur les fiches en A3 (font_size=16), ça produit un interligne plus
+    # petit que la police elle-même et les lignes wrappées se chevauchent.
+    return Paragraph(str(value), _ps('cell', fontSize=font_size,
+                                      leading=font_size * 1.25, alignment=alignment))
 
 
 # ── Canvas avec footer ────────────────────────────────────────────────────────
@@ -537,9 +541,10 @@ def loge_oraux(infos_loge: dict, tempdir: str = ".", file_dir: str = '.',
     data = []
     filename = f"{filename_root}-{infos_loge['salle']}.pdf"
     for o in infos_loge['oraux']:
-        nom = f"{o['candidat']} ({o['numero']})"
+        nom = o['candidat']
         if o['tiers_temps']:
             nom += " " + WARNING_CHAR
+        nom += f"<br/>N° {o['numero']}"
         data.append([nom, o['salle'], o['matiere_court'], o['examinateur'],
                      o['sujet'], o['oral'], "", ""])
     liste_pdf(
