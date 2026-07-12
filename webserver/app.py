@@ -1279,7 +1279,7 @@ def login() -> ResponseReturnValue:
         session['_ts'] = __import__('time').time()
         _online_set('admin', 'admin')
         app.logger.info("admin: connecté")
-        return redirect(url or url_for("index"))
+        return redirect(url or url_for("gestion_home"))
 
     app.logger.warning("admin: échec connexion (code OTP incorrect)")
     _record_auth_failure("admin", "totp")
@@ -1449,11 +1449,26 @@ def reload_pages() -> ResponseReturnValue:
 @app.route("/gestion")
 @admin_required
 @nocache
-def index_gestion() -> ResponseReturnValue:
-    """Page d'accueil de la gestion : liste des oraux et accès aux outils admin."""
+def gestion_home() -> ResponseReturnValue:
+    """Dashboard d'accueil admin : marche à suivre Préparation → Jour J →
+    Fin de session, liens statiques uniquement (pas de requête DB)."""
+    return render_template(
+        "gestion_home.html",
+        centre=CENTRE_EXAMEN,
+        url_of_page=request.url,
+        authenticated=is_authenticated(),
+        username=get_username(),
+    )
+
+
+@app.route("/gestion/candidats")
+@admin_required
+@nocache
+def gestion_candidats() -> ResponseReturnValue:
+    """Vue fusionnée candidats/oraux : liste des oraux et accès aux outils admin."""
     oraux = db_get(db_facility_web.SELECT_LISTE_ORAUX, no_list_auto=False)
     return render_template(
-        "index_gestion.html",
+        "gestion_candidats.html",
         centre=CENTRE_EXAMEN,
         oraux=oraux,
         url_of_page=request.url,
@@ -1749,7 +1764,7 @@ def edit_oral() -> ResponseReturnValue:
 
         _appliquer_changement_oral(d, numero)
         url = _safe_redirect_url(request.form.get("link_back"))
-        return redirect(url or url_for('index_gestion', _anchor=str(d['id'])))
+        return redirect(url or url_for('gestion_candidats', _anchor=str(d['id'])))
 
     # GET
     id_oral = request.args.get('oral', None)
@@ -1983,7 +1998,7 @@ def edit_candidat() -> ResponseReturnValue:
             tiers_temps=candidat_actuel['tiers_temps'], telephone=telephone,
         )
         url = _safe_redirect_url(request.form.get('link_back'))
-        return redirect(url or url_for('index_gestion'))
+        return redirect(url or url_for('gestion_candidats'))
 
     # GET
     id_candidat_arg = request.args.get('id', None)

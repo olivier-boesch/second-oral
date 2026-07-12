@@ -186,6 +186,12 @@ examinateurs et loges n'apparaissent pas dans l'archive RGPD.
 
 ## Interface d'administration
 
+`/gestion` est le tableau de bord d'accueil admin (`gestion_home()`) — atterrissage
+par défaut après connexion (`login()`, en l'absence de `link_back`), organisé en
+liens statiques groupés par étape (Préparation/Jour J/Fin de session), sans
+requête DB. La vue candidats/oraux fusionnée (ex-`/gestion`) vit désormais sur
+`/gestion/candidats` (`gestion_candidats()`).
+
 Les pages d'administration (`/gestion/*`) partagent une sidebar d'icônes SVG fixe
 (`admin_nav.html`, incluse dans chaque template admin). Les icônes utilisent le
 style Lucide (trait, pas de remplissage, `viewBox="0 0 24 24"`) — aucune
@@ -193,7 +199,12 @@ dépendance externe, les SVG sont inline.
 
 Les pages d'archivage (`/gestion/archive`) et de vérification des logs
 (`/gestion/verify-logs`) sont intentionnellement **hors de la sidebar** :
-ce sont des opérations de fin de session, pas des commandes courantes.
+ce sont des opérations de fin de session, pas des commandes courantes — elles
+restent accessibles depuis le tableau de bord (`/gestion`). `/salle`, `/loge`
+et `/liste` (accès direct salle/loge, grand écran TV) sont, eux, dans la
+sidebar : consultés fréquemment pendant le jour J, malgré une autorisation
+plus large que le reste de la sidebar (`is_authenticated()`, pas
+`admin_required` — tout le personnel, pas seulement l'admin).
 
 Les couleurs de la sidebar (`--primary`, `--primary-lt`, `--border`) suivent
 automatiquement le thème d'accent — aucune valeur codée en dur.

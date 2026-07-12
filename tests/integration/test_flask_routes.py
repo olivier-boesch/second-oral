@@ -15,6 +15,17 @@ class TestPublicRoutes:
         r = client.get("/")
         assert r.status_code == 200
 
+    def test_index_admin_tile_links_to_login_when_anonymous(self, client):
+        body = client.get("/").data.decode()
+        assert "Connexion administrateur" in body
+        assert "Tableau de bord admin" not in body
+
+    def test_index_admin_tile_links_to_dashboard_when_logged_in(self, admin_client):
+        body = admin_client.get("/").data.decode()
+        assert "Tableau de bord admin" in body
+        assert 'href="/gestion"' in body
+        assert "Connexion administrateur" not in body
+
     def test_login_page_ok(self, client):
         r = client.get("/login")
         assert r.status_code == 200
@@ -55,6 +66,7 @@ class TestPublicRoutes:
 class TestAuthRedirects:
     @pytest.mark.parametrize("url", [
         "/gestion",
+        "/gestion/candidats",
         "/gestion/algo",
         "/gestion/algo/validate",
         "/gestion/liste-examinateurs",
@@ -87,11 +99,23 @@ class TestLogin:
         code = totp.now()
         r = client.post("/login", data={"key": code, "link_back": ""},
                         follow_redirects=False)
-        # Bon code → redirect vers l'index
+        # Bon code, pas de link_back → redirect vers le dashboard admin (/gestion)
         assert r.status_code == 302
         assert "/login" not in r.headers["Location"]
+        assert r.headers["Location"] == "/gestion"
         with client.session_transaction() as sess:
             assert sess.get("user") == "admin"
+
+    def test_correct_totp_with_link_back_redirects_there(self, client):
+        """link_back (deep-link via admin_required) reste prioritaire sur le
+        dashboard par défaut."""
+        import pyotp
+        totp = pyotp.TOTP("JBSWY3DPEHPK3PXP")
+        code = totp.now()
+        r = client.post("/login", data={"key": code, "link_back": "/gestion/algo"},
+                        follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["Location"] == "/gestion/algo"
 
     def test_logout_clears_session(self, admin_client):
         r = admin_client.get("/logout", follow_redirects=False)
@@ -403,9 +427,18 @@ class TestAdminRoutes:
         assert r.status_code == 200
 
     def test_gestion_ok(self, admin_client):
+        """/gestion est désormais le dashboard admin (Préparation/Jour J/Fin
+        de session), la vue candidats/oraux a déménagé vers /gestion/candidats."""
         r = admin_client.get("/gestion")
         assert r.status_code == 200
+        body = r.data.decode()
+        assert "Préparation" in body
+        assert "Jour J" in body
+        assert "Fin de session" in body
 
+    def test_gestion_candidats_ok(self, admin_client):
+        r = admin_client.get("/gestion/candidats")
+        assert r.status_code == 200
 
     def test_algo_status_reflects_is_running(self, admin_client, monkeypatch):
         import algo_bg
@@ -1376,10 +1409,11 @@ class TestTelFilter:
         assert app_module.tel_filter("123") == "12.3"
 
 
-class TestIndexGestionFusionCandidatOraux:
-    """Vue fusionnée candidat + oraux (2026-07-09) : /gestion affiche désormais
-    nom/numéro/téléphone/tiers-temps + les 2 oraux, /gestion/liste-candidats
-    (page séparée) a été supprimée."""
+class TestGestionCandidatsFusionCandidatOraux:
+    """Vue fusionnée candidat + oraux (2026-07-09), déplacée de /gestion vers
+    /gestion/candidats (2026-07-11, /gestion devient le dashboard admin) :
+    affiche nom/numéro/téléphone/tiers-temps + les 2 oraux,
+    /gestion/liste-candidats (page séparée) a été supprimée."""
 
     ORAUX_CANDIDAT_UNIQUE = [
         {"id_oral": 10, "id_candidat": 1, "nom": "Dupont Jean", "numero": "111111111AA",
@@ -1397,7 +1431,7 @@ class TestIndexGestionFusionCandidatOraux:
 
     def test_telephone_and_edit_link_displayed(self, admin_client, db_mock):
         db_mock.make_sql_select.return_value = self.ORAUX_CANDIDAT_UNIQUE
-        r = admin_client.get("/gestion")
+        r = admin_client.get("/gestion/candidats")
         assert r.status_code == 200
         body = r.data.decode()
         assert 'href="tel:0612345678"' in body
@@ -1407,7 +1441,7 @@ class TestIndexGestionFusionCandidatOraux:
 
     def test_no_link_to_removed_liste_candidats(self, admin_client, db_mock):
         db_mock.make_sql_select.return_value = self.ORAUX_CANDIDAT_UNIQUE
-        r = admin_client.get("/gestion")
+        r = admin_client.get("/gestion/candidats")
         assert "/gestion/liste-candidats" not in r.data.decode()
 
     def test_quick_tiers_temps_button_present(self, admin_client, db_mock):
@@ -1415,7 +1449,7 @@ class TestIndexGestionFusionCandidatOraux:
         vues, a été remis dans la liste (en plus de la case à cocher sur la
         fiche d'édition) — cf. project_fusion_vue_candidat_oraux."""
         db_mock.make_sql_select.return_value = self.ORAUX_CANDIDAT_UNIQUE
-        r = admin_client.get("/gestion")
+        r = admin_client.get("/gestion/candidats")
         body = r.data.decode()
         assert "/gestion/candidat/tiers-temps?id_candidat=1" in body
         assert "⏱️ Déclarer" in body

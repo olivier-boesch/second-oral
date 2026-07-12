@@ -2,6 +2,8 @@
 
 Ce document décrit le processus complet de préparation et de lancement des oraux de second groupe, du formatage des fichiers CSV jusqu'à la distribution des papillons le jour J.
 
+**Point d'entrée** : après connexion (`/login`), l'administrateur atterrit sur `/gestion` — le tableau de bord admin, qui reprend cette même trame Préparation → Jour J → Fin de session sous forme de liens groupés. La sidebar (icônes fixes sur chaque page `/gestion/*`) permet ensuite de circuler rapidement sans repasser par ce tableau de bord.
+
 ---
 
 ## Vue d'ensemble du workflow

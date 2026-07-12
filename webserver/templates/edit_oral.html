@@ -107,7 +107,7 @@
             ↺ Réinitialiser
         </button>
         <button type="button" class="outline"
-                onclick="document.location='{% if link_back %}{{ link_back }}{% else %}{{ url_for('index_gestion', _anchor=''~donnees_oral['id']) }}{% endif %}';">
+                onclick="document.location='{% if link_back %}{{ link_back }}{% else %}{{ url_for('gestion_candidats', _anchor=''~donnees_oral['id']) }}{% endif %}';">
             ← Annuler
         </button>
     </div>

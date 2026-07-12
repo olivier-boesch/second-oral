@@ -426,12 +426,6 @@ form {
     gap: 0.5em;
 }
 
-.not_available {
-    opacity: 0.45;
-    pointer-events: none;
-    user-select: none;
-}
-
 .grid-options {
     display: grid;
     grid-template-columns: 1fr 1fr;
