@@ -197,14 +197,12 @@ Les pages d'administration (`/gestion/*`) partagent une sidebar d'icônes SVG fi
 style Lucide (trait, pas de remplissage, `viewBox="0 0 24 24"`) — aucune
 dépendance externe, les SVG sont inline.
 
-Les pages d'archivage (`/gestion/archive`) et de vérification des logs
-(`/gestion/verify-logs`) sont intentionnellement **hors de la sidebar** :
-ce sont des opérations de fin de session, pas des commandes courantes — elles
-restent accessibles depuis le tableau de bord (`/gestion`). `/liste` (grand
-écran TV) est, elle, dans la sidebar : consultée fréquemment pendant le jour
-J, malgré une autorisation plus large que le reste de la sidebar
-(`is_authenticated()`, pas `admin_required` — tout le personnel, pas
-seulement l'admin).
+Les pages d'archivage (`/gestion/archive`), de vérification des logs
+(`/gestion/verify-logs`) et `/liste` (grand écran TV) sont intentionnellement
+**hors de la sidebar** : ce sont des opérations de fin de session ou un
+affichage secondaire, pas des commandes courantes de la sidebar — elles
+restent accessibles depuis le tableau de bord (`/gestion`, bloc Jour J pour
+`/liste`, retiré de la sidebar le 2026-07-13).
 
 `/salle` et `/loge` (« Index des salles/loges », pages génériques listant
 tous les liens) ne sont **pas** dans la partie admin (ni dashboard, ni
