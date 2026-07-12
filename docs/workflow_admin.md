@@ -2,7 +2,7 @@
 
 Ce document décrit le processus complet de préparation et de lancement des oraux de second groupe, du formatage des fichiers CSV jusqu'à la distribution des papillons le jour J.
 
-**Point d'entrée** : après connexion (`/login`), l'administrateur atterrit sur `/gestion` — le tableau de bord admin, qui reprend cette même trame Préparation → Jour J → Fin de session sous forme de liens groupés. La sidebar (icônes fixes sur chaque page `/gestion/*`) permet ensuite de circuler rapidement sans repasser par ce tableau de bord.
+**Point d'entrée** : après connexion (`/login`), l'administrateur atterrit sur `/gestion` — le tableau de bord admin, qui reprend cette même trame Préparation → Jour J → Fin de session. Détails techniques (sidebar, routes hors sidebar) : voir [architecture.md](architecture.md#interface-dadministration).
 
 ---
 
@@ -273,17 +273,6 @@ Sur la page `/gestion/documents` (accueil admin → bloc **Préparation** → Do
 
 ## 4. Corrections après le lancement
 
-### Jour J — page de monitoring
-
-`/gestion/jour-j` (icône 📊 dans la barre latérale admin) est une page de **monitoring seul** :
-
-- **État** : algorithme en cours d'exécution ou non ; pause méridienne configurée (à venir / en cours / terminée), avec un lien direct vers `/gestion/algo` pour la régler.
-- **📊 Supervision technique** (dépliée par défaut) : requêtes HTTP, activité des dernières 24 h, sessions actives (avec lien direct vers la salle/loge concernée), échecs d'authentification récents, rappel de purge des PDFs générés. Rafraîchie automatiquement toutes les 10 s.
-
-**Historique (2026-07-11) :** les raccourcis **🕒 Disponibilité d'un examinateur** et **🔄 Changement de matière d'un candidat**, qui centralisaient ces actions ici via des listes déroulantes, ont été retirés — ils faisaient double emploi avec les boutons désormais présents directement sur `/gestion/liste-examinateurs` (**🕒 Disponibilité** par ligne) et `/gestion/candidats` (**🔄 Changer de matière** par ligne, ajouté ce même jour). Ces deux actions restent documentées ci-dessous, simplement accessibles depuis les listes complètes plutôt que depuis ce hub.
-
-**Limite actuelle :** cette page ne fait pas le suivi des oraux non replacés automatiquement (paliers 2/3 de résolution poussée, cf. plus bas) — cet état reste propre à chaque écran de prévisualisation et n'est pas persisté entre deux visites.
-
 ### Modifier un oral
 
 1. `/gestion/candidats` → cliquer sur l'oral à modifier
@@ -419,7 +408,18 @@ Depuis le 09/07/2026, `Examinateur.loge_id` est une vraie clé étrangère vers 
 
 ---
 
-## 5. Jour des épreuves
+## 5. Jour J
+
+### Monitoring (`/gestion/jour-j`)
+
+`/gestion/jour-j` (icône 📊 dans la barre latérale admin) est une page de **monitoring seul** :
+
+- **État** : algorithme en cours d'exécution ou non ; pause méridienne configurée (à venir / en cours / terminée), avec un lien direct vers `/gestion/algo` pour la régler.
+- **📊 Supervision technique** (dépliée par défaut) : requêtes HTTP, activité des dernières 24 h, sessions actives (avec lien direct vers la salle/loge concernée), échecs d'authentification récents, rappel de purge des PDFs générés. Rafraîchie automatiquement toutes les 10 s.
+
+**Historique (2026-07-11) :** les raccourcis **🕒 Disponibilité d'un examinateur** et **🔄 Changement de matière d'un candidat**, qui centralisaient ces actions ici via des listes déroulantes, ont été retirés — ils faisaient double emploi avec les boutons désormais présents directement sur `/gestion/liste-examinateurs` (**🕒 Disponibilité** par ligne) et `/gestion/candidats` (**🔄 Changer de matière** par ligne, ajouté ce même jour). Ces deux actions restent documentées dans la section précédente, simplement accessibles depuis les listes complètes plutôt que depuis ce hub.
+
+**Limite actuelle :** cette page ne fait pas le suivi des oraux non replacés automatiquement (paliers 2/3 de résolution poussée, cf. section précédente) — cet état reste propre à chaque écran de prévisualisation et n'est pas persisté entre deux visites.
 
 ### Accès des différents acteurs
 

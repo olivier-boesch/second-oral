@@ -37,7 +37,16 @@ second_oral/
 │   │   ├── test_ods_handler.py     Tests unitaires du lecteur/générateur ODS
 │   │   └── test_setup_utils.py     Tests unitaires des utilitaires de setup
 │   ├── integration/
-│   │   ├── test_flask_routes.py    Tests d'intégration Flask (DB mockée)
+│   │   ├── test_login_routes.py        Pages publiques, connexions (admin/examinateur/candidat/loge)
+│   │   ├── test_gestion_algo.py        Paramètres et pilotage de l'algo, upload/validation ODS, dashboard
+│   │   ├── test_jour_j.py              Page de monitoring du jour J
+│   │   ├── test_gestion_candidats.py   Vue candidats/oraux, fiches PDF, tiers-temps
+│   │   ├── test_archive.py             Archive de fin de session (zip)
+│   │   ├── test_liste_examinateurs.py  Ajout/édition/suppression/tri des examinateurs, loges
+│   │   ├── test_gestion_loges.py       Liste des loges, réaffectation salles ↔ loges
+│   │   ├── test_credentials.py         Renouvellement des identifiants, purge du vault
+│   │   ├── test_loge_timer.py          Minuteur de loge (SSE), passage en loge
+│   │   ├── test_edit_oral.py           Édition manuelle d'un oral, créneaux libres
 │   │   └── test_security.py        Non-régression des constats de l'audit sécurité
 │   └── load/
 │       └── test_sse_rate_limit.py  Test de charge sur le flux SSE
