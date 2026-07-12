@@ -9,6 +9,7 @@
 {% include 'auth_icon.html' %}
 {% include 'admin_nav.html' %}
     <h1>Liste des candidats</h1>
+    <div class="table-scroll">
     <table class="table_oraux">
         <tr>
             <th>
@@ -69,6 +70,18 @@
                             onclick="document.location='{{ url_for('declarer_tiers_temps_candidat', id_candidat=oral['id_candidat']) }}';">
                         {% if oral['tiers_temps'] %}⏱️ Retirer{% else %}⏱️ Déclarer{% endif %}
                     </button>
+                    <br>
+                    <button type="button" class="outline btn-sm"
+                            onclick="document.location='{{ url_for('changer_matiere_candidat', id_candidat=oral['id_candidat']) }}';">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                             style="vertical-align:middle; margin-right:.25em;">
+                            <path d="m17 2 4 4-4 4"/>
+                            <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
+                            <path d="m7 22-4-4 4-4"/>
+                            <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+                        </svg>Changer de matière
+                    </button>
                 </td>
             {% endif %}
             {% if oral['maj'] %}
@@ -122,6 +135,7 @@
         </tr>
         {% endfor %}
     </table>
+    </div>
     {% include 'footer.html' %}
 </body>
 </html>

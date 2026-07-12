@@ -273,18 +273,16 @@ Sur la page `/gestion/documents` (accueil admin → bloc **Préparation** → Do
 
 ## 4. Corrections après le lancement
 
-### Jour J — hub de pilotage en direct
+### Jour J — page de monitoring
 
-`/gestion/jour-j` (icône ⚡ en bas de la barre latérale admin, dans le groupe « pilotage live ») centralise les actions courantes en cours de journée, sans repasser par les listes complètes :
+`/gestion/jour-j` (icône 📊 dans la barre latérale admin) est une page de **monitoring seul** :
 
 - **État** : algorithme en cours d'exécution ou non ; pause méridienne configurée (à venir / en cours / terminée), avec un lien direct vers `/gestion/algo` pour la régler.
-- **🕒 Disponibilité d'un examinateur** : sélectionner directement l'examinateur concerné dans la liste déroulante et accéder au formulaire d'absence/retard/renfort (cf. section suivante) — équivalent au bouton **🕒 Disponibilité** de `/gestion/liste-examinateurs`, mais sans avoir à parcourir la liste.
-- **🔄 Changement de matière d'un candidat** : idem pour le formulaire de changement de matière (cf. plus bas), à partir d'une liste déroulante de candidats.
-- **📊 Supervision technique** (section repliable en bas de page, ex-page `/gestion/monitoring`) : requêtes HTTP, activité des dernières 24 h, sessions actives, échecs d'authentification récents, rappel de purge des PDFs générés. Rafraîchie automatiquement toutes les 10 s.
+- **📊 Supervision technique** (dépliée par défaut) : requêtes HTTP, activité des dernières 24 h, sessions actives (avec lien direct vers la salle/loge concernée), échecs d'authentification récents, rappel de purge des PDFs générés. Rafraîchie automatiquement toutes les 10 s.
 
-Un lien « Voir tous les examinateurs/candidats » reste disponible pour retrouver le mode liste complet (recherche visuelle, autres actions d'édition).
+**Historique (2026-07-11) :** les raccourcis **🕒 Disponibilité d'un examinateur** et **🔄 Changement de matière d'un candidat**, qui centralisaient ces actions ici via des listes déroulantes, ont été retirés — ils faisaient double emploi avec les boutons désormais présents directement sur `/gestion/liste-examinateurs` (**🕒 Disponibilité** par ligne) et `/gestion/candidats` (**🔄 Changer de matière** par ligne, ajouté ce même jour). Ces deux actions restent documentées ci-dessous, simplement accessibles depuis les listes complètes plutôt que depuis ce hub.
 
-**Limite actuelle :** ce hub ne fait pas le suivi des oraux non replacés automatiquement (paliers 2/3 de résolution poussée, cf. plus bas) — cet état reste propre à chaque écran de prévisualisation et n'est pas persisté entre deux visites.
+**Limite actuelle :** cette page ne fait pas le suivi des oraux non replacés automatiquement (paliers 2/3 de résolution poussée, cf. plus bas) — cet état reste propre à chaque écran de prévisualisation et n'est pas persisté entre deux visites.
 
 ### Modifier un oral
 
@@ -331,7 +329,7 @@ Ces deux résolutions poussées peuvent être relancées successivement depuis l
 
 ### Changement de matière d'un candidat en cours de journée
 
-`/gestion/candidats` → clic sur le nom du candidat (page d'édition) → lien **🔄 Changer une matière**.
+`/gestion/candidats` → bouton **🔄 Changer de matière** sur la ligne du candidat concerné (ajouté 2026-07-11), ou depuis sa fiche d'édition (clic sur le nom) → lien **🔄 Changer une matière**.
 
 Permet de traiter le cas d'un élève qui change de matière le jour J, après que l'algorithme a déjà placé les oraux : un des deux oraux du candidat (choix1 ou choix2) doit être remplacé par un oral dans la nouvelle matière, avec un nouvel examinateur et potentiellement un nouvel horaire.
 

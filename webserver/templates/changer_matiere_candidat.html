@@ -76,6 +76,7 @@
 
     {% if changement %}
     <p style="font-size:.9em;">Nouvel oral proposé :</p>
+    <div class="table-scroll">
     <table class="cm-table">
         <tr>
             <th>Candidat</th>
@@ -92,6 +93,7 @@
             <td>{{ changement.nouvelle_heure_sujet|heure }}{% if not changement.meme_heure %} ⚠{% endif %}{% if changement.hors_grille %} 🕐{% endif %}</td>
         </tr>
     </table>
+    </div>
     <p class="cm-hint">
         🟩 même heure (seul l'examinateur change) — 🟨 heure modifiée (déjà utilisée aujourd'hui)
         — 🟧 nouvel horaire 🕐 (extension de journée, à signaler aussi à l'examinateur concerné)

@@ -77,6 +77,7 @@
     </p>
 
     {% if plan.changements %}
+    <div class="table-scroll">
     <table class="dispo-table">
         <tr>
             <th>Candidat</th>
@@ -95,6 +96,7 @@
         </tr>
         {% endfor %}
     </table>
+    </div>
     <p class="dispo-hint">
         🟩 même heure (seul l'examinateur change) — 🟨 heure modifiée (déjà utilisée aujourd'hui)
         — 🟧 nouvel horaire 🕐 (extension de journée, à signaler aussi à l'examinateur concerné)
@@ -102,6 +104,7 @@
     {% endif %}
 
     {% if plan.non_replaces %}
+    <div class="table-scroll">
     <table class="dispo-table">
         <tr><th>Candidat non replacé</th><th>Examinateur actuel</th><th>Heure</th></tr>
         {% for o in plan.non_replaces %}
@@ -112,6 +115,7 @@
         </tr>
         {% endfor %}
     </table>
+    </div>
     <p class="dispo-hint">
         Non replacés automatiquement (glouton) — une résolution plus poussée peut réussir
         là où le glouton échoue, quitte à proposer de nouveaux horaires en fin de journée.

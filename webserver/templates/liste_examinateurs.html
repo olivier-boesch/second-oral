@@ -24,6 +24,7 @@
         &nbsp;·&nbsp;
         <a href="{{ url_for('reassignation_loges') }}">🔀 Réaffecter les salles à une loge</a>
     </div>
+    <div class="table-scroll">
     <table class="table_oraux sortable">
         <tr>
             <th data-sortable>
@@ -101,7 +102,12 @@
                     {% if ex['nb_oraux'] > 0 %}
                     <button type="button" class="outline" style="font-size:.8rem; padding:.2em .6em;"
                             onclick="document.location='{{ url_for('disponibilite_examinateur', id_examinateur=ex['id']) }}';">
-                        🕒 Disponibilité
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                             style="vertical-align:middle; margin-right:.3em;">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>Disponibilité
                     </button>
                     {% endif %}
                 </td>
@@ -133,6 +139,7 @@
             </tr>
         {% endfor %}
     </table>
+    </div>
     {% include 'footer.html' %}
 <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='sortable_table.js') }}?v={{ sv }}"></script>
 </body>

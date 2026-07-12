@@ -48,6 +48,7 @@
     /* Mise en page */
     --header-h:    52px;
     --footer-h:    36px;
+    --admin-sidebar-h-mobile: 48px;
     --radius:      8px;
     --radius-lg:   12px;
     --transition:  0.15s ease;
@@ -724,6 +725,47 @@ body.body-admin {
     }
 
     h1 { font-size: 1.25rem; }
+
+    /* Sidebar admin : bascule en barre horizontale défilable sous le header
+       — la colonne fixe de 48px prendrait trop de largeur utile sur mobile. */
+    .admin-sidebar {
+        top: var(--header-h);
+        left: 0;
+        right: 0;
+        bottom: auto;
+        width: 100%;
+        height: var(--admin-sidebar-h-mobile);
+        flex-direction: row;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 0.4rem 0.5rem;
+    }
+    .admin-sidebar__sep {
+        width: 1px;
+        height: 24px;
+        margin: 0 0.3rem;
+    }
+    .admin-sidebar__item.active {
+        border-left: none;
+        border-bottom: 2px solid var(--primary);
+        border-radius: var(--radius) var(--radius) 0 0;
+        width: 36px;
+        margin-left: 0;
+        margin-top: -2px;
+    }
+    /* Tooltip (::after) affiché en dessous plutôt qu'à droite, sinon il
+       sortirait de l'écran en haut de page. */
+    .admin-sidebar__item::after {
+        left: 50%;
+        top: calc(100% + 6px);
+        transform: translateX(-50%);
+    }
+    body.body-admin {
+        padding-left: 0.5rem;
+        padding-top: calc(var(--header-h) + var(--admin-sidebar-h-mobile) + 0.75rem);
+    }
 
     .table_oraux,
     .table_mobile { width: 100%; }

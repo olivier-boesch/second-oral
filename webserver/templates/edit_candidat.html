@@ -72,7 +72,16 @@
 {% if donnees_candidat.get('matiere1') and donnees_candidat.get('matiere2') %}
 <p style="margin-top:1.5em; padding-top:1em; border-top:1px solid var(--border, #ddd);">
     <strong>Matières choisies :</strong> {{ donnees_candidat['matiere1'] }}, {{ donnees_candidat['matiere2'] }}<br>
-    <a href="{{ url_for('changer_matiere_candidat', id_candidat=donnees_candidat['id']) }}">🔄 Changer une matière</a>
+    <a href="{{ url_for('changer_matiere_candidat', id_candidat=donnees_candidat['id']) }}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             style="vertical-align:middle; margin-right:.25em;">
+            <path d="m17 2 4 4-4 4"/>
+            <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
+            <path d="m7 22-4-4 4-4"/>
+            <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+        </svg>Changer une matière
+    </a>
 </p>
 {% endif %}
 </div>

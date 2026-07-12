@@ -69,6 +69,7 @@ function onLogeChange(select) {
         select.value === '__nouvelle_loge__' ? 'inline' : 'none';
 }
 </script>
+    <div class="table-scroll">
     <table class="table_oraux">
         <tr>
             <th>
@@ -134,6 +135,7 @@ function onLogeChange(select) {
         </tr>
         {% endfor %}
     </table>
+    </div>
     {% include 'footer.html' %}
 </body>
 </html>

@@ -215,3 +215,14 @@ navigation entre salles/loges pour le personnel non-admin).
 
 Les couleurs de la sidebar (`--primary`, `--primary-lt`, `--border`) suivent
 automatiquement le thème d'accent — aucune valeur codée en dur.
+
+**Responsive (`main.css`, `@media (max-width: 800px)`)** : la sidebar
+(colonne fixe de 48px sur desktop) bascule en barre horizontale défilable
+sous le header, pour ne pas amputer la largeur utile sur mobile — l'état
+actif passe d'une bordure gauche à une bordure basse, le tooltip s'affiche
+en dessous de l'icône plutôt qu'à droite. Les tableaux larges des pages
+admin (`liste_examinateurs.html`, `gestion_candidats.html`,
+`liste_loges.html`, écrans de prévisualisation disponibilité/changement de
+matière/tiers-temps, `jour_j.html`) sont enveloppés dans `.table-scroll`
+(déjà utilisée par `salle.html`/`loge.html`) pour défiler horizontalement
+sans élargir toute la page.

@@ -55,6 +55,7 @@
     <input type="hidden" name="id_candidat" value="{{ candidat['id'] }}">
     <input type="hidden" name="etape" value="confirmer">
 
+    <div class="table-scroll">
     <table class="tt-table">
         <tr>
             <th>Candidat</th>
@@ -79,6 +80,7 @@
         </tr>
         {% endfor %}
     </table>
+    </div>
     <p class="tt-hint">
         🟩 le candidat lui-même (préparation {{ 'étendue' if activer else 'réduite' }}) —
         🟨 oral cascadé (décalé du même délai) — 🟧 ⚠ écart minimum rompu avec l'autre oral du

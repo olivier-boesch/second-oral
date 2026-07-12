@@ -116,6 +116,7 @@ class TestEditCandidatMatieres:
         assert "Maths" in body
         assert "Philo" in body
         assert "/gestion/candidat/changer-matiere?id_candidat=100" in body
+        assert "🔄" not in body  # icône SVG, pas emoji (cf. project_liens_admin)
 
 
 class TestEditCandidatTiersTempsButton:

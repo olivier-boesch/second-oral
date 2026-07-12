@@ -436,6 +436,13 @@ class TestAdminRoutes:
         assert "Jour J" in body
         assert "Fin de session" in body
 
+    def test_icone_candidats_a_une_idee_de_multiplicite(self, admin_client):
+        """L'icône "Candidats / Oraux" doit évoquer plusieurs personnes (icône
+        candidat dupliquée), pas un individu seul ni une liste générique."""
+        r = admin_client.get("/gestion")
+        body = r.data.decode()
+        assert '<circle cx="9" cy="7" r="4"/>' in body
+
     def test_gestion_candidats_ok(self, admin_client):
         r = admin_client.get("/gestion/candidats")
         assert r.status_code == 200
@@ -866,36 +873,35 @@ class TestAdminRoutes:
 
 
 class TestJourJ:
-    """Hub de pilotage en direct (/gestion/jour-j) : état ambiant (algo,
-    pause méridienne) + accès rapide aux actions de rééquilibrage."""
-
-    EXAMINATEURS = [
-        {"id": 1, "nom": "ProfA", "etablissements": "", "salle": "A1", "loge": "L1",
-         "matiere": "Maths", "nb_oraux": 5},
-    ]
-    CANDIDATS = [
-        {"id": 100, "nom": "Dupont Jean", "numero": "0123456789A", "tiers_temps": 0},
-    ]
+    """Page de monitoring seule (/gestion/jour-j) : état ambiant (algo, pause
+    méridienne) + supervision technique. Les actions de rééquilibrage
+    (disponibilité examinateur, changement de matière) ont été retirées le
+    2026-07-11 — elles font désormais double emploi avec les boutons
+    déjà présents sur /gestion/liste-examinateurs et /gestion/candidats."""
 
     @pytest.fixture(autouse=True)
     def _isolation(self, monkeypatch, tmp_path):
         import app as app_module
         monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE", tmp_path / "algo_params.json")
 
-    def test_ok_et_contient_les_deux_actions_rapides(self, admin_client, db_mock):
-        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
+    def test_ok_page_monitoring(self, admin_client, db_mock):
         r = admin_client.get("/gestion/jour-j")
         assert r.status_code == 200
         body = r.data.decode()
-        assert "ProfA (Maths)" in body
-        assert "Dupont Jean (0123456789A)" in body
         assert "au repos" in body
         assert "non configurée" in body  # aucune pause méridienne par défaut
+
+    def test_actions_rapides_retirees(self, admin_client, db_mock):
+        """Ne doit plus proposer les raccourcis disponibilité/changement de
+        matière — devenus redondants avec liste-examinateurs/candidats."""
+        r = admin_client.get("/gestion/jour-j")
+        body = r.data.decode()
+        assert "Disponibilité d'un examinateur" not in body
+        assert "Changement de matière d'un candidat" not in body
 
     def test_algo_en_cours_affiche(self, admin_client, db_mock, monkeypatch):
         import algo_bg
         monkeypatch.setattr(algo_bg, "is_running", lambda: True)
-        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
         r = admin_client.get("/gestion/jour-j")
         assert r.status_code == 200
         assert "en cours…" in r.data.decode()
@@ -913,7 +919,6 @@ class TestJourJ:
                 return _dt_module.datetime(2026, 7, 6, 12, 10)
 
         monkeypatch.setattr(app_module, "datetime", _FakeDatetime)
-        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
         r = admin_client.get("/gestion/jour-j")
         assert r.status_code == 200
         body = r.data.decode()
@@ -932,7 +937,6 @@ class TestJourJ:
                 return _dt_module.datetime(2026, 7, 6, 9, 0)
 
         monkeypatch.setattr(app_module, "datetime", _FakeDatetime)
-        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
         r = admin_client.get("/gestion/jour-j")
         assert r.status_code == 200
         assert "à venir (12:00" in r.data.decode()
@@ -943,7 +947,6 @@ class TestJourJ:
         import app as app_module
         monkeypatch.setattr(app_module, "_redis",
                             lambda: (_ for _ in ()).throw(OSError("Redis KO")))
-        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
         r = admin_client.get("/gestion/jour-j")
         assert r.status_code == 200
         assert "Redis indisponible" in r.data.decode()
@@ -964,7 +967,6 @@ class TestJourJ:
                 return iter([b'stats:online:exam:A1', b'stats:online:loge:L1'])
 
         monkeypatch.setattr(app_module, "_redis", lambda: _FakeRedis())
-        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
         r = admin_client.get("/gestion/jour-j")
         assert r.status_code == 200
         body = r.data.decode()
@@ -1477,6 +1479,16 @@ class TestGestionCandidatsFusionCandidatOraux:
         assert "/gestion/candidat/tiers-temps?id_candidat=1" in body
         assert "⏱️ Déclarer" in body
 
+    def test_quick_changer_matiere_button_present(self, admin_client, db_mock):
+        """Bouton rapide « changer de matière » — ajouté le 2026-07-11, sans
+        repasser par la fiche d'édition candidat (cf. project_jour_j_monitoring)."""
+        db_mock.make_sql_select.return_value = self.ORAUX_CANDIDAT_UNIQUE
+        r = admin_client.get("/gestion/candidats")
+        body = r.data.decode()
+        assert "/gestion/candidat/changer-matiere?id_candidat=1" in body
+        assert "Changer de matière" in body
+        assert "🔄" not in body  # icône SVG, pas emoji (cf. project_liens_admin)
+
 
 # ── Archive de fin de session (zip) ───────────────────────────────────────────
 
@@ -1965,6 +1977,18 @@ class TestListeExaminateursTri:
         assert 'data-sort="Martin Sophie"' in body
         assert 'data-sort="A01"' in body
         assert 'data-sort="L1"' in body
+
+    def test_bouton_disponibilite_utilise_icone_svg_pas_emoji(self, admin_client, db_mock):
+        """L'icône du bouton Disponibilité doit être un SVG (style Lucide,
+        cohérent avec le reste de l'admin), pas l'emoji 🕒 (cf. project_liens_admin)."""
+        examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "loge": "L1", "matiere": "Maths", "etablissements": "",
+                       "nb_oraux": 3}
+        db_mock.make_sql_select.return_value = [examinateur]
+        r = admin_client.get("/gestion/liste-examinateurs")
+        body = r.data.decode()
+        assert "🕒" not in body
+        assert '<circle cx="12" cy="12" r="10"/>' in body  # icône horloge
 
 
 class TestListeExaminateursDelete:

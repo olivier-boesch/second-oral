@@ -14,6 +14,7 @@
         rattaché — pour en libérer une, réassignez d'abord ses salles vers une autre
         loge depuis le <a href="{{ url_for('reassignation_loges') }}">tableau de réaffectation rapide</a>.</small>
     </p>
+    <div class="table-scroll">
     <table class="table_oraux">
         <tr>
             <th>Nom</th>
@@ -77,6 +78,7 @@
             </tr>
         {% endfor %}
     </table>
+    </div>
     {% include 'footer.html' %}
 </body>
 </html>
