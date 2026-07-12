@@ -124,6 +124,40 @@ def _chevauche_pause(
     return heure_fin > heure_pause_meridienne and heure_oral < pause_fin
 
 
+def creneaux_libres(
+    duree_prep: timedelta,
+    duree_oral: timedelta,
+    occupations_examinateur: list[tuple[timedelta, timedelta]],
+    grille_horaires: list[timedelta],
+    autre_heure_sujet: timedelta | None,
+    ecart_mini_minutes: float,
+    heure_pause_meridienne: timedelta | None = None,
+    duree_pause_meridienne: timedelta = timedelta(0),
+) -> list[timedelta]:
+    """Liste les heures de sujet compatibles pour UN examinateur déjà fixé
+    (contrairement à `_placer`, qui choisit un couple examinateur/horaire) —
+    utilisé par l'écran d'édition manuelle d'un oral pour proposer des
+    créneaux une fois l'examinateur sélectionné dans le formulaire.
+
+    Les horaires candidats viennent de `grille_horaires` (heures de sujet
+    déjà utilisées aujourd'hui pour cette matière, toutes matières
+    confondues) — mêmes contraintes que `_placer` : écart minimum candidat,
+    pause méridienne, disponibilité de l'examinateur.
+    """
+    creneaux = []
+    for heure_sujet in sorted(set(grille_horaires)):
+        heure_oral = heure_sujet + duree_prep
+        heure_fin = heure_oral + duree_oral
+        if not _ecart_suffisant(heure_sujet, autre_heure_sujet, ecart_mini_minutes):
+            continue
+        if _chevauche_pause(heure_oral, heure_fin, heure_pause_meridienne, duree_pause_meridienne):
+            continue
+        if not _intervalle_libre(occupations_examinateur, heure_oral, heure_fin):
+            continue
+        creneaux.append(heure_sujet)
+    return creneaux
+
+
 def _placer(
     oral: OralActuel,
     examinateurs: list[ExaminateurCible],

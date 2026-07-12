@@ -1792,6 +1792,56 @@ def edit_oral() -> ResponseReturnValue:
     )
 
 
+@app.route('/gestion/edit-oral/creneaux')
+@admin_required
+@nocache
+def edit_oral_creneaux() -> ResponseReturnValue:
+    """Créneaux (heure de sujet) libres pour un examinateur donné, compatibles
+    avec l'écart minimum du candidat — alimente le tableau de suggestions de
+    l'écran d'édition manuelle d'un oral (`edit_oral.html`), une fois
+    l'examinateur sélectionné dans le formulaire."""
+    id_oral = request.args.get('oral', type=int)
+    id_examinateur = request.args.get('examinateur', type=int)
+    id_matiere = request.args.get('matiere', type=int)
+    if not id_oral or not id_examinateur or not id_matiere:
+        abort(400, "Paramètres manquants")
+
+    oral_actuel = db_get(db_facility_web.SELECT_INFOS_ORAL, id_oral)
+    if not oral_actuel:
+        abort(404, "Oral introuvable")
+    duree_prep = _to_td(oral_actuel['heure_oral']) - _to_td(oral_actuel['heure_sujet'])
+    duree_oral = _to_td(oral_actuel['heure_fin']) - _to_td(oral_actuel['heure_oral'])
+
+    oraux_candidat = db_get(
+        db_facility_web.SELECT_LISTE_EDITION_ORAL,
+        oral_actuel['id_candidat'], no_list_auto=False,
+    )
+    autre = next((o for o in oraux_candidat if o['id'] != id_oral), None)
+    autre_heure_sujet = _to_td(autre['heure_sujet']) if autre else None
+
+    oraux_matiere = db_get(
+        db_facility_web.SELECT_ORAUX_MATIERE_DU_JOUR, id_matiere, no_list_auto=False,
+    )
+    grille_horaires = [_to_td(o['heure_sujet']) for o in oraux_matiere]
+
+    oraux_exam = db_get(
+        db_facility_web.SELECT_ORAUX_EXAMINATEUR_CONFLITS, id_examinateur, no_list_auto=False,
+    )
+    occupations = [
+        (_to_td(o['heure_oral']), _to_td(o['heure_fin']))
+        for o in oraux_exam if o['id'] != id_oral
+    ]
+
+    ecart_mini = _load_algo_params()['ecart_mini']
+    heure_pause_meridienne, duree_pause_meridienne = _pause_meridienne_params()
+
+    creneaux = rebalance.creneaux_libres(
+        duree_prep, duree_oral, occupations, grille_horaires, autre_heure_sujet,
+        ecart_mini, heure_pause_meridienne, duree_pause_meridienne,
+    )
+    return jsonify([_td_to_time_str(c) for c in creneaux])
+
+
 @app.route('/gestion/liste-examinateurs')
 @admin_required
 @nocache

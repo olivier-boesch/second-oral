@@ -290,6 +290,8 @@ Sur la page `/gestion/documents` (accueil admin → bloc **Préparation** → Do
 2. Changer l'horaire, l'examinateur ou cocher **"Marquer comme modifié"**
 3. Si "Marquer comme modifié" est coché, les pages des candidats concernés s'actualisent en temps réel (SSE)
 
+**Créneaux libres suggérés** : une fois un examinateur sélectionné dans le formulaire, un tableau apparaît à droite avec ses prochains créneaux libres (heures de sujet déjà utilisées aujourd'hui pour la matière choisie, compatibles avec l'écart minimum du candidat et la pause méridienne configurée). Cliquer sur un créneau reporte directement l'heure dans le champ "Heure de sujet" — évite de deviner manuellement une heure compatible.
+
 ### Forcer le rechargement de toutes les pages
 
 Dans la barre latérale admin (icône ↺, présente sur toutes les pages de gestion), cliquer **Recharger les pages** : tous les navigateurs connectés rechargent instantanément.

@@ -11,6 +11,7 @@ from rebalance import (  # noqa: E402
     ExaminateurCible,
     OralActuel,
     construire_grille_etendue,
+    creneaux_libres,
     duree_creneau_estimee,
     planifier_absence,
     planifier_changement_matiere,
@@ -255,6 +256,51 @@ class TestChangementMemeHeure:
             nouvelle_heure_oral=_td(9, 45), nouvelle_heure_fin=_td(10),
         )
         assert c.meme_heure is False
+
+
+class TestCreneauxLibres:
+    """Suggestions de créneaux pour un examinateur déjà fixé — écran
+    d'édition manuelle d'un oral (edit_oral.html)."""
+
+    def test_filtre_les_creneaux_deja_occupes_par_l_examinateur(self):
+        # Examinateur déjà occupé 9h15-9h30 -> le créneau 9h (9h15-9h30) est exclu.
+        creneaux = creneaux_libres(
+            duree_prep=_td(0, 15), duree_oral=_td(0, 15),
+            occupations_examinateur=[(_td(9, 15), _td(9, 30))],
+            grille_horaires=[_td(9), _td(9, 30), _td(10)],
+            autre_heure_sujet=None, ecart_mini_minutes=0,
+        )
+        assert creneaux == [_td(9, 30), _td(10)]
+
+    def test_filtre_selon_l_ecart_minimum_avec_l_autre_oral_du_candidat(self):
+        creneaux = creneaux_libres(
+            duree_prep=_td(0, 15), duree_oral=_td(0, 15),
+            occupations_examinateur=[],
+            grille_horaires=[_td(9), _td(9, 30), _td(11)],
+            autre_heure_sujet=_td(9, 20), ecart_mini_minutes=40,
+        )
+        # 9h -> 20 min d'écart (< 40) exclu ; 9h30 -> 10 min exclu ; 11h -> 100 min ok.
+        assert creneaux == [_td(11)]
+
+    def test_filtre_les_creneaux_chevauchant_la_pause_meridienne(self):
+        creneaux = creneaux_libres(
+            duree_prep=_td(0, 15), duree_oral=_td(0, 15),
+            occupations_examinateur=[],
+            grille_horaires=[_td(11, 45), _td(13, 30)],
+            autre_heure_sujet=None, ecart_mini_minutes=0,
+            heure_pause_meridienne=_td(12), duree_pause_meridienne=_td(1),
+        )
+        # 11h45 -> oral 12h-12h15, chevauche la pause (12h-13h) -> exclu.
+        assert creneaux == [_td(13, 30)]
+
+    def test_deduplique_et_trie_la_grille(self):
+        creneaux = creneaux_libres(
+            duree_prep=_td(0, 15), duree_oral=_td(0, 15),
+            occupations_examinateur=[],
+            grille_horaires=[_td(10), _td(9), _td(9)],
+            autre_heure_sujet=None, ecart_mini_minutes=0,
+        )
+        assert creneaux == [_td(9), _td(10)]
 
 
 class TestDureeCreneauEtGrilleEtendue:

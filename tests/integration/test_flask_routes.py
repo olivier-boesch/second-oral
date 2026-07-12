@@ -2414,6 +2414,96 @@ class TestEditOralGetLiensExaminateurSalle:
         assert '/gestion/edit-examinateur?id_examinateur=11' in body
         assert '<a href="/salle/B02" target="_blank">B02</a>' in body
 
+    def test_get_affiche_le_panneau_creneaux(self, admin_client, db_mock):
+        """Le panneau de suggestion de créneaux (cf. project_creneaux_edit_oral)
+        doit être présent, avec l'appel JS vers le bon endpoint."""
+        db_mock.make_sql_select.side_effect = [
+            [self.DONNEES_ORAL], [self.AUTRE_ORAL], [], [],
+        ]
+        r = admin_client.get("/gestion/edit-oral?oral=1")
+        body = r.data.decode()
+        assert 'id="creneaux-table"' in body
+        assert "/gestion/edit-oral/creneaux?oral=1" in body
+        assert "chargerCreneaux()" in body
+
+
+class TestEditOralCreneaux:
+    """Suggestions de créneaux libres pour un examinateur donné, sur l'écran
+    d'édition manuelle d'un oral (/gestion/edit-oral/creneaux) — cf.
+    project_creneaux_edit_oral."""
+
+    from datetime import timedelta as _td
+
+    ORAL_ACTUEL = {
+        "id": 1, "nom": "Dupont Jean", "numero": "N1", "etablissement": "",
+        "tiers_temps": 0, "id_candidat": 42, "id_examinateur": 10, "id_matiere": 2,
+        "heure_sujet": _td(hours=9), "heure_oral": _td(hours=9, minutes=15),
+        "heure_fin": _td(hours=9, minutes=30), "matiere": "Maths",
+    }
+    AUTRE_ORAL_CANDIDAT = {
+        # Volontairement loin (14h) pour ne jamais interférer avec l'écart
+        # minimum (défaut 80 min) sur les créneaux candidats 9h/10h ci-dessous.
+        "id": 2, "id_candidat": 42, "matiere": "Philo",
+        "heure_sujet": _td(hours=14), "heure_oral": _td(hours=14, minutes=15),
+        "heure_fin": _td(hours=14, minutes=30),
+    }
+    ORAUX_MATIERE_DU_JOUR = [
+        {"id": 1, "id_candidat": 42, "numero": "N1", "etablissement": "",
+         "id_examinateur": 10, "examinateur": "ProfA",
+         "heure_sujet": _td(hours=9), "heure_oral": _td(hours=9, minutes=15),
+         "heure_fin": _td(hours=9, minutes=30)},
+        {"id": 3, "id_candidat": 43, "numero": "N3", "etablissement": "",
+         "id_examinateur": 20, "examinateur": "ProfB",
+         "heure_sujet": _td(hours=10), "heure_oral": _td(hours=10, minutes=15),
+         "heure_fin": _td(hours=10, minutes=30)},
+    ]
+
+    @pytest.fixture(autouse=True)
+    def _isolation(self, monkeypatch, tmp_path):
+        import app as app_module
+        monkeypatch.setattr(app_module, "_ALGO_PARAMS_FILE", tmp_path / "algo_params.json")
+
+    def test_requires_admin(self, client):
+        r = client.get("/gestion/edit-oral/creneaux?oral=1&examinateur=10&matiere=2",
+                       follow_redirects=False)
+        assert r.status_code == 302
+        assert "/login" in r.headers["Location"]
+
+    def test_parametres_manquants_400(self, admin_client):
+        r = admin_client.get("/gestion/edit-oral/creneaux?oral=1")
+        assert r.status_code == 400
+
+    def test_oral_introuvable_404(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = []
+        r = admin_client.get("/gestion/edit-oral/creneaux?oral=999&examinateur=10&matiere=2")
+        assert r.status_code == 404
+
+    def test_propose_les_creneaux_libres_de_l_examinateur(self, admin_client, db_mock):
+        """L'examinateur 10 est déjà pris à 9h (son propre oral en cours
+        d'édition, exclu) et libre à 10h (occupé par ProfB, pas lui) :
+        les deux créneaux de la grille doivent donc ressortir."""
+        db_mock.make_sql_select.side_effect = [
+            [self.ORAL_ACTUEL],           # SELECT_INFOS_ORAL
+            [self.AUTRE_ORAL_CANDIDAT],   # SELECT_LISTE_EDITION_ORAL
+            self.ORAUX_MATIERE_DU_JOUR,   # SELECT_ORAUX_MATIERE_DU_JOUR
+            [],                            # SELECT_ORAUX_EXAMINATEUR_CONFLITS (examinateur 10 libre à part son propre oral)
+        ]
+        r = admin_client.get("/gestion/edit-oral/creneaux?oral=1&examinateur=10&matiere=2")
+        assert r.status_code == 200
+        assert r.get_json() == ["09:00", "10:00"]
+
+    def test_exclut_les_creneaux_deja_pris_par_l_examinateur(self, admin_client, db_mock):
+        db_mock.make_sql_select.side_effect = [
+            [self.ORAL_ACTUEL],           # SELECT_INFOS_ORAL
+            [self.AUTRE_ORAL_CANDIDAT],   # SELECT_LISTE_EDITION_ORAL
+            self.ORAUX_MATIERE_DU_JOUR,   # SELECT_ORAUX_MATIERE_DU_JOUR
+            [{"id": 5, "candidat": "Autre Candidat",  # occupe 10h15-10h30 (chevauche le créneau 10h)
+              "heure_oral": self._td(hours=10, minutes=15), "heure_fin": self._td(hours=10, minutes=30)}],
+        ]
+        r = admin_client.get("/gestion/edit-oral/creneaux?oral=1&examinateur=10&matiere=2")
+        assert r.status_code == 200
+        assert r.get_json() == ["09:00"]
+
 
 # ── Validation du déplacement d'oral ────────────────────────────────────────
 
