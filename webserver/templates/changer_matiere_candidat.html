@@ -41,7 +41,8 @@
     <p><strong>Oral à remplacer :</strong></p>
     {% for o in oraux %}
     <label class="cm-oral-choix">
-        <input type="radio" name="id_oral_a_remplacer" value="{{ o['id'] }}" required>
+        <input type="radio" name="id_oral_a_remplacer" value="{{ o['id'] }}" required
+               {% if o['id'] == id_oral_preselect %}checked{% endif %}>
         {{ o['matiere'] }} — {{ o['examinateur'] }} ({{ o['salle'] }}) à {{ o['heure_sujet'] }}
     </label>
     {% endfor %}

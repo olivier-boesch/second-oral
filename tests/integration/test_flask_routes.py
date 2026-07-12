@@ -1479,14 +1479,16 @@ class TestGestionCandidatsFusionCandidatOraux:
         assert "/gestion/candidat/tiers-temps?id_candidat=1" in body
         assert "⏱️ Déclarer" in body
 
-    def test_quick_changer_matiere_button_present(self, admin_client, db_mock):
-        """Bouton rapide « changer de matière » — ajouté le 2026-07-11, sans
-        repasser par la fiche d'édition candidat (cf. project_jour_j_monitoring)."""
+    def test_icone_changer_matiere_par_oral(self, admin_client, db_mock):
+        """Icône « changer de matière », une par oral (pas par candidat) —
+        colonne dédiée, ajoutée le 2026-07-11 (cf. project_jour_j_monitoring),
+        puis déplacée dans sa propre colonne le même jour (une icône par
+        oral plutôt qu'un bouton par candidat)."""
         db_mock.make_sql_select.return_value = self.ORAUX_CANDIDAT_UNIQUE
         r = admin_client.get("/gestion/candidats")
         body = r.data.decode()
-        assert "/gestion/candidat/changer-matiere?id_candidat=1" in body
-        assert "Changer de matière" in body
+        assert "/gestion/candidat/changer-matiere?id_candidat=1&amp;id_oral=10" in body
+        assert "/gestion/candidat/changer-matiere?id_candidat=1&amp;id_oral=11" in body
         assert "🔄" not in body  # icône SVG, pas emoji (cf. project_liens_admin)
 
 

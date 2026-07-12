@@ -40,6 +40,9 @@
                 Salle
             </th>
             <th>
+                Changer matière
+            </th>
+            <th>
                 Éditer
             </th>
         </tr>
@@ -69,18 +72,6 @@
                     <button type="button" class="outline btn-sm"
                             onclick="document.location='{{ url_for('declarer_tiers_temps_candidat', id_candidat=oral['id_candidat']) }}';">
                         {% if oral['tiers_temps'] %}⏱️ Retirer{% else %}⏱️ Déclarer{% endif %}
-                    </button>
-                    <br>
-                    <button type="button" class="outline btn-sm"
-                            onclick="document.location='{{ url_for('changer_matiere_candidat', id_candidat=oral['id_candidat']) }}';">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                             style="vertical-align:middle; margin-right:.25em;">
-                            <path d="m17 2 4 4-4 4"/>
-                            <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
-                            <path d="m7 22-4-4 4-4"/>
-                            <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
-                        </svg>Changer de matière
                     </button>
                 </td>
             {% endif %}
@@ -118,6 +109,21 @@
             <td>
             {% endif %}
                 <a href="{{ url_for('salle', id_salle=oral['salle']) }}" target="_blank">{{ oral['salle'] }}</a>
+            </td>
+            <td>
+                <a href="{{ url_for('changer_matiere_candidat', id_candidat=oral['id_candidat'], id_oral=oral['id_oral']) }}">
+                    <div class="tooltip">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                             aria-label="Changer la matière de cet oral" role="img">
+                            <path d="m17 2 4 4-4 4"/>
+                            <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
+                            <path d="m7 22-4-4 4-4"/>
+                            <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+                        </svg>
+                        <span class="tooltiptext">changer la matière de cet oral</span>
+                    </div>
+                </a>
             </td>
             <td>
                 <a href="{{ url_for('edit_oral', oral=oral['id_oral']) }}">

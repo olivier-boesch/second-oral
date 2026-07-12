@@ -94,6 +94,15 @@ class TestChangerMatiereCandidatForm:
         # dans le sélecteur de nouvelle matière.
         assert 'value="7"' in body
 
+    def test_get_avec_id_oral_preselectionne_la_ligne(self, admin_client, db_mock):
+        """Depuis l'icône « changer de matière » d'un oral précis
+        (/gestion/candidats), le radio de cet oral doit être pré-coché."""
+        db_mock.make_sql_select.side_effect = _side_effect_defaut
+        r = admin_client.get("/gestion/candidat/changer-matiere?id_candidat=100&id_oral=20")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert 'value="20" required\n               checked' in body
+
 
 class TestChangerMatiereCandidatPrevisualisation:
     def _post(self, admin_client, db_mock, **extra):

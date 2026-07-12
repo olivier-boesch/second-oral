@@ -766,6 +766,12 @@ body.body-admin {
         padding-left: 0.5rem;
         padding-top: calc(var(--header-h) + var(--admin-sidebar-h-mobile) + 0.75rem);
     }
+    /* La barre sidebar horizontale (48px) s'ajoute au header fixe : sans ce
+       correctif, les <th> sticky (top: var(--header-h) partout ailleurs)
+       se retrouveraient sous la barre au lieu d'en dessous. */
+    body.body-admin th {
+        top: calc(var(--header-h) + var(--admin-sidebar-h-mobile));
+    }
 
     .table_oraux,
     .table_mobile { width: 100%; }
@@ -777,6 +783,15 @@ body.body-admin {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         width: 100%;
+    }
+    /* Un ancêtre avec overflow-x:auto force overflow-y à auto (règle CSS :
+       un axe non-visible entraîne le changement de l'autre) — ça capture le
+       position:sticky des <th> pour ce conteneur au lieu de la page, cassant
+       le scroll (le sticky ne suit plus rien puisque ce wrapper ne défile
+       jamais verticalement lui-même). On désactive donc sticky ici : le
+       compromis standard pour un tableau défilant horizontalement sur mobile. */
+    .table-scroll th {
+        position: static;
     }
 
     .block_documents { width: 100%; padding: 1.1em; }

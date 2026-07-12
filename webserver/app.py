@@ -2568,6 +2568,7 @@ def changer_matiere_candidat() -> ResponseReturnValue:
             oraux=oraux_candidat,
             matieres=liste_matieres,
             etape="saisie",
+            id_oral_preselect=request.args.get("id_oral", type=int),
             url_of_page=request.url,
             username=get_username(),
             authenticated=is_authenticated(),
