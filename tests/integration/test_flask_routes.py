@@ -1945,6 +1945,28 @@ class TestListeExaminateursSalleLink:
         assert '<a href="/loge/L1" target="_blank">L1</a>' in body
 
 
+class TestListeExaminateursTri:
+    """Tri au clic sur les en-têtes (JS `sortable_table.js`, générique)."""
+
+    def test_colonnes_triables_marquees_et_script_inclus(self, admin_client, db_mock):
+        examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "loge": "L1", "matiere": "Maths", "etablissements": "",
+                       "nb_oraux": 3}
+        db_mock.make_sql_select.return_value = [examinateur]
+        r = admin_client.get("/gestion/liste-examinateurs")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert 'class="table_oraux sortable"' in body
+        assert 'data-sortable data-sort-type="numeric"' in body  # Nombre d'oraux
+        assert body.count('data-sortable') == 7  # Nom/Établissements/Matiere/Salle/Loge/Nb oraux/Fin de journée
+        assert 'src="/static/sortable_table.js' in body
+        # Le nom/salle/loge sont enveloppés d'un lien+tooltip : la valeur de
+        # tri doit être la valeur nue, pas le textContent pollué par le tooltip.
+        assert 'data-sort="Martin Sophie"' in body
+        assert 'data-sort="A01"' in body
+        assert 'data-sort="L1"' in body
+
+
 class TestListeExaminateursDelete:
     def test_delete_button_asks_confirmation(self, admin_client, db_mock):
         """Le bouton de suppression doit demander confirmation en JS."""
@@ -1990,6 +2012,18 @@ class TestGestionLoges:
         body = r.data.decode()
         assert "B404" in body
         assert "B405" in body
+
+    def test_get_lie_la_loge_en_direct_et_sa_fiche_pdf(self, admin_client, db_mock):
+        """La colonne « Loge » pointe vers la fiche live (loge()), la colonne
+        « Fiche loge » vers le PDF (fiche_loge) — remplace l'ancienne page
+        « Index des loges » retirée de l'admin (cf. project_liens_admin)."""
+        db_mock.make_sql_select.return_value = [
+            {"id": 1, "nom": "B404", "nb_examinateurs": 2},
+        ]
+        r = admin_client.get("/gestion/liste-loges")
+        body = r.data.decode()
+        assert '<a href="/loge/B404" target="_blank">B404</a>' in body
+        assert "/generate-screen-one?type_doc=fiche_loge&amp;id_doc=B404" in body
 
     def test_delete_requires_admin(self, client):
         r = client.post("/gestion/loge/1/delete", follow_redirects=False)

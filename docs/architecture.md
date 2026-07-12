@@ -200,11 +200,18 @@ dépendance externe, les SVG sont inline.
 Les pages d'archivage (`/gestion/archive`) et de vérification des logs
 (`/gestion/verify-logs`) sont intentionnellement **hors de la sidebar** :
 ce sont des opérations de fin de session, pas des commandes courantes — elles
-restent accessibles depuis le tableau de bord (`/gestion`). `/salle`, `/loge`
-et `/liste` (accès direct salle/loge, grand écran TV) sont, eux, dans la
-sidebar : consultés fréquemment pendant le jour J, malgré une autorisation
-plus large que le reste de la sidebar (`is_authenticated()`, pas
-`admin_required` — tout le personnel, pas seulement l'admin).
+restent accessibles depuis le tableau de bord (`/gestion`). `/liste` (grand
+écran TV) est, elle, dans la sidebar : consultée fréquemment pendant le jour
+J, malgré une autorisation plus large que le reste de la sidebar
+(`is_authenticated()`, pas `admin_required` — tout le personnel, pas
+seulement l'admin).
+
+`/salle` et `/loge` (« Index des salles/loges », pages génériques listant
+tous les liens) ne sont **pas** dans la partie admin (ni dashboard, ni
+sidebar) — retiré le 2026-07-11 car redondant : `/gestion/liste-examinateurs`
+lie déjà directement chaque salle, et `/gestion/liste-loges` chaque loge.
+Ces deux pages restent utilisées ailleurs (bas de `salle.html`/`loge.html`,
+navigation entre salles/loges pour le personnel non-admin).
 
 Les couleurs de la sidebar (`--primary`, `--primary-lt`, `--border`) suivent
 automatiquement le thème d'accent — aucune valeur codée en dur.

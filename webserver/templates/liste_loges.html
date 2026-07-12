@@ -17,6 +17,7 @@
     <table class="table_oraux">
         <tr>
             <th>Nom</th>
+            <th>Loge</th>
             <th>Fiche loge</th>
             <th>Examinateurs rattachés</th>
             <th>Identifiants</th>
@@ -36,7 +37,13 @@
                     </form>
                 </td>
                 <td>
-                    <a href="{{ url_for('loge', id_loge=loge['nom']) }}" target="_blank">
+                    <div class="tooltip">
+                        <a href="{{ url_for('loge', id_loge=loge['nom']) }}" target="_blank">{{ loge['nom'] }}</a>
+                        <span class="tooltiptext">voir la loge</span>
+                    </div>
+                </td>
+                <td>
+                    <a href="{{ url_for('generate_screen_one', type_doc="fiche_loge", id_doc=loge['nom']) }}" target="_blank">
                         <img src="{{ url_for('static', filename='pdf.png') }}">
                     </a>
                 </td>

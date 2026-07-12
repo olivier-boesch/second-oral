@@ -24,30 +24,30 @@
         &nbsp;·&nbsp;
         <a href="{{ url_for('reassignation_loges') }}">🔀 Réaffecter les salles à une loge</a>
     </div>
-    <table class="table_oraux">
+    <table class="table_oraux sortable">
         <tr>
-            <th>
+            <th data-sortable>
                 Nom
             </th>
             <th>
                 Fiche Salle
             </th>
-            <th>
+            <th data-sortable>
                 Établissements
             </th>
-            <th>
+            <th data-sortable>
                 Matiere
             </th>
-            <th>
+            <th data-sortable>
                 Salle
             </th>
-            <th>
+            <th data-sortable>
               Loge
             </th>
-            <th>
+            <th data-sortable data-sort-type="numeric">
                 Nombre d'oraux
             </th>
-            <th>
+            <th data-sortable>
                 Fin de journée
             </th>
             <th>
@@ -62,7 +62,7 @@
         </tr>
         {% for ex in examinateurs %}
             <tr class="{{ loop.cycle("tr_light", "tr_dark") }}">
-                <td>
+                <td data-sort="{{ ex['nom'] }}">
                     <div class="tooltip">
                         <a href="{{ url_for('edit_examinateur', id_examinateur=ex['id']) }}">{{ ex['nom'] }}</a>
                         <span class="tooltiptext">éditer</span>
@@ -79,13 +79,13 @@
                 <td>
                     {{ ex['matiere'] }}
                 </td>
-                <td>
+                <td data-sort="{{ ex['salle'] }}">
                     <div class="tooltip">
                         <a href="{{ url_for('salle', id_salle=ex['salle']) }}" target="_blank">{{ ex['salle'] }}</a>
                         <span class="tooltiptext">voir la salle</span>
                     </div>
                 </td>
-                <td>
+                <td data-sort="{{ ex['loge'] }}">
                     <div class="tooltip">
                         <a href="{{ url_for('loge', id_loge=ex['loge']) }}" target="_blank">{{ ex['loge'] }}</a>
                         <span class="tooltiptext">voir la loge</span>
@@ -134,5 +134,6 @@
         {% endfor %}
     </table>
     {% include 'footer.html' %}
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='sortable_table.js') }}?v={{ sv }}"></script>
 </body>
 </html>

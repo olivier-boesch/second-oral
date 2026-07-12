@@ -298,7 +298,7 @@ Dans la barre latérale admin (icône ↺, présente sur toutes les pages de ges
 
 ### Ajouter ou modifier un examinateur
 
-`/gestion/liste-examinateurs` → modifier ou ajouter. Après ajout, un papillon PDF est automatiquement généré avec le nouveau mot de passe.
+`/gestion/liste-examinateurs` → modifier ou ajouter. Après ajout, un papillon PDF est automatiquement généré avec le nouveau mot de passe. Les en-têtes de colonne (Nom, Établissements, Matière, Salle, Loge, Nombre d'oraux, Fin de journée) sont cliquables pour trier la liste (croissant/décroissant) — utile pour repérer rapidement les examinateurs les plus/moins chargés.
 
 ### Absence, retard ou renfort d'un examinateur en cours de journée
 
