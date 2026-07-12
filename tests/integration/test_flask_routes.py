@@ -1477,7 +1477,8 @@ class TestGestionCandidatsFusionCandidatOraux:
         r = admin_client.get("/gestion/candidats")
         body = r.data.decode()
         assert "/gestion/candidat/tiers-temps?id_candidat=1" in body
-        assert "⏱️ Déclarer" in body
+        assert "Déclarer" in body
+        assert "⏱️" not in body  # icône SVG, pas emoji (cf. project_icones_admin)
 
     def test_icone_changer_matiere_par_oral(self, admin_client, db_mock):
         """Icône « changer de matière », une par oral (pas par candidat) —

@@ -485,4 +485,5 @@ class TestLogIntegrityChain:
 
         r = admin_client.get("/gestion/verify-logs")
         assert r.status_code == 200
-        assert "❌" in r.get_data(as_text=True)
+        # Icône SVG rouge (pas emoji) sur la ligne au hash invalide — cf. project_icones_admin.
+        assert 'stroke="var(--danger)"' in r.get_data(as_text=True)

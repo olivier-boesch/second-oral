@@ -48,7 +48,18 @@
         {% endif %}
         <button type="button" class="outline btn-sm"
                 onclick="document.location='{{ url_for('declarer_tiers_temps_candidat', id_candidat=donnees_candidat['id']) }}';">
-            {% if donnees_candidat['tiers_temps'] %}⏱️ Retirer{% else %}⏱️ Déclarer{% endif %}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 style="vertical-align:middle; margin-right:.25em;">
+                <circle cx="10" cy="14" r="8"/>
+                <polyline points="10 10 10 14 13 16"/>
+                {% if donnees_candidat['tiers_temps'] %}
+                <line x1="16" y1="7" x2="22" y2="7"/>
+                {% else %}
+                <line x1="19" y1="4" x2="19" y2="10"/>
+                <line x1="16" y1="7" x2="22" y2="7"/>
+                {% endif %}
+            </svg>{% if donnees_candidat['tiers_temps'] %}Retirer{% else %}Déclarer{% endif %}
         </button>
         <br><small>
             Étend (ou réduit) la préparation de ses deux oraux — et décale les oraux suivants

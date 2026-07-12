@@ -131,8 +131,11 @@ class TestEditCandidatTiersTempsButton:
         r = admin_client.get("/gestion/edit-candidat?id=100")
         body = r.data.decode()
         assert "/gestion/candidat/tiers-temps?id_candidat=100" in body
-        assert "⏱️ Déclarer" in body
+        assert "Déclarer" in body
+        assert "⏱️" not in body  # icône SVG, pas emoji (cf. project_icones_admin)
         assert 'type="checkbox" name="tiers_temps"' not in body
+        # Icône horloge + badge "+" (ajout de tiers-temps) — cf. project_icones_admin.
+        assert '<line x1="19" y1="4" x2="19" y2="10"/>' in body
 
     def test_get_renders_retirer_link_when_already_set(self, admin_client, db_mock):
         db_mock.make_sql_select.return_value = [{
@@ -141,7 +144,10 @@ class TestEditCandidatTiersTempsButton:
         }]
         r = admin_client.get("/gestion/edit-candidat?id=100")
         body = r.data.decode()
-        assert "⏱️ Retirer" in body
+        assert "Retirer" in body
+        # Icône horloge + badge "-" seul (retrait) — pas la barre verticale du "+".
+        assert '<line x1="19" y1="4" x2="19" y2="10"/>' not in body
+        assert '<line x1="16" y1="7" x2="22" y2="7"/>' in body
 
     def test_post_does_not_touch_oral_schedule(self, admin_client, db_mock):
         """Le POST ne doit plus jamais appeler _appliquer_oraux_tiers_temps

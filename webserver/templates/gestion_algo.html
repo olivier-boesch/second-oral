@@ -97,7 +97,7 @@
 
 {# ── 1. Fichier ODS (méthode recommandée) ─────────────────────────────────── #}
 <div class="algo-section">
-    <h2>📊 Import via fichier ODS <span style="font-size:.75em;font-weight:normal;color:#3d2fa0;">(recommandé)</span></h2>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.3em;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Import via fichier ODS <span style="font-size:.75em;font-weight:normal;color:#3d2fa0;">(recommandé)</span></h2>
     <p style="font-size:.9em;">
         Téléchargez le modèle, remplissez les feuilles <strong>examinateurs</strong> et <strong>candidats</strong>
         (listes déroulantes pour les disciplines), puis uploadez-le ici.<br>
@@ -106,7 +106,7 @@
     <p>
         <a href="{{ url_for('algo_download_modele_ods') }}"
            class="btn-dl" style="text-decoration:none; display:inline-flex; align-items:center; gap:.4em; padding:.4em 1em;">
-            ⬇ Télécharger le modèle ODS
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>Télécharger le modèle ODS
         </a>
         {% if csv_status.candidats and csv_status.examinateurs and csv_status.preps %}
         <span style="font-size:.8em; color:#155724; margin-left:.8em;">✔ Les 3 fichiers CSV sont déjà présents</span>
@@ -116,7 +116,7 @@
         <div class="file-row">
             <label>Fichier ODS</label>
             <input type="file" name="ods_file" accept=".ods" style="flex:1">
-            <button type="submit">⬆ Envoyer</button>
+            <button type="submit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>Envoyer</button>
         </div>
         <p id="ods-upload-feedback" class="upload-feedback"></p>
     </form>
@@ -125,7 +125,7 @@
 
 {# ── 1b. Fichiers CSV individuels (méthode avancée) ───────────────────────── #}
 <div class="algo-section">
-    <h2>📂 Import CSV individuel <span style="font-size:.75em;font-weight:normal;color:#666;">(avancé)</span></h2>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.3em;"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>Import CSV individuel <span style="font-size:.75em;font-weight:normal;color:#666;">(avancé)</span></h2>
     <p style="font-size:.9em;">Déposez un ou plusieurs fichiers CSV directement, puis cliquez sur <em>Envoyer</em>.</p>
 
     <form id="upload-form">
@@ -151,7 +151,7 @@
             <input type="file" name="preps" accept=".csv">
         </div>
         <p style="margin-top:.8em;">
-            <button type="submit">⬆ Envoyer les fichiers sélectionnés</button>
+            <button type="submit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>Envoyer les fichiers sélectionnés</button>
         </p>
         <p id="upload-feedback" class="upload-feedback"></p>
     </form>
@@ -161,7 +161,7 @@
 {# ── 1b. Téléchargement des CSV existants ─────────────────────────────────── #}
 {% if csv_status.candidats or csv_status.examinateurs or csv_status.preps %}
 <div class="algo-section">
-    <h2>⬇ Télécharger les fichiers CSV actuels</h2>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.3em;"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>Télécharger les fichiers CSV actuels</h2>
     <ul class="templates-list">
         {% if csv_status.candidats %}
         <li>
@@ -187,24 +187,24 @@
 
 {# ── 2. Modèles CSV (fallback) ────────────────────────────────────────────── #}
 <div class="algo-section">
-    <h2>📄 Modèles CSV individuels</h2>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.3em;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Modèles CSV individuels</h2>
     <p style="font-size:.85em; color:#666;">Utilisés en import CSV individuel (méthode avancée).</p>
     <ul class="templates-list">
         <li>
             <a href="{{ url_for('static', filename='templates_csv/candidats_modele.csv') }}" download>
-                ⬇ candidats_modele.csv
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>candidats_modele.csv
             </a>
             <small>— CANDIDAT ; CHOIX DISCIPLINE 1 ; CHOIX DISCIPLINE 2 ; TT ; Etab ; Profs</small>
         </li>
         <li>
             <a href="{{ url_for('static', filename='templates_csv/examinateurs_modele.csv') }}" download>
-                ⬇ examinateurs_modele.csv
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>examinateurs_modele.csv
             </a>
             <small>— Nom ; Disc.poste ; Salle ; Heure mini ; Etab ; Loge</small>
         </li>
         <li>
             <a href="{{ url_for('static', filename='templates_csv/preps_modele.csv') }}" download>
-                ⬇ preps_modele.csv
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>preps_modele.csv
             </a>
             <small>— Matiere ; Matière court ; Temps preparation (min) ; Duree (min)</small>
         </li>
@@ -213,7 +213,7 @@
 
 {# ── 3. Paramètres de l'algorithme ───────────────────────────────────────── #}
 <div class="algo-section">
-    <h2>⚙ Paramètres de l'algorithme</h2>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.3em;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Paramètres de l'algorithme</h2>
     <p style="font-size:.88em; color:#555;">Ces paramètres sont sauvegardés et utilisés au prochain lancement.</p>
 
     <div class="params-grid">
@@ -467,14 +467,14 @@
     </details>
 
     <p style="margin-top:.9em;">
-        <button onclick="sauvegarderParams()">💾 Sauvegarder les paramètres</button>
+        <button onclick="sauvegarderParams()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Sauvegarder les paramètres</button>
     </p>
     <p id="params-feedback"></p>
 </div>
 
 {# ── 4. Lancement et log ──────────────────────────────────────────────────── #}
 <div class="algo-section">
-    <h2>⚙ Lancement</h2>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.3em;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Lancement</h2>
     <p>
         Statut : <span id="status-badge" class="badge {% if is_running %}badge-running{% else %}badge-idle{% endif %}">
             {% if is_running %}En cours…{% else %}Inactif{% endif %}
@@ -493,7 +493,7 @@
             ⚠ Recrée entièrement la base de données.
         </small>
     </p>
-    <h2>📋 Sortie en temps réel</h2>
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.3em;"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>Sortie en temps réel</h2>
     <div id="log-console"></div>
     <div id="algo-success-actions" hidden style="margin-top:1em; gap:.5em; flex-wrap:wrap;">
         <a href="{{ url_for('gestion_candidats') }}"
@@ -703,9 +703,19 @@ function renderReport(report, container) {
         const stats = document.createElement('div');
         stats.className = 'val-stats';
         const s = report.stats;
-        if (s.matieres)       stats.innerHTML += `<span class="val-stat">📚 ${s.matieres} matière(s)</span>`;
-        if (s.examinateurs)   stats.innerHTML += `<span class="val-stat">👩‍🏫 ${s.examinateurs} examinateur(s)</span>`;
-        if (s.candidats)      stats.innerHTML += `<span class="val-stat">🎓 ${s.candidats} candidat(s)</span>`;
+        const ICONE_MATIERE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;">'
+            + '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>';
+        const ICONE_EXAMINATEUR = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;">'
+            + '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+        const ICONE_CANDIDAT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;">'
+            + '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'
+            + '<path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+        if (s.matieres)       stats.innerHTML += `<span class="val-stat">${ICONE_MATIERE}${s.matieres} matière(s)</span>`;
+        if (s.examinateurs)   stats.innerHTML += `<span class="val-stat">${ICONE_EXAMINATEUR}${s.examinateurs} examinateur(s)</span>`;
+        if (s.candidats)      stats.innerHTML += `<span class="val-stat">${ICONE_CANDIDAT}${s.candidats} candidat(s)</span>`;
         container.appendChild(stats);
     }
 
