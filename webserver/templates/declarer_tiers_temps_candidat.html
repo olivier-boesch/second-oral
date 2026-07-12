@@ -66,7 +66,7 @@
         {% for c in plan.changements %}
         <tr class="{{ 'tt-soi' if c.est_le_candidat else ('tt-alerte' if (c.ecart_mini_rompu or c.chevauche_pause) else 'tt-cascade') }}">
             <td>{{ c.numero }}{% if c.est_le_candidat %} <strong>(lui-même)</strong>{% endif %}</td>
-            <td>{{ c.examinateur_nom }}</td>
+            <td><a href="{{ url_for('edit_examinateur', id_examinateur=c.id_examinateur) }}">{{ c.examinateur_nom }}</a></td>
             <td>
                 {{ c.ancienne_heure_sujet|heure }}
                 {%- if c.ancienne_heure_sujet != c.nouvelle_heure_sujet %} → {{ c.nouvelle_heure_sujet|heure }}{% endif %}

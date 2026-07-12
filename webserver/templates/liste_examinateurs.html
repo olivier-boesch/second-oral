@@ -86,7 +86,10 @@
                     </div>
                 </td>
                 <td>
-                    {{ ex['loge'] }}
+                    <div class="tooltip">
+                        <a href="{{ url_for('loge', id_loge=ex['loge']) }}" target="_blank">{{ ex['loge'] }}</a>
+                        <span class="tooltiptext">voir la loge</span>
+                    </div>
                 </td>
                 <td>
                     {{ ex['nb_oraux'] }}

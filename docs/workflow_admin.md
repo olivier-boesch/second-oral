@@ -121,7 +121,7 @@ Leroy Sophie (1122334455C);Mana;Droit Eco;0;Cézanne;Dupont,Bernard;
 - La colonne `Profs` peut être vide (laisser le champ vide, pas d'espace)
 - Un candidat avec tiers-temps (`TT=1`) bénéficie automatiquement d'un temps de préparation majoré d'un tiers
 - La colonne `Etab` empêche l'algorithme d'assigner un examinateur du même établissement que le candidat
-- La colonne `Téléphone` est optionnelle (peut être absente du fichier ou vide) : visible et modifiable uniquement par l'administrateur depuis `/gestion` → clic sur le nom du candidat, jamais transmise au candidat, aux examinateurs ni à l'archive zip de fin de session (cf. [securite.md](securite.md#rgpd))
+- La colonne `Téléphone` est optionnelle (peut être absente du fichier ou vide) : visible et modifiable uniquement par l'administrateur depuis `/gestion/candidats` → clic sur le nom du candidat, jamais transmise au candidat, aux examinateurs ni à l'archive zip de fin de session (cf. [securite.md](securite.md#rgpd))
 
 ---
 
@@ -236,7 +236,7 @@ Avant de lancer l'algorithme, s'assurer que :
 
 Après un lancement réussi :
 
-1. Aller sur `/gestion` → **Liste des oraux** pour vérifier le planning global
+1. Aller sur `/gestion/candidats` → **Liste des oraux** pour vérifier le planning global
 2. Aller sur `/salle` → vérifier chaque salle (nombre d'oraux, horaires)
 3. Vérifier qu'aucun candidat n'a deux oraux trop proches
 4. Si besoin, modifier manuellement un oral via `/gestion/edit-oral`
@@ -288,7 +288,7 @@ Un lien « Voir tous les examinateurs/candidats » reste disponible pour retrouv
 
 ### Modifier un oral
 
-1. `/gestion` → cliquer sur l'oral à modifier
+1. `/gestion/candidats` → cliquer sur l'oral à modifier
 2. Changer l'horaire, l'examinateur ou cocher **"Marquer comme modifié"**
 3. Si "Marquer comme modifié" est coché, les pages des candidats concernés s'actualisent en temps réel (SSE)
 
@@ -331,7 +331,7 @@ Ces deux résolutions poussées peuvent être relancées successivement depuis l
 
 ### Changement de matière d'un candidat en cours de journée
 
-`/gestion` → clic sur le nom du candidat (page d'édition) → lien **🔄 Changer une matière**.
+`/gestion/candidats` → clic sur le nom du candidat (page d'édition) → lien **🔄 Changer une matière**.
 
 Permet de traiter le cas d'un élève qui change de matière le jour J, après que l'algorithme a déjà placé les oraux : un des deux oraux du candidat (choix1 ou choix2) doit être remplacé par un oral dans la nouvelle matière, avec un nouvel examinateur et potentiellement un nouvel horaire.
 
@@ -346,7 +346,7 @@ Le flux se déroule en 3 étapes, sur le même modèle que la disponibilité exa
 
 ### Déclaration (ou retrait) de tiers-temps d'un candidat en cours de journée
 
-`/gestion` → bouton **⏱️ Déclarer/Retirer** sur la ligne du candidat concerné, ou depuis sa fiche
+`/gestion/candidats` → bouton **⏱️ Déclarer/Retirer** sur la ligne du candidat concerné, ou depuis sa fiche
 d'édition (clic sur le nom) → même bouton. Les deux mènent à l'écran de prévisualisation détaillé
 ci-dessous (aucune bascule directe sans prévisualisation).
 
@@ -406,7 +406,7 @@ sans adaptation possible (rien à adapter).
 
 > **Cas d'usage :** un examinateur perd son papillon → aller sur `/gestion/credentials`, cliquer "Renouveler" sur la ligne de cet examinateur → un nouveau papillon PDF est regénéré et disponible au téléchargement.
 
-**Renouvellement individuel depuis la liste des examinateurs :** `/gestion/liste-examinateurs` dispose d'une colonne **Identifiants** avec un bouton "↺ Renouveler" par ligne — raccourci vers la même action que ci-dessus, sans quitter la liste. Pour les candidats, ce raccourci n'existe pas dans la vue fusionnée `/gestion` (nom/numéro/téléphone/tiers-temps/oraux) — le renouvellement individuel se fait depuis `/gestion/credentials`.
+**Renouvellement individuel depuis la liste des examinateurs :** `/gestion/liste-examinateurs` dispose d'une colonne **Identifiants** avec un bouton "↺ Renouveler" par ligne — raccourci vers la même action que ci-dessus, sans quitter la liste. Pour les candidats, ce raccourci n'existe pas dans la vue fusionnée `/gestion/candidats` (nom/numéro/téléphone/tiers-temps/oraux) — le renouvellement individuel se fait depuis `/gestion/credentials`.
 
 ### Gestion des loges
 

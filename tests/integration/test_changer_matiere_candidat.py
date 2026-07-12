@@ -112,6 +112,12 @@ class TestChangerMatiereCandidatPrevisualisation:
         assert "ProfAnglais" in body
         assert "N100" in body
 
+    def test_lie_les_noms_d_examinateur_vers_leur_edition(self, admin_client, db_mock):
+        r = self._post(admin_client, db_mock)
+        body = r.data.decode()
+        assert "/gestion/edit-examinateur?id_examinateur=1" in body  # ProfMaths (ancien)
+        assert "/gestion/edit-examinateur?id_examinateur=3" in body  # ProfAnglais (nouveau)
+
     def test_refuse_matiere_deja_choisie(self, admin_client, db_mock):
         db_mock.make_sql_select.side_effect = _side_effect_defaut
         r = admin_client.post("/gestion/candidat/changer-matiere", data={

@@ -948,6 +948,29 @@ class TestJourJ:
         assert r.status_code == 200
         assert "Redis indisponible" in r.data.decode()
 
+    def test_sessions_actives_lient_salle_et_loge(self, admin_client, db_mock, monkeypatch):
+        """Les sessions actives (supervision technique) doivent lier la salle et
+        la loge vers leur fiche en direct (cf. project_liens_admin)."""
+        import app as app_module
+
+        class _FakeRedis:
+            def get(self, key):
+                return {
+                    'stats:online:exam:A1': b'1.2.3.4',
+                    'stats:online:loge:L1': b'5.6.7.8',
+                }.get(key)
+
+            def scan_iter(self, pattern):
+                return iter([b'stats:online:exam:A1', b'stats:online:loge:L1'])
+
+        monkeypatch.setattr(app_module, "_redis", lambda: _FakeRedis())
+        db_mock.make_sql_select.side_effect = [self.EXAMINATEURS, self.CANDIDATS]
+        r = admin_client.get("/gestion/jour-j")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert '<a href="/salle/A1" target="_blank">A1</a>' in body
+        assert '<a href="/loge/L1" target="_blank">L1</a>' in body
+
 
 # ── Intégration ODS complète ─────────────────────────────────────────────────
 
@@ -1910,6 +1933,17 @@ class TestListeExaminateursSalleLink:
         body = r.data.decode()
         assert '<a href="/salle/A01" target="_blank">A01</a>' in body
 
+    def test_loge_pointe_vers_la_page_loge(self, admin_client, db_mock):
+        """La loge doit aussi renvoyer vers sa fiche en direct (cf. project_liens_admin)."""
+        examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "loge": "L1", "matiere": "Maths", "etablissements": "",
+                       "nb_oraux": 0}
+        db_mock.make_sql_select.return_value = [examinateur]
+        r = admin_client.get("/gestion/liste-examinateurs")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert '<a href="/loge/L1" target="_blank">L1</a>' in body
+
 
 class TestListeExaminateursDelete:
     def test_delete_button_asks_confirmation(self, admin_client, db_mock):
@@ -2089,6 +2123,20 @@ class TestReassignationLoges:
         assert "ProfA" in body
         assert "B404" in body
         assert "B405" in body
+
+    def test_get_lie_salle_examinateur_et_colonnes_loges(self, admin_client, db_mock):
+        """Salle, examinateur et en-têtes de loge doivent tous être des liens
+        directs (cf. project_liens_admin)."""
+        db_mock.make_sql_select.side_effect = [
+            [{"id": 1, "nom": "ProfA", "salle": "A1", "matiere": "Maths",
+              "loge_id": 10, "loge": "B404"}],
+            [{"id": 10, "nom": "B404"}],
+        ]
+        r = admin_client.get("/gestion/reassignation-loges")
+        body = r.data.decode()
+        assert '<a href="/salle/A1" target="_blank">A1</a>' in body
+        assert '/gestion/edit-examinateur?id_examinateur=1' in body
+        assert '<a href="/loge/B404" target="_blank">B404</a>' in body
 
     # ── Réaffectation d'une salle (POST assign) ───────────────────────────────
 
@@ -2274,6 +2322,39 @@ class TestLogePassage:
         assert r.status_code == 200
 
 
+class TestEditOralGetLiensExaminateurSalle:
+    """La table « Oraux du candidat » de l'écran d'édition doit lier le nom de
+    l'examinateur vers son édition, et la salle vers sa fiche (cf. project_liens_admin)."""
+
+    from datetime import timedelta as _td
+
+    DONNEES_ORAL = {
+        "id": 1, "nom": "Dupont Jean", "numero": "N1", "etablissement": "",
+        "tiers_temps": 0, "id_candidat": 42, "id_examinateur": 10, "id_matiere": 2,
+        "heure_sujet": _td(hours=9), "heure_oral": _td(hours=9, minutes=15),
+        "heure_fin": _td(hours=9, minutes=30), "matiere": "Maths",
+    }
+    AUTRE_ORAL = {
+        "id": 2, "matiere": "Français", "id_examinateur": 11, "examinateur": "Durand",
+        "salle": "B02",
+        "heure_sujet": _td(hours=11), "heure_oral": _td(hours=11, minutes=15),
+        "heure_fin": _td(hours=12),
+    }
+
+    def test_get_lie_examinateur_et_salle(self, admin_client, db_mock):
+        db_mock.make_sql_select.side_effect = [
+            [self.DONNEES_ORAL],   # SELECT_INFOS_ORAL
+            [self.AUTRE_ORAL],     # SELECT_LISTE_EDITION_ORAL
+            [],                    # SELECT_LISTE_MATIERES
+            [],                    # SELECT_LISTE_EXAMINATEURS_PAR_MATIERE
+        ]
+        r = admin_client.get("/gestion/edit-oral?oral=1")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert '/gestion/edit-examinateur?id_examinateur=11' in body
+        assert '<a href="/salle/B02" target="_blank">B02</a>' in body
+
+
 # ── Validation du déplacement d'oral ────────────────────────────────────────
 
 class TestEditOralValidation:
@@ -2294,7 +2375,7 @@ class TestEditOralValidation:
     }
     # Autre oral du même candidat : 11h00–12h00
     AUTRE_ORAL = {
-        "id": 2, "matiere": "Français", "examinateur": "Durand",
+        "id": 2, "matiere": "Français", "id_examinateur": 11, "examinateur": "Durand",
         "salle": "B02",
         "heure_sujet": _td(hours=11, minutes=0),
         "heure_oral":  _td(hours=11, minutes=15),
@@ -2561,6 +2642,10 @@ class TestCredentialRenewal:
         assert "Dupont Jean" in body
         assert "Martin Sophie" in body
         assert "Loge A" in body
+        # Examinateur/salle/loge doivent être des liens directs (cf. project_liens_admin)
+        assert '/gestion/edit-examinateur?id_examinateur=10' in body
+        assert '<a href="/salle/A01" target="_blank">A01</a>' in body
+        assert '<a href="/loge/Loge%20A" target="_blank">Loge A</a>' in body
 
     # ── Candidat ─────────────────────────────────────────────────────────────
 

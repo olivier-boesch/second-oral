@@ -86,8 +86,8 @@
         </tr>
         <tr class="{{ 'cm-hors-grille' if changement.hors_grille else ('cm-meme-heure' if changement.meme_heure else 'cm-heure-changee') }}">
             <td>{{ changement.numero }}</td>
-            <td>{{ changement.ancien_examinateur_nom }}</td>
-            <td>{{ changement.nouvel_examinateur_nom }}</td>
+            <td><a href="{{ url_for('edit_examinateur', id_examinateur=changement.ancien_examinateur_id) }}">{{ changement.ancien_examinateur_nom }}</a></td>
+            <td><a href="{{ url_for('edit_examinateur', id_examinateur=changement.nouvel_examinateur_id) }}">{{ changement.nouvel_examinateur_nom }}</a></td>
             <td>{{ changement.ancienne_heure_sujet|heure }}</td>
             <td>{{ changement.nouvelle_heure_sujet|heure }}{% if not changement.meme_heure %} ⚠{% endif %}{% if changement.hors_grille %} 🕐{% endif %}</td>
         </tr>
@@ -142,10 +142,13 @@
 {% if etape == 'termine' %}
 <p style="background:#d1fae5; color:#065f46; border-left:4px solid #059669;
           padding:.75em 1em; border-radius:.25em; margin-bottom:1em;">
-    ✔ Oral de {{ changement.numero }} déplacé vers {{ changement.nouvel_examinateur_nom }}
+    ✔ Oral de {{ changement.numero }} déplacé vers
+    <a href="{{ url_for('edit_examinateur', id_examinateur=changement.nouvel_examinateur_id) }}">{{ changement.nouvel_examinateur_nom }}</a>
     à {{ changement.nouvelle_heure_sujet|heure }}, notifications envoyées.
     {% if compaction %}
-    <br>✔ Planning de {{ compaction.ancien_examinateur_nom }} compacté (déplacement de
+    <br>✔ Planning de
+    <a href="{{ url_for('edit_examinateur', id_examinateur=compaction.ancien_examinateur_id) }}">{{ compaction.ancien_examinateur_nom }}</a>
+    compacté (déplacement de
     {{ compaction.numero }} vers {{ compaction.nouvelle_heure_sujet|heure }}).
     {% endif %}
 </p>

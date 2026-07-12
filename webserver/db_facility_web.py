@@ -185,7 +185,8 @@ WHERE Oral.id = %s
 """
 
 SELECT_LISTE_EDITION_ORAL = """
-SELECT Oral.id AS id, Matiere.nom AS matiere, Examinateur.nom AS examinateur,
+SELECT Oral.id AS id, Matiere.nom AS matiere, Examinateur.id AS id_examinateur,
+       Examinateur.nom AS examinateur,
        Examinateur.salle AS salle, Oral.heure_sujet AS heure_sujet,
        Oral.heure_oral AS heure_oral, Oral.heure_fin AS heure_fin
 FROM Oral

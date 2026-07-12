@@ -177,6 +177,7 @@ class TestPlacerPrivilegieCreneauAvantOralExistant:
         )
         assert not plan.non_replaces
         changement = plan.changements[0]
+        assert changement.ancien_examinateur_id == 1
         assert changement.nouvel_examinateur_id == 2
         assert changement.nouvelle_heure_sujet == _td(9, 20)
 

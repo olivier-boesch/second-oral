@@ -17,7 +17,7 @@
 <body class="body-for-sticky">
 {% include 'auth_icon.html' %}
 
-<h1>Disponibilité — {{ examinateur['nom'] }} ({{ examinateur['matiere'] }})</h1>
+<h1>Disponibilité — <a href="{{ url_for('edit_examinateur', id_examinateur=examinateur['id']) }}">{{ examinateur['nom'] }}</a> ({{ examinateur['matiere'] }})</h1>
 
 <div style="max-width:640px; margin:0 auto;">
 
@@ -88,8 +88,8 @@
         {% for c in plan.changements %}
         <tr class="{{ 'dispo-hors-grille' if c.hors_grille else ('dispo-meme-heure' if c.meme_heure else 'dispo-heure-changee') }}">
             <td>{{ c.numero }}</td>
-            <td>{{ c.ancien_examinateur_nom }}</td>
-            <td>{{ c.nouvel_examinateur_nom }}</td>
+            <td><a href="{{ url_for('edit_examinateur', id_examinateur=c.ancien_examinateur_id) }}">{{ c.ancien_examinateur_nom }}</a></td>
+            <td><a href="{{ url_for('edit_examinateur', id_examinateur=c.nouvel_examinateur_id) }}">{{ c.nouvel_examinateur_nom }}</a></td>
             <td>{{ c.ancienne_heure_sujet|heure }}</td>
             <td>{{ c.nouvelle_heure_sujet|heure }}{% if not c.meme_heure %} ⚠{% endif %}{% if c.hors_grille %} 🕐{% endif %}</td>
         </tr>
@@ -107,7 +107,7 @@
         {% for o in plan.non_replaces %}
         <tr>
             <td>{{ o.numero }}</td>
-            <td>{{ o.examinateur_nom }}</td>
+            <td><a href="{{ url_for('edit_examinateur', id_examinateur=o.id_examinateur) }}">{{ o.examinateur_nom }}</a></td>
             <td>{{ o.heure_sujet|heure }}</td>
         </tr>
         {% endfor %}

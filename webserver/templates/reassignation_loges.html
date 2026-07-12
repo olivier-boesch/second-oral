@@ -19,7 +19,7 @@
         <tr>
             <th style="position:sticky; left:0; z-index:3;">Salle</th>
             {% for loge in loges %}
-            <th>{{ loge['nom'] }}</th>
+            <th><a href="{{ url_for('loge', id_loge=loge['nom']) }}" target="_blank">{{ loge['nom'] }}</a></th>
             {% endfor %}
             <th>
                 <form id="form-nouvelle-loge" style="display:flex; gap:.3em; align-items:center; justify-content:center;">
@@ -34,8 +34,8 @@
         {% for ex in examinateurs %}
         <tr class="{{ loop.cycle("tr_light", "tr_dark") }}" data-examinateur-id="{{ ex['id'] }}">
             <td style="position:sticky; left:0; z-index:1; background:inherit; text-align:left;">
-                <strong>{{ ex['salle'] }}</strong><br>
-                <small>{{ ex['nom'] }} — {{ ex['matiere'] }}</small>
+                <strong><a href="{{ url_for('salle', id_salle=ex['salle']) }}" target="_blank">{{ ex['salle'] }}</a></strong><br>
+                <small><a href="{{ url_for('edit_examinateur', id_examinateur=ex['id']) }}">{{ ex['nom'] }}</a> — {{ ex['matiere'] }}</small>
             </td>
             {% for loge in loges %}
             <td style="text-align:center;">

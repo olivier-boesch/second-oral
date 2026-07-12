@@ -86,6 +86,14 @@ class TestDisponibiliteExaminateurPrevisualisation:
         assert "N100" in body
         assert "1</strong> oral" in body
 
+    def test_previsualisation_lie_les_noms_d_examinateur_vers_leur_edition(self, admin_client, db_mock):
+        """Les noms d'ancien/nouvel examinateur pointent vers /gestion/edit-examinateur
+        (cf. project_liens_admin) — évite d'avoir à repasser par la liste complète."""
+        r = self._post_previsualisation(admin_client, db_mock)
+        body = r.data.decode()
+        assert "/gestion/edit-examinateur?id_examinateur=1" in body  # ProfA (ancien)
+        assert "/gestion/edit-examinateur?id_examinateur=2" in body  # ProfB (nouveau)
+
     def test_aucune_mise_a_jour_pendant_la_previsualisation(self, admin_client, db_mock):
         db_mock.make_sql_update.reset_mock()
         self._post_previsualisation(admin_client, db_mock)

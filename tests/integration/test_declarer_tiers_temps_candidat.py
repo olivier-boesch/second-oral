@@ -142,6 +142,8 @@ class TestDeclarerTiersTempsPrevisualisation:
         assert "N101" in body  # oral cascadé
         assert "ProfMaths" in body
         assert "ProfPhilo" in body
+        assert "/gestion/edit-examinateur?id_examinateur=1" in body
+        assert "/gestion/edit-examinateur?id_examinateur=2" in body
 
     def test_aucune_mise_a_jour_pendant_la_previsualisation(self, admin_client, db_mock):
         db_mock.make_sql_select.side_effect = _side_effect_defaut

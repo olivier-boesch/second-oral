@@ -60,6 +60,10 @@ class Changement:
     """Vrai si l'heure proposée n'a jamais été utilisée aujourd'hui pour cette
     matière — càd un créneau réellement nouveau (palier « extension d'horaire »
     de resoudre_oraux_difficiles), pas juste un horaire déjà existant réutilisé."""
+    ancien_examinateur_id: int = 0
+    """Id de l'examinateur remplacé — 0 si non renseigné (uniquement pour
+    lier son nom vers sa fiche d'édition côté template, sans incidence sur
+    la logique de replanification)."""
 
     @property
     def meme_heure(self) -> bool:
@@ -165,7 +169,7 @@ def _placer(
             occupations.setdefault(examinateur.id, []).append((heure_oral, heure_fin))
             return Changement(
                 id_oral=oral.id, id_candidat=oral.id_candidat, numero=oral.numero,
-                ancien_examinateur_nom=oral.examinateur_nom,
+                ancien_examinateur_id=oral.id_examinateur, ancien_examinateur_nom=oral.examinateur_nom,
                 nouvel_examinateur_id=examinateur.id, nouvel_examinateur_nom=examinateur.nom,
                 ancienne_heure_sujet=oral.heure_sujet, nouvelle_heure_sujet=heure_sujet,
                 nouvelle_heure_oral=heure_oral, nouvelle_heure_fin=heure_fin,
@@ -207,7 +211,7 @@ def _placer(
     occupations.setdefault(examinateur.id, []).append((heure_oral, heure_fin))
     return Changement(
         id_oral=oral.id, id_candidat=oral.id_candidat, numero=oral.numero,
-        ancien_examinateur_nom=oral.examinateur_nom,
+        ancien_examinateur_id=oral.id_examinateur, ancien_examinateur_nom=oral.examinateur_nom,
         nouvel_examinateur_id=examinateur.id, nouvel_examinateur_nom=examinateur.nom,
         ancienne_heure_sujet=oral.heure_sujet, nouvelle_heure_sujet=heure_sujet,
         nouvelle_heure_oral=heure_oral, nouvelle_heure_fin=heure_fin,
@@ -505,7 +509,7 @@ def resoudre_oraux_difficiles(
         heure_fin = heure_oral + duree_oral
         plan.changements.append(Changement(
             id_oral=oral.id, id_candidat=oral.id_candidat, numero=oral.numero,
-            ancien_examinateur_nom=oral.examinateur_nom,
+            ancien_examinateur_id=oral.id_examinateur, ancien_examinateur_nom=oral.examinateur_nom,
             nouvel_examinateur_id=examinateur.id, nouvel_examinateur_nom=examinateur.nom,
             ancienne_heure_sujet=oral.heure_sujet, nouvelle_heure_sujet=heure_sujet,
             nouvelle_heure_oral=heure_oral, nouvelle_heure_fin=heure_fin,
@@ -604,7 +608,7 @@ def proposer_compaction(
         return None
     return Changement(
         id_oral=plus_tardif.id, id_candidat=plus_tardif.id_candidat, numero=plus_tardif.numero,
-        ancien_examinateur_nom=plus_tardif.examinateur_nom,
+        ancien_examinateur_id=plus_tardif.id_examinateur, ancien_examinateur_nom=plus_tardif.examinateur_nom,
         nouvel_examinateur_id=plus_tardif.id_examinateur, nouvel_examinateur_nom=plus_tardif.examinateur_nom,
         ancienne_heure_sujet=plus_tardif.heure_sujet, nouvelle_heure_sujet=creneau_libere,
         nouvelle_heure_oral=nouvelle_heure_oral, nouvelle_heure_fin=nouvelle_heure_fin,

@@ -136,13 +136,13 @@
             <tr class="tr_light"><td>Admin</td><td>—</td><td><code>{{ s['ip'] }}</code></td></tr>
             {% endfor %}{% endif %}
             {% for s in online_detail['exam'] %}
-            <tr class="tr_light"><td>Examinateur</td><td>Salle {{ s['id'] }}</td><td><code>{{ s['ip'] }}</code></td></tr>
+            <tr class="tr_light"><td>Examinateur</td><td>Salle <a href="{{ url_for('salle', id_salle=s['id']) }}" target="_blank">{{ s['id'] }}</a></td><td><code>{{ s['ip'] }}</code></td></tr>
             {% endfor %}
             {% for s in online_detail['cand'] %}
             <tr class="tr_dark"><td>Candidat</td><td>{{ s['id'] }}</td><td><code>{{ s['ip'] }}</code></td></tr>
             {% endfor %}
             {% for s in online_detail['loge'] %}
-            <tr class="tr_light"><td>Loge</td><td>{{ s['id'] }}</td><td><code>{{ s['ip'] }}</code></td></tr>
+            <tr class="tr_light"><td>Loge</td><td><a href="{{ url_for('loge', id_loge=s['id']) }}" target="_blank">{{ s['id'] }}</a></td><td><code>{{ s['ip'] }}</code></td></tr>
             {% endfor %}
             {% if not online['admin'] and not online_detail['exam'] and not online_detail['cand'] and not online_detail['loge'] %}
             <tr class="tr_light"><td colspan="3">Aucune session active</td></tr>
@@ -215,13 +215,15 @@ function jjOuvrirChangementMatiere() {
             rows.push('<tr class="tr_light"><td>Admin</td><td>—</td><td><code>' + s.ip + '</code></td></tr>');
         });
         (detail.exam || []).forEach(function (s) {
-            rows.push('<tr class="tr_light"><td>Examinateur</td><td>Salle ' + s.id + '</td><td><code>' + s.ip + '</code></td></tr>');
+            rows.push('<tr class="tr_light"><td>Examinateur</td><td>Salle <a href="/salle/'
+                + encodeURIComponent(s.id) + '" target="_blank">' + s.id + '</a></td><td><code>' + s.ip + '</code></td></tr>');
         });
         (detail.cand || []).forEach(function (s) {
             rows.push('<tr class="tr_dark"><td>Candidat</td><td>' + s.id + '</td><td><code>' + s.ip + '</code></td></tr>');
         });
         (detail.loge || []).forEach(function (s) {
-            rows.push('<tr class="tr_light"><td>Loge</td><td>' + s.id + '</td><td><code>' + s.ip + '</code></td></tr>');
+            rows.push('<tr class="tr_light"><td>Loge</td><td><a href="/loge/'
+                + encodeURIComponent(s.id) + '" target="_blank">' + s.id + '</a></td><td><code>' + s.ip + '</code></td></tr>');
         });
         if (!rows.length) rows.push('<tr class="tr_light"><td colspan="3">Aucune session active</td></tr>');
         return rows.join('');

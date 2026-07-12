@@ -82,7 +82,7 @@ Résumé des traitements :
 
 **Téléphone mobile candidat** (ajouté 2026-07-09) : import optionnel depuis
 `candidats.csv`/le fichier ODS (colonne `Téléphone`), modifiable depuis
-`/gestion` → clic sur le nom du candidat → `/gestion/edit-candidat`.
+`/gestion/candidats` → clic sur le nom du candidat → `/gestion/edit-candidat`.
 Minimisation appliquée à trois niveaux :
 - **Accès restreint à l'administrateur** : `SELECT_INFOS_CANDIDAT` (fiche
   `candidat.html`, consultée par le candidat lui-même) ne sélectionne pas ce
