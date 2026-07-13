@@ -411,3 +411,40 @@ class TestLoginCandidatQr:
         with client.session_transaction() as sess:
             assert "candidat" not in sess
 
+
+class TestHeaderUserActions:
+    """Depuis le 2026-07-13, l'icône utilisateur du header (auth_icon.html)
+    renvoie vers la page de l'utilisateur connecté (dashboard/salle/fiche/loge)
+    au lieu de /logout — une icône de déconnexion séparée a été ajoutée à sa
+    droite pour chaque rôle."""
+
+    def test_admin_header_links_to_dashboard_with_separate_logout(self, admin_client):
+        body = admin_client.get("/about").data.decode()
+        assert 'class="site-header__user" href="/gestion"' in body
+        assert 'class="site-header__logout"' in body
+        assert 'href="/logout' in body
+
+    def test_examinateur_header_links_to_salle_with_separate_logout(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [{"nom": "Martin"}]
+        with client.session_transaction() as sess:
+            sess["user"] = "101"
+        body = client.get("/about").data.decode()
+        assert 'class="site-header__user" href="/salle/101"' in body
+        assert 'class="site-header__logout"' in body
+        assert 'href="/logout' in body
+
+    def test_candidat_header_links_to_fiche_with_separate_logout(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [{"nom": "Dupont Jean"}]
+        with client.session_transaction() as sess:
+            sess["candidat"] = "1234567890A"
+        body = client.get("/about").data.decode()
+        assert 'class="site-header__user" href="/candidat/1234567890A"' in body
+        assert 'class="site-header__logout" href="/logout-candidat"' in body
+
+    def test_loge_header_links_to_loge_page_with_separate_logout(self, client):
+        with client.session_transaction() as sess:
+            sess["loge"] = "Loge A"
+        body = client.get("/about").data.decode()
+        assert 'class="site-header__user" href="/loge/Loge%20A"' in body
+        assert 'class="site-header__logout" href="/logout-loge"' in body
+

@@ -155,6 +155,28 @@ img { vertical-align: middle; }
 }
 .site-header__user svg { flex-shrink: 0; }
 
+.site-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.site-header__logout {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    color: var(--text-md);
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    transition: background var(--transition), color var(--transition);
+}
+.site-header__logout:hover {
+    background: var(--primary-lt);
+    color: var(--primary);
+}
+
 /* ── Pied de page fixe ───────────────────────────────────── */
 footer {
     position: fixed;

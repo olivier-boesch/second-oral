@@ -9,38 +9,46 @@
     2ndOral
   </a>
 
-  {% if username %}
-  <a class="site-header__user"
-     href="{{ url_for('logout', link_back=url_of_page if url_of_page is defined else '/') }}"
-     title="Se déconnecter">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="8" r="4"/>
-      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-    </svg>
-    {{ username }}
-  </a>
+  {% if session.get('user') == 'admin' %}
+    {% set user_href = url_for('gestion_home') %}
+    {% set user_title = 'Tableau de bord admin' %}
+    {% set user_label = username %}
+    {% set logout_href = url_for('logout', link_back=url_of_page if url_of_page is defined else '/') %}
+  {% elif username %}
+    {% set user_href = url_for('salle', id_salle=session['user']) %}
+    {% set user_title = 'Ma salle' %}
+    {% set user_label = username %}
+    {% set logout_href = url_for('logout', link_back=url_of_page if url_of_page is defined else '/') %}
   {% elif session.get('candidat') %}
-  <a class="site-header__user"
-     href="{{ url_for('logout_candidat') }}"
-     title="Se déconnecter">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="8" r="4"/>
-      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-    </svg>
-    {{ candidat_nom or 'Candidat' }}
-  </a>
+    {% set user_href = url_for('candidat', id_candidat=session['candidat']) %}
+    {% set user_title = 'Ma fiche' %}
+    {% set user_label = candidat_nom or 'Candidat' %}
+    {% set logout_href = url_for('logout_candidat') %}
   {% elif session.get('loge') %}
-  <a class="site-header__user"
-     href="{{ url_for('logout_loge') }}"
-     title="Se déconnecter">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="8" r="4"/>
-      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-    </svg>
-    {{ session['loge'] }}
-  </a>
+    {% set user_href = url_for('loge', id_loge=session['loge']) %}
+    {% set user_title = 'Ma loge' %}
+    {% set user_label = session['loge'] %}
+    {% set logout_href = url_for('logout_loge') %}
+  {% endif %}
+
+  {% if user_href is defined %}
+  <div class="site-header__actions">
+    <a class="site-header__user" href="{{ user_href }}" title="{{ user_title }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+      {{ user_label }}
+    </a>
+    <a class="site-header__logout" href="{{ logout_href }}" title="Se déconnecter">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+    </a>
+  </div>
   {% endif %}
 </header>
