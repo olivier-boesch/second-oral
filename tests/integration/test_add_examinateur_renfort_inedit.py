@@ -29,7 +29,7 @@ def _side_effect_ajout(sql, *args):
     if sql is dfw.SELECT_LISTE_MATIERES:
         return [{"id": 5, "nom": "Maths"}]
     if sql is dfw.SELECT_ALL_EXAMINATEURS_FOR_RENEWAL:
-        return [{"id": 42, "nom": "Nouveau Prof", "salle": "Z9"}]
+        return [{"id": 42, "nom": "Nouveau Prof", "salle": "Z9", "identifiant": "examinateur42"}]
     return []
 
 

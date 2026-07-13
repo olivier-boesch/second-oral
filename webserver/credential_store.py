@@ -40,7 +40,7 @@ def load_credentials(enc_file: Path, secret_key: str) -> dict:
 
     :param enc_file:   Chemin vers le fichier chiffré (credentials.enc).
     :param secret_key: APP_SECRET_KEY de l'instance.
-    :returns: Dict {"examinateurs": {salle: plaintext}, "loges": {nom: plaintext}}.
+    :returns: Dict {"examinateurs": {identifiant: plaintext}, "loges": {nom: plaintext}}.
     """
     empty: dict = {"examinateurs": {}, "loges": {}}
     if not enc_file.exists():
@@ -63,7 +63,7 @@ def save_credentials(enc_file: Path, secret_key: str, creds: dict) -> None:
 
     :param enc_file:   Chemin de destination (credentials.enc).
     :param secret_key: APP_SECRET_KEY de l'instance.
-    :param creds:      Dict {"examinateurs": {salle: plaintext}, "loges": {nom: plaintext}}.
+    :param creds:      Dict {"examinateurs": {identifiant: plaintext}, "loges": {nom: plaintext}}.
     """
     enc_file.parent.mkdir(parents=True, exist_ok=True)
     nonce = os.urandom(12)

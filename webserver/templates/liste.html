@@ -102,7 +102,7 @@
             {% else %}
             <td>
             {% endif %}
-                <a href="{{ url_for('salle', id_salle=oral['salle']) }}">{{ oral['salle'] }}</a>
+                <a href="{{ url_for('examinateur', identifiant=oral['identifiant']) }}">{{ oral['salle'] }}</a>
             </td>
         </tr>
         {% endfor %}

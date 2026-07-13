@@ -54,13 +54,13 @@
                 {% endif %}
             </td>
             {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
-                <a href="{{ url_for('salle', id_salle=oral['salle']) }}" target="_blank">{{ oral['salle'] }}</a>
+                <a href="{{ url_for('examinateur', identifiant=oral['identifiant']) }}" target="_blank">{{ oral['salle'] }}</a>
             </td>
             {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
                 {{ oral['matiere'] }}
             </td>
             {% if oral['maj'] %} <td class="red col-examinateur"> {% else %} <td class="col-examinateur"> {% endif %}
-                <a href="{{ url_for('salle', id_salle=oral['salle']) }}" target="_blank">{{ oral['examinateur'] }}</a>
+                <a href="{{ url_for('examinateur', identifiant=oral['identifiant']) }}" target="_blank">{{ oral['examinateur'] }}</a>
             </td>
             {% if oral['maj'] %} <td class="red"> {% else %} <td> {% endif %}
                 {{ oral['sujet'] }}

@@ -11,7 +11,7 @@
     <script nonce="{{ csp_nonce }}">
         function sign_document(id){
             console.log("sign for " + id);
-            document.location = "{{ url_for('sign') }}" + "?id=" + id + "&link_back={{ data['salle'] }}";
+            document.location = "{{ url_for('sign') }}" + "?id=" + id + "&link_back={{ data['identifiant'] }}";
         }
     </script>
 </head>
@@ -19,7 +19,7 @@
 {% include 'modal.html' %}
 {% include 'auth_icon.html' %}
 {% if not username and digital_sign %}
-    <a href="{{ url_for('login_examinateur', salle=data['salle']) }}"><div class="connect-button">Accès en modification</div></a>
+    <a href="{{ url_for('login_examinateur', identifiant=data['identifiant']) }}"><div class="connect-button">Accès en modification</div></a>
 {% endif %}
     <h1>
       Salle {{ data['salle'] }} — {{ data['nom'] }} ({{ data['matiere'] }})
@@ -36,8 +36,8 @@
     </h1>
     <p class="centered"><a href="{{ url_for('loge', id_loge=data['loge']) }}">loge: {{ data['loge'] }}</a></p>
     <p class="centered">
-        <img src="{{ url_for('salle_court', _external=True, id_salle=data['salle']) | qr(scale=4) }}">
-        {% if not digital_sign %}<a href="#" onclick="open_url('{{ url_for('generate_screen_one', type_doc="fiche_salle", id_doc=data['salle']) }}')"><img src="{{ url_for('static', filename='pdf.png') }}"></a>{% endif %}
+        <img src="{{ url_for('examinateur_court', _external=True, identifiant=data['identifiant']) | qr(scale=4) }}">
+        {% if not digital_sign %}<a href="#" onclick="open_url('{{ url_for('generate_screen_one', type_doc="fiche_salle", id_doc=data['identifiant']) }}')"><img src="{{ url_for('static', filename='pdf.png') }}"></a>{% endif %}
     </p>
     <p class="centered"></p>
     {% if data['oraux'] != [] %}

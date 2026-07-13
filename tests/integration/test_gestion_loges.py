@@ -171,13 +171,13 @@ class TestReassignationLoges:
         """Salle, examinateur et en-têtes de loge doivent tous être des liens
         directs (cf. project_liens_admin)."""
         db_mock.make_sql_select.side_effect = [
-            [{"id": 1, "nom": "ProfA", "salle": "A1", "matiere": "Maths",
-              "loge_id": 10, "loge": "B404"}],
+            [{"id": 1, "nom": "ProfA", "salle": "A1", "identifiant": "examinateur1",
+              "matiere": "Maths", "loge_id": 10, "loge": "B404"}],
             [{"id": 10, "nom": "B404"}],
         ]
         r = admin_client.get("/gestion/reassignation-loges")
         body = r.data.decode()
-        assert '<a href="/salle/A1" target="_blank">A1</a>' in body
+        assert '<a href="/examinateur/examinateur1" target="_blank">A1</a>' in body
         assert '/gestion/edit-examinateur?id_examinateur=1' in body
         assert '<a href="/loge/B404" target="_blank">B404</a>' in body
 
@@ -197,7 +197,7 @@ class TestReassignationLoges:
 
     def test_assign_unknown_loge_returns_404(self, admin_client, db_mock):
         db_mock.make_sql_select.side_effect = [
-            [{"salle": "A1", "loge": "B404"}],  # SELECT_SALLE_LOGE_FROM_EXAMINATEUR
+            [{"salle": "A1", "identifiant": "examinateur1", "loge": "B404"}],
             [],                                   # SELECT_LOGE_BY_ID (introuvable)
         ]
         r = admin_client.post("/gestion/reassignation-loges/assign",
@@ -213,7 +213,7 @@ class TestReassignationLoges:
         """Réaffecter vers la loge déjà active ne doit ni toucher la DB ni publier de SSE."""
         import app as app_module
         db_mock.make_sql_select.side_effect = [
-            [{"salle": "A1", "loge": "B404"}],   # SELECT_SALLE_LOGE_FROM_EXAMINATEUR
+            [{"salle": "A1", "identifiant": "examinateur1", "loge": "B404"}],
             [{"id": 10, "nom": "B404"}],           # SELECT_LOGE_BY_ID
         ]
         db_mock.make_sql_update.reset_mock()
@@ -227,7 +227,7 @@ class TestReassignationLoges:
         import app as app_module
         from unittest.mock import MagicMock
         db_mock.make_sql_select.side_effect = [
-            [{"salle": "A1", "loge": "B404"}],   # SELECT_SALLE_LOGE_FROM_EXAMINATEUR
+            [{"salle": "A1", "identifiant": "examinateur1", "loge": "B404"}],
             [{"id": 11, "nom": "B405"}],           # SELECT_LOGE_BY_ID
         ]
         db_mock.make_sql_update.reset_mock()
@@ -241,7 +241,7 @@ class TestReassignationLoges:
         _, kwargs = db_mock.make_sql_update.call_args
         assert kwargs == {"id": 1, "loge_id": 11}
         channels = {c.kwargs.get("channel") for c in publish_mock.call_args_list}
-        assert channels == {"salle_A1", "loge_B404", "loge_B405"}
+        assert channels == {"salle_examinateur1", "loge_B404", "loge_B405"}
 
     # ── Création d'une loge à la volée (POST nouvelle-loge) ───────────────────
 

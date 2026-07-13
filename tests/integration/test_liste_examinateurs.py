@@ -32,7 +32,10 @@ class TestAddExaminateur:
 
     def test_post_valid_inserts_with_password_hash(self, admin_client, db_mock,
                                                     monkeypatch, tmp_path):
-        """Un POST valide doit insérer l'examinateur avec un password_hash non vide."""
+        """Un POST valide doit insérer l'examinateur (password_hash vide, l'id
+        n'étant connu qu'après l'INSERT) puis poser son password_hash (non
+        vide, salé par l'identifiant dérivé de cet id) dans un second temps —
+        même pattern que _assurer_loge."""
         import app as app_module
         monkeypatch.setattr(app_module, "root_path", str(tmp_path),
                             raising=False)
@@ -41,6 +44,7 @@ class TestAddExaminateur:
                             lambda *a, **kw: None)
 
         db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_update.return_value = 42
         db_mock.make_sql_select.side_effect = [
             [{"id": 1, "nom": "L1"}],  # SELECT_LOGE_BY_NOM('L1') -> déjà existante
             [],                         # SELECT_ALL_EXAMINATEURS_FOR_RENEWAL (papillon examinateurs)
@@ -51,11 +55,14 @@ class TestAddExaminateur:
                                     "etablissements": "Lycée Test"})
         assert r.status_code == 302
         calls = db_mock.make_sql_update.call_args_list
-        assert len(calls) == 1  # seul l'INSERT_EXAMINATEUR (loge déjà existante)
-        _, kwargs = calls[0]
-        assert kwargs.get("password_hash"), "password_hash doit être non vide"
-        assert kwargs.get("nom") == "Martin Sophie"
-        assert kwargs.get("salle") == "B02"
+        assert len(calls) == 2  # INSERT_EXAMINATEUR (hash vide) puis UPDATE_EXAMINATEUR_PASSWORD
+        insert_kwargs = calls[0].kwargs
+        assert insert_kwargs.get("password_hash") == ""
+        assert insert_kwargs.get("nom") == "Martin Sophie"
+        assert insert_kwargs.get("salle") == "B02"
+        update_kwargs = calls[1].kwargs
+        assert update_kwargs.get("id") == 42
+        assert update_kwargs.get("password_hash"), "password_hash doit être non vide"
 
     def test_post_valid_redirects_with_papillon_param(self, admin_client, db_mock,
                                                        monkeypatch, tmp_path):
@@ -109,13 +116,15 @@ class TestAddExaminateur:
 
     def test_post_existing_loge_not_recreated(self, admin_client, db_mock,
                                                monkeypatch, tmp_path):
-        """Si la loge existe déjà, aucun nouveau compte/mot de passe n'est créé."""
+        """Si la loge existe déjà, aucun compte de loge n'est créé — seuls
+        l'INSERT de l'examinateur et la pose de son mot de passe (2 appels)."""
         import app as app_module
         (tmp_path / "generated").mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(app_module, "root_path", str(tmp_path), raising=False)
         monkeypatch.setattr(app_module.reports, "liste_papillons_connexion",
                             lambda *a, **kw: None)
         db_mock.make_sql_update.reset_mock()
+        db_mock.make_sql_update.return_value = 42
         db_mock.make_sql_select.side_effect = [
             [{"id": 1, "nom": "L1"}],  # SELECT_LOGE_BY_NOM('L1') -> déjà existante
             [],                         # SELECT_ALL_EXAMINATEURS_FOR_RENEWAL
@@ -125,7 +134,7 @@ class TestAddExaminateur:
                                     "matiere": "1", "loge": "L1",
                                     "etablissements": ""})
         assert r.status_code == 302
-        db_mock.make_sql_update.assert_called_once()  # seul l'INSERT_EXAMINATEUR
+        assert db_mock.make_sql_update.call_count == 2  # INSERT + pose du mot de passe
 
 
 # ── Édition d'un examinateur ──────────────────────────────────────────────────
@@ -283,19 +292,21 @@ class TestAssurerLoge:
 
 class TestListeExaminateursSalleLink:
     def test_salle_pointe_vers_la_page_salle(self, admin_client, db_mock):
-        """La salle doit renvoyer vers la fiche salle en direct, pas vers l'édition."""
+        """La salle doit renvoyer vers la fiche examinateur en direct, pas vers l'édition."""
         examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "identifiant": "examinateur10",
                        "loge": "L1", "matiere": "Maths", "etablissements": "",
                        "nb_oraux": 0}
         db_mock.make_sql_select.return_value = [examinateur]
         r = admin_client.get("/gestion/liste-examinateurs")
         assert r.status_code == 200
         body = r.data.decode()
-        assert '<a href="/salle/A01" target="_blank">A01</a>' in body
+        assert '<a href="/examinateur/examinateur10" target="_blank">A01</a>' in body
 
     def test_loge_pointe_vers_la_page_loge(self, admin_client, db_mock):
         """La loge doit aussi renvoyer vers sa fiche en direct (cf. project_liens_admin)."""
         examinateur = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                       "identifiant": "examinateur10",
                        "loge": "L1", "matiere": "Maths", "etablissements": "",
                        "nb_oraux": 0}
         db_mock.make_sql_select.return_value = [examinateur]

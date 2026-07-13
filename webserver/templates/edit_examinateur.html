@@ -10,7 +10,7 @@
 {% include 'admin_nav.html' %}
 <h1>Edition d'examinateur: {{ donnees_examinateur['nom'] }}</h1>
 <div class="centered">
-    <img src="{{ url_for('salle_court', _external=True, id_salle=donnees_examinateur['salle']) | qr(scale=4) }}">
+    <img src="{{ url_for('examinateur_court', _external=True, identifiant=donnees_examinateur['identifiant']) | qr(scale=4) }}">
 </div>
 <form class="classic" action="{{ url_for('edit_examinateur') }}" method="post">
     <fieldset>

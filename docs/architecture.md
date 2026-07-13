@@ -126,8 +126,8 @@ Quatre rôles, fixes et adaptés au domaine :
 | Rôle | Session Flask | Canal SSE autorisé |
 |---|---|---|
 | Admin | `session['user'] = 'admin'` | `general` + tous les canaux ciblés |
-| Examinateur | `session['user'] = '<salle>'` | `general`, `salle_<X>`, `loge_<Y>` |
-| Loge | `session['loge'] = '<nom>'` | `general`, `loge_<Y>`, `salle_<X>` (ses salles) |
+| Examinateur | `session['user'] = '<identifiant>'` | `general`, `salle_<identifiant>`, `loge_<Y>` |
+| Loge | `session['loge'] = '<nom>'` | `general`, `loge_<Y>`, `salle_<identifiant>` (ses salles) |
 | Candidat | `session['candidat'] = '<token>'` | `candidat_<numero>` uniquement |
 
 Le canal `general` ne diffuse **jamais de données personnelles** (numéros de
@@ -137,6 +137,19 @@ par `_sse_channel_allowed()`.
 
 Le numéro de candidat n'est **jamais stocké en clair dans le cookie** :
 un token aléatoire (TTL 5 min, Redis) fait le lien entre la session et le numéro.
+
+**Identifiant examinateur vs salle (depuis 2026-07-13) :** `Examinateur.salle`
+est un champ purement informatif (texte libre, affiché sur les fiches et
+papillons) — il peut désormais être partagé par plusieurs examinateurs à des
+horaires différents dans la journée (ex. salle libérée le matin, réutilisée
+l'après-midi par un autre examinateur). Tout ce qui exige une clé unique par
+examinateur (session, sel du mot de passe, canal SSE, store `credentials.enc`,
+route `/examinateur/<identifiant>`) repose sur `identifiant` — une chaîne du
+type `examinateurN` dérivée de l'id DB (via `CONCAT('examinateur', id)` côté
+SQL, ou de `Examinateur.idx` côté `algo.py`), jamais de la salle. Avant cette
+évolution, la salle jouait ce rôle et deux examinateurs y étant assignés
+cassaient silencieusement la connexion (`SELECT ... WHERE salle = %s`
+renvoyait 2 lignes) et le sel du mot de passe.
 
 ---
 

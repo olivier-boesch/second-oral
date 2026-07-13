@@ -660,6 +660,12 @@ body.tv_screen {
 /* ── Utilitaires ─────────────────────────────────────────── */
 .salle_big { font-size: 1.15em; }
 
+/* Tuile "index des salles" groupée (salle partagée par plusieurs examinateurs
+   à des horaires différents) — empile un lien par occupant sous le numéro
+   de salle, plutôt que des tuiles identiques en apparence. */
+.grid-item-group { display: flex; flex-direction: column; gap: 0.3em; }
+.grid-item-group:hover { background: var(--surface); }
+
 /* Icône de chargement animée (spinner SVG inline) */
 @keyframes icon-spin { to { transform: rotate(360deg); } }
 .icon-spin {

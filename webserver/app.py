@@ -405,9 +405,31 @@ def fetch_candidat(id_candidat) -> dict | None:
     return data
 
 
-def fetch_salle(id_salle) -> dict | None:
-    """Retourne les infos salle + ses oraux, ou None si introuvable."""
-    rows = db_get(db_facility_web.SELECT_INFOS_SALLE, id_salle, no_list_auto=False)
+_IDENTIFIANT_PREFIX = "examinateur"
+
+
+def _parse_identifiant(identifiant: str | None) -> int | None:
+    """Extrait l'id DB d'un examinateur depuis son identifiant de connexion
+    (ex. 'examinateur7' -> 7), ou None si le format est invalide.
+
+    L'identifiant est un code stable et unique généré à partir de l'id DB —
+    contrairement à la salle (texte libre), qui peut désormais être partagée
+    par plusieurs examinateurs à des horaires différents (cf. project memory
+    project_identifiant_examinateur).
+    """
+    if not identifiant or not identifiant.startswith(_IDENTIFIANT_PREFIX):
+        return None
+    suffix = identifiant[len(_IDENTIFIANT_PREFIX):]
+    return int(suffix) if suffix.isdigit() else None
+
+
+def fetch_salle(identifiant) -> dict | None:
+    """Retourne les infos de l'examinateur (fiche salle) + ses oraux, ou None
+    si l'identifiant est invalide ou introuvable."""
+    id_examinateur = _parse_identifiant(identifiant)
+    if id_examinateur is None:
+        return None
+    rows = db_get(db_facility_web.SELECT_INFOS_SALLE, id_examinateur, no_list_auto=False)
     if not rows:
         return None
     data = rows[0]
@@ -533,11 +555,12 @@ def is_teacher_user():
     """
     if '_is_teacher' in g:
         return g._is_teacher
-    if 'user' not in session:
+    id_examinateur = _parse_identifiant(session.get('user'))
+    if id_examinateur is None:
         g._is_teacher = False
         return False
     info = db_get(db_facility_web.SELECT_PASSWORD_CHECK_SALLE,
-                  session['user'], no_list_auto=False)
+                  id_examinateur, no_list_auto=False)
     g._is_teacher = len(info) == 1
     return g._is_teacher
 
@@ -601,7 +624,8 @@ def get_username(complete=True):
         return 'Admin'
     if not complete:
         return session['user']
-    infos = db_get(db_facility_web.SELECT_PASSWORD_CHECK_SALLE, session['user'])
+    id_examinateur = _parse_identifiant(session['user'])
+    infos = db_get(db_facility_web.SELECT_PASSWORD_CHECK_SALLE, id_examinateur)
     return f"{session['user']} - {infos['nom']}"
 
 
@@ -748,7 +772,7 @@ def image_normalize(img, size=(300, 300)):
 # ──────────────────────────────────────────────────────────────────────────────
 
 class LoginExaminateurForm(FlaskForm):
-    salle = SelectField('Salle')
+    identifiant = SelectField('Identifiant')
     password = PasswordField(
         'Password', id='id_password',
         render_kw={"autofocus": True},
@@ -1045,45 +1069,48 @@ def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturn
 @nocache
 @limiter.limit("10 per minute")
 def login_examinateur() -> ResponseReturnValue:
-    """Connexion d'un examinateur par numéro de salle + mot de passe."""
+    """Connexion d'un examinateur par identifiant + mot de passe."""
     form = LoginExaminateurForm()
     if request.method == 'GET':
-        salle = request.args.get('salle', None)
+        identifiant = request.args.get('identifiant', None)
         message = request.args.get('message', None)
         liste_salles = db_get(db_facility_web.SELECT_LISTE_SALLES, no_list_auto=False)
         # N'afficher que le numéro de salle — pas les noms ni les disciplines.
         # (RGPD : /login-examinateur est accessible sans auth, les noms
         # d'examinateurs ne doivent pas y être exposés au grand public.)
-        form.salle.choices = [
-            (s['salle'], s['salle'])
+        form.identifiant.choices = [
+            (s['identifiant'], f"{s['identifiant']} (salle {s['salle']})")
             for s in liste_salles
         ]
-        form.salle.data = salle
+        form.identifiant.data = identifiant
         return render_template(
             "login_examinateur.html",
             centre=CENTRE_EXAMEN,
             salles=liste_salles,
             url_of_page=request.url,
-            salle=salle,
+            identifiant=identifiant,
             message=message,
             form=form,
         )
 
     # POST
-    salle = form.salle.data
+    identifiant = form.identifiant.data
     passwd = form.password.data
-    infos = db_get(db_facility_web.SELECT_PASSWORD_CHECK_SALLE,
-                   salle, no_list_auto=False)
-    if len(infos) == 1 and check_password(passwd, salle, infos[0]['password_hash']):
+    id_examinateur = _parse_identifiant(identifiant)
+    infos = (
+        db_get(db_facility_web.SELECT_PASSWORD_CHECK_SALLE, id_examinateur, no_list_auto=False)
+        if id_examinateur is not None else []
+    )
+    if len(infos) == 1 and check_password(passwd, identifiant, infos[0]['password_hash']):
         session.clear()
-        session['user'] = salle
+        session['user'] = identifiant
         session['_ts'] = __import__('time').time()
-        _online_set('exam', salle)
-        app.logger.info(f"{salle}: connecté")
-        return redirect(url_for('salle', id_salle=salle))
-    app.logger.warning(f"{salle}: échec connexion")
-    _record_auth_failure("examinateur", salle)
-    return redirect(url_for('login_examinateur', salle=salle,
+        _online_set('exam', identifiant)
+        app.logger.info(f"{identifiant}: connecté")
+        return redirect(url_for('examinateur', identifiant=identifiant))
+    app.logger.warning(f"{identifiant}: échec connexion")
+    _record_auth_failure("examinateur", identifiant)
+    return redirect(url_for('login_examinateur', identifiant=identifiant,
                              message='Mot de passe incorrect'))
 
 
@@ -1104,32 +1131,34 @@ def salle_form() -> ResponseReturnValue:
     )
 
 
-@app.route('/s/<id_salle>')
+@app.route('/e/<identifiant>')
 @nocache
-def salle_court(id_salle: str) -> ResponseReturnValue:
-    """Raccourci `/s/<id>` → redirige vers la fiche de la salle."""
-    return redirect(url_for('salle', id_salle=id_salle))
+def examinateur_court(identifiant: str) -> ResponseReturnValue:
+    """Raccourci `/e/<identifiant>` → redirige vers la fiche de l'examinateur."""
+    return redirect(url_for('examinateur', identifiant=identifiant))
 
 
-@app.route("/salle/<id_salle>")
+@app.route("/examinateur/<identifiant>")
 @nocache
-def salle(id_salle: str) -> ResponseReturnValue:
-    """Fiche salle — RGPD : personnel uniquement."""
+def examinateur(identifiant: str) -> ResponseReturnValue:
+    """Fiche examinateur (salle + oraux du jour) — RGPD : personnel uniquement."""
     if not is_authenticated():
-        return redirect(url_for('login_examinateur', salle=id_salle))
-    # Supprime les tokens de signature en attente pour cette salle
-    # uniquement si c'est le propre examinateur de cette salle qui consulte
+        return redirect(url_for('login_examinateur', identifiant=identifiant))
+    # Supprime les tokens de signature en attente pour cette fiche
+    # uniquement si c'est le propre examinateur de cette fiche qui consulte
     if 'token_emargement' in session:
         session.pop('token_emargement')
-    if 'user' in session and session['user'] == id_salle:
-        db_update(db_facility_web.DELETE_SALLE_TOKEN_SIGNATURE, id_salle=id_salle)
+    if 'user' in session and session['user'] == identifiant:
+        id_examinateur = _parse_identifiant(identifiant)
+        if id_examinateur is not None:
+            db_update(db_facility_web.DELETE_SALLE_TOKEN_SIGNATURE, id_examinateur=id_examinateur)
 
-    donnees_salle = fetch_salle(id_salle)
+    donnees_salle = fetch_salle(identifiant)
     if not donnees_salle:
-        abort(404, "Cette salle n'est pas dans la liste des salles utilisées")
+        abort(404, "Cet examinateur n'est pas dans la liste des salles utilisées")
     students_ine_list = [item['numero'] for item in donnees_salle['oraux']]
     # L'admin peut émarger sur n'importe quelle salle
-    is_userpage = is_admin_user() or (session.get('user') == donnees_salle['salle'])
+    is_userpage = is_admin_user() or (session.get('user') == donnees_salle['identifiant'])
     return render_template(
         "salle.html",
         centre=CENTRE_EXAMEN,
@@ -1139,7 +1168,7 @@ def salle(id_salle: str) -> ResponseReturnValue:
         username=get_username(),
         is_userpage=is_userpage,
         digital_sign=DIGITAL_SIGN,
-        sse_channel=f"salle_{id_salle}",
+        sse_channel=f"salle_{identifiant}",
     )
 
 
@@ -1159,7 +1188,7 @@ def sign() -> ResponseReturnValue:
             return abort(403)
         if is_admin_user():
             # L'admin peut signer depuis n'importe quelle salle.
-            # link_back contient l'id de la salle (pour le retour).
+            # link_back contient l'identifiant de l'examinateur (pour le retour).
             token_key = 'admin'
         else:
             user = get_username(complete=False)
@@ -1204,7 +1233,7 @@ def sign() -> ResponseReturnValue:
     }
     db_update(db_facility_web.UPDATE_SIGNATURE_ORAL, **d)
     clear_outdated_tokens(id_oral)
-    return redirect(url_for('salle', id_salle=link))
+    return redirect(url_for('examinateur', identifiant=link))
 
 
 @app.route('/request-token/<id_oral>')
@@ -1671,7 +1700,7 @@ def _appliquer_changement_oral(d: dict, numero: str | None) -> None:
     sse.publish(data='', type="data_updated", channel='general')
     if exam:
         sse.publish(data=numero, type="data_updated",
-                    channel=f"salle_{exam[0]['salle']}")
+                    channel=f"salle_{exam[0]['identifiant']}")
         sse.publish(data=numero, type="data_updated",
                     channel=f"loge_{exam[0]['loge']}")
     sse.publish(data=numero, type="data_updated",
@@ -1976,7 +2005,7 @@ def reassignation_loges_assign() -> ResponseReturnValue:
     )
     if not lignes:
         abort(404, "Examinateur introuvable")
-    ancienne_salle, ancienne_loge = lignes[0]['salle'], lignes[0]['loge']
+    ancien_identifiant, ancienne_loge = lignes[0]['identifiant'], lignes[0]['loge']
 
     loge_cible = db_get(db_facility_web.SELECT_LOGE_BY_ID, id_loge, no_list_auto=False)
     if not loge_cible:
@@ -1990,7 +2019,7 @@ def reassignation_loges_assign() -> ResponseReturnValue:
 
     # Notifie en direct les vues loge (ancienne/nouvelle) et salle déjà ouvertes
     # — même mécanisme que _notifier_salle_loge_examinateur (SSE ciblé par canal).
-    sse.publish(data=None, type="data_updated", channel=f"salle_{ancienne_salle}")
+    sse.publish(data=None, type="data_updated", channel=f"salle_{ancien_identifiant}")
     sse.publish(data=None, type="data_updated", channel=f"loge_{ancienne_loge}")
     sse.publish(data=None, type="data_updated", channel=f"loge_{nouvelle_loge}")
 
@@ -2491,7 +2520,7 @@ def _notifier_salle_loge_examinateur(id_examinateur: int, numero: str | None) ->
         db_facility_web.SELECT_SALLE_LOGE_FROM_EXAMINATEUR, id_examinateur, no_list_auto=False,
     )
     if exam:
-        sse.publish(data=numero, type="data_updated", channel=f"salle_{exam[0]['salle']}")
+        sse.publish(data=numero, type="data_updated", channel=f"salle_{exam[0]['identifiant']}")
         sse.publish(data=numero, type="data_updated", channel=f"loge_{exam[0]['loge']}")
 
 
@@ -2896,7 +2925,7 @@ def delete_examinateur() -> ResponseReturnValue:
     # de l'algo (qui remplace tout le store).
     if exam:
         creds = _load_credentials()
-        if creds.get("examinateurs", {}).pop(exam['salle'], None) is not None:
+        if creds.get("examinateurs", {}).pop(exam['identifiant'], None) is not None:
             _save_credentials(creds)
     return redirect(url_for('liste_examinateurs'))
 
@@ -2926,19 +2955,25 @@ def add_examinateur() -> ResponseReturnValue:
         password = generate_password()
         loge = _loge_soumise(request.form)
         loge_id, loge_creee = _assurer_loge(loge)
+        # L'identifiant de connexion (et le sel du mot de passe) est dérivé de
+        # l'id DB, connu seulement après l'INSERT (AUTO_INCREMENT) — même
+        # pattern que _assurer_loge : le hash est posé dans un second temps.
         d = {
             'nom': nom,
             'salle': salle,
             'matiere': request.form.get('matiere'),
             'loge_id': loge_id,
             'etablissements': ','.join(request.form.getlist('etablissements')),
-            'password_hash': hash_password(password, salle),
+            'password_hash': '',
         }
         id_nouvel_examinateur = db_update(db_facility_web.INSERT_EXAMINATEUR, **d)
+        identifiant = f"{_IDENTIFIANT_PREFIX}{id_nouvel_examinateur}"
+        db_update(db_facility_web.UPDATE_EXAMINATEUR_PASSWORD,
+                  id=id_nouvel_examinateur, password_hash=hash_password(password, identifiant))
 
         # Stocker le nouveau mot de passe dans credentials.enc
         creds = _load_credentials()
-        creds.setdefault("examinateurs", {})[salle] = password
+        creds.setdefault("examinateurs", {})[identifiant] = password
         _save_credentials(creds)
 
         base_url = request.host_url.rstrip('/')
@@ -3788,21 +3823,22 @@ def _renew_candidat(candidat_id: int) -> str:
 def _renew_examinateur(exam_id: int) -> tuple[str, str, str]:
     """Génère un nouveau mot de passe pour un examinateur, met à jour DB et store chiffré.
 
-    La salle est l'identifiant de connexion de l'examinateur ; elle est utilisée comme
-    clé dans le store chiffré (credentials.enc) pour permettre la regénération du papillon.
+    L'identifiant (dérivé de l'id DB, stable) est la clé de connexion de
+    l'examinateur ; il est utilisé comme clé dans le store chiffré
+    (credentials.enc) pour permettre la regénération du papillon.
 
     :param exam_id: Identifiant DB de l'examinateur.
-    :returns: Tuple (salle, nom, password_plaintext) pour la génération du papillon.
+    :returns: Tuple (identifiant, nom, password_plaintext) pour la génération du papillon.
     """
     exam = db_get(db_facility_web.SELECT_EXAMINATEUR_FOR_RENEWAL, exam_id)
     new_password = generate_password()
-    new_hash = hash_password(new_password, exam['salle'])
+    new_hash = hash_password(new_password, exam['identifiant'])
     db_update(db_facility_web.UPDATE_EXAMINATEUR_PASSWORD,
               id=exam_id, password_hash=new_hash)
     creds = _load_credentials()
-    creds.setdefault("examinateurs", {})[exam['salle']] = new_password
+    creds.setdefault("examinateurs", {})[exam['identifiant']] = new_password
     _save_credentials(creds)
-    return exam['salle'], exam['nom'], new_password
+    return exam['identifiant'], exam['nom'], new_password
 
 
 def _renew_loge(nom_loge: str) -> str:
@@ -3883,9 +3919,9 @@ def _regenerer_papillons_examinateurs(base_url: str) -> None:
     store_exams = creds.get("examinateurs", {})
     tous = db_get(db_facility_web.SELECT_ALL_EXAMINATEURS_FOR_RENEWAL, no_list_auto=False)
     connexions = [
-        (ex['salle'], ex['nom'], store_exams[ex['salle']])
+        (ex['identifiant'], ex['nom'], store_exams[ex['identifiant']])
         for ex in tous
-        if ex['salle'] in store_exams
+        if ex['identifiant'] in store_exams
     ]
     if connexions:
         reports.liste_papillons_connexion(
@@ -4055,8 +4091,8 @@ def renew_examinateurs() -> ResponseReturnValue:
     connexions = []
     base_url = request.host_url.rstrip('/')
     for exam in tous:
-        salle, nom, password = _renew_examinateur(exam['id'])
-        connexions.append((salle, nom, password))
+        identifiant, nom, password = _renew_examinateur(exam['id'])
+        connexions.append((identifiant, nom, password))
     papillon_filename = 'papillons_examinateurs.pdf'
     if connexions:
         reports.liste_papillons_connexion(

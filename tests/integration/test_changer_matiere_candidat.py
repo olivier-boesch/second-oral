@@ -66,7 +66,7 @@ def _side_effect_defaut(sql, *args):
     if sql is dfw.SELECT_LISTE_EXAMINATEURS_PAR_MATIERE:
         return EXAMINATEURS_ANGLAIS
     if sql is dfw.SELECT_SALLE_LOGE_FROM_EXAMINATEUR:
-        return [{"salle": "X", "loge": "LogeX"}]
+        return [{"salle": "X", "identifiant": "examinateurX", "loge": "LogeX"}]
     return []
 
 
@@ -173,5 +173,5 @@ class TestChangerMatiereCandidatConfirmation:
         # Notifie l'ancien ET le nouvel examinateur (salle+loge chacun) + le candidat + general
         assert publish_mock.called
         canaux = [c.kwargs.get("channel") for c in publish_mock.call_args_list]
-        assert "salle_X" in canaux  # SELECT_SALLE_LOGE_FROM_EXAMINATEUR mocké identique pour les deux
+        assert "salle_examinateurX" in canaux  # SELECT_SALLE_LOGE_FROM_EXAMINATEUR mocké identique pour les deux
         assert "candidat_N100" in canaux

@@ -198,7 +198,7 @@
         <td>{% if oral['id'] == donnees_oral['id'] %}▶ {% endif %}{{ oral['matiere'] }}</td>
         <td>
             <a href="{{ url_for('edit_examinateur', id_examinateur=oral['id_examinateur']) }}">{{ oral['examinateur'] }}</a>
-            (<a href="{{ url_for('salle', id_salle=oral['salle']) }}" target="_blank">{{ oral['salle'] }}</a>)
+            (<a href="{{ url_for('examinateur', identifiant=oral['identifiant']) }}" target="_blank">{{ oral['salle'] }}</a>)
         </td>
         <td>{{ oral['heure_sujet'] }}</td>
         <td>{{ oral['heure_oral'] }}</td>

@@ -159,6 +159,7 @@ Durand Paul;Mana;B202;8;St Ex,Diderot;B203
 - `Heure mini` définit l'heure à partir de laquelle l'examinateur peut recevoir des candidats. Un examinateur avec `Heure mini = 9` n'aura pas d'oral avant 9h00. Les minutes sont acceptées (`9:30` → pas d'oral avant 9h30).
 - `Etab` : l'algorithme évite d'assigner un candidat dont l'établissement (`Etab` dans candidats.csv) correspond à l'établissement de l'examinateur. Utiliser les **mêmes abréviations** dans les deux fichiers.
 - `Loge` : regroupe les examinateurs par salle de loge pour l'organisation des surveillants. Toutes les salles d'une même loge doivent avoir le même identifiant de loge.
+- `Salle` **peut être partagée par plusieurs examinateurs** (une salle libérée le matin peut être réutilisée l'après-midi par un autre examinateur) — un simple avertissement (non bloquant) le signale à l'import, à charge pour l'admin de vérifier que leurs horaires ne se chevauchent pas (l'algorithme ne le vérifie pas automatiquement). Chaque examinateur reçoit de toute façon un identifiant de connexion distinct (`examinateurN`), indépendant de la salle — voir « Renouvellement des identifiants » ci-dessous.
 - Un examinateur peut appartenir à plusieurs établissements (séparés par virgule) : `St Ex,Diderot`
 
 ---
@@ -390,6 +391,8 @@ sans adaptation possible (rien à adapter).
 | **Loges** | Une ou toutes | Génère un nouveau mot de passe + hash en DB + regénère le papillon PDF |
 
 **Stockage sécurisé :** les mots de passe en clair des examinateurs et des loges sont chiffrés (AES-256-GCM) dans `data/credentials.enc`. Ce store est initialisé automatiquement à la fin de chaque lancement de l'algorithme, et mis à jour à chaque renouvellement.
+
+**Identifiant de connexion (examinateur) vs salle :** depuis le 2026-07-13, un examinateur se connecte avec un **identifiant** (`examinateurN`, généré automatiquement à partir de son id en base) et non plus avec son numéro de salle — la salle peut désormais être partagée par plusieurs examinateurs (cf. §1.3), elle ne peut donc plus servir d'identifiant unique. Le papillon imprime les deux informations séparément : « Salle » (où se rendre) et « Identifiant » (ce qu'il faut saisir pour se connecter, sur `/login-examinateur`).
 
 **QR de connexion directe (candidats)** : la fiche PDF d'un candidat (individuelle ou dans le lot) contient un QR code qui, une fois scanné, le connecte directement (plus besoin de taper numéro + mot de passe) — pratique pour la connexion du matin. Techniquement, c'est un token à usage unique, distinct du `login_key`, valable par défaut 48h (réglable au moment de générer le lot de fiches, cf. `/gestion/documents`). Renouveler le mot de passe d'un candidat invalide automatiquement son ancien QR — une fiche perdue redevient inoffensive dès le renouvellement. Voir [securite.md](securite.md) pour le détail du mécanisme.
 

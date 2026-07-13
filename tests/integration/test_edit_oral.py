@@ -18,7 +18,7 @@ class TestEditOralGetLiensExaminateurSalle:
     }
     AUTRE_ORAL = {
         "id": 2, "matiere": "Français", "id_examinateur": 11, "examinateur": "Durand",
-        "salle": "B02",
+        "salle": "B02", "identifiant": "examinateur11",
         "heure_sujet": _td(hours=11), "heure_oral": _td(hours=11, minutes=15),
         "heure_fin": _td(hours=12),
     }
@@ -34,7 +34,7 @@ class TestEditOralGetLiensExaminateurSalle:
         assert r.status_code == 200
         body = r.data.decode()
         assert '/gestion/edit-examinateur?id_examinateur=11' in body
-        assert '<a href="/salle/B02" target="_blank">B02</a>' in body
+        assert '<a href="/examinateur/examinateur11" target="_blank">B02</a>' in body
 
     def test_get_affiche_le_panneau_creneaux(self, admin_client, db_mock):
         """Le panneau de suggestion de créneaux (cf. project_creneaux_edit_oral)

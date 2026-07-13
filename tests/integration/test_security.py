@@ -361,7 +361,7 @@ class TestCandidatPdfAccessControl:
         db_mock.make_sql_select.return_value = [{"nom": "Martin", "password_hash": "x",
                                                   "salle": "101"}]
         with client.session_transaction() as sess:
-            sess["user"] = "101"
+            sess["user"] = "examinateur101"
         r = client.get("/download?filename=candidat_Martin_Paul.pdf",
                        follow_redirects=False)
         assert r.status_code != 403

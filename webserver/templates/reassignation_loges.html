@@ -34,7 +34,7 @@
         {% for ex in examinateurs %}
         <tr class="{{ loop.cycle("tr_light", "tr_dark") }}" data-examinateur-id="{{ ex['id'] }}">
             <td style="position:sticky; left:0; z-index:1; background:inherit; text-align:left;">
-                <strong><a href="{{ url_for('salle', id_salle=ex['salle']) }}" target="_blank">{{ ex['salle'] }}</a></strong><br>
+                <strong><a href="{{ url_for('examinateur', identifiant=ex['identifiant']) }}" target="_blank">{{ ex['salle'] }}</a></strong><br>
                 <small><a href="{{ url_for('edit_examinateur', id_examinateur=ex['id']) }}">{{ ex['nom'] }}</a> — {{ ex['matiere'] }}</small>
             </td>
             {% for loge in loges %}

@@ -92,7 +92,7 @@ def _side_effect_defaut(sql, *args):
         id_candidat = args[0]
         return AUTRE_ORAL_101 if id_candidat == 101 else []
     if sql is dfw.SELECT_SALLE_LOGE_FROM_EXAMINATEUR:
-        return [{"salle": "X", "loge": "LogeX"}]
+        return [{"salle": "X", "identifiant": "examinateurX", "loge": "LogeX"}]
     return []
 
 
@@ -110,7 +110,7 @@ def _side_effect_retrait(sql, *args):
         id_candidat = args[0]
         return AUTRE_ORAL_101 if id_candidat == 101 else []
     if sql is dfw.SELECT_SALLE_LOGE_FROM_EXAMINATEUR:
-        return [{"salle": "X", "loge": "LogeX"}]
+        return [{"salle": "X", "identifiant": "examinateurX", "loge": "LogeX"}]
     return []
 
 

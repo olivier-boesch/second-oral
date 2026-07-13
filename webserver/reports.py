@@ -637,15 +637,16 @@ def salle_oraux(infos_examinateur: dict, tempdir: str = ".", file_dir: str = '.'
                            spaceAfter=3 * mm)),
             Image(
                 make_qr_image(
-                    url_for('salle_court',
-                            id_salle=infos_examinateur['salle'], _external=True),
+                    url_for('examinateur_court',
+                            identifiant=infos_examinateur['identifiant'], _external=True),
                     tempdir, dpi=500,
                 ),
                 width=36 * mm, height=36 * mm, useDPI=True,
             ),
             Paragraph(
                 "adresse pour les mises à jour : " + url_for(
-                    'salle_court', id_salle=infos_examinateur['salle'], _external=True
+                    'examinateur_court', identifiant=infos_examinateur['identifiant'],
+                    _external=True
                 ),
                 _ps('url', fontSize=9, textColor=C_TEXT_MD),
             ),
@@ -856,7 +857,10 @@ def liste_papillons_connexion(connexions: list,
                                base_url: str = '', centre_examen: str = '') -> None:
     """Génère les papillons de connexion pour les examinateurs.
 
-    :param connexions:    Liste de tuples (salle, nom, mot_de_passe).
+    :param connexions:    Liste de tuples (identifiant, nom, mot_de_passe). Le
+        numéro de salle n'y figure pas : il peut désormais être partagé par
+        plusieurs examinateurs (cf. project_identifiant_examinateur) et est
+        déjà indiqué sur la fiche salle (émargement) distribuée séparément.
     :param filename:      Chemin du PDF de sortie.
     :param base_url:      URL de base du site (ex. 'https://stex.mesoraux.fr').
     :param centre_examen: Nom du centre affiché sur chaque papillon.
@@ -866,11 +870,11 @@ def liste_papillons_connexion(connexions: list,
         filename=filename,
         title1="Oraux de second groupe — Examinateur",
         title2=centre_examen,
-        id_label="Salle",
+        id_label="Identifiant",
         get_id=lambda t: t[0],
         get_name=lambda t: t[1],
         get_pwd=lambda t: t[2],
-        get_url=lambda t: f"{base_url}/s/{t[0]}" if base_url else "",
+        get_url=lambda t: f"{base_url}/e/{t[0]}" if base_url else "",
     )
 
 

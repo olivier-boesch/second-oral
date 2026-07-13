@@ -392,19 +392,32 @@ class Examinateur:
         log.debug(f"Creation examinateur: {str(self)}")
 
     @property
+    def identifiant(self) -> str:
+        """
+        Identifiant de connexion de l'examinateur — dérivé de son id DB
+        (self.idx, assigné par AlgoOne.save() avant l'appel à cette property),
+        stable et garanti unique, contrairement à la salle (texte libre) qui
+        peut désormais être partagée par plusieurs examinateurs à des horaires
+        différents.
+
+        :rtype: str
+        """
+        return f"examinateur{self.idx}"
+
+    @property
     def infos_connexion(self) -> tuple:
         """
         Renvoie les informations de connexion de l'examinateur
 
-        :return: Tuple contenant la salle, le nom et le mot de passe
+        :return: Tuple contenant l'identifiant, le nom et le mot de passe
         :rtype: tuple
         """
-        return self.salle, self.nom, self.mot_de_passe
+        return self.identifiant, self.nom, self.mot_de_passe
 
     def to_dict(self) -> dict:
         """
         Convertit l'objet en dictionnaire
-        
+
         :return: Dictionnaire représentant l'objet
         :rtype: dict
         """
@@ -415,7 +428,7 @@ class Examinateur:
             'salle': self.salle,
             'loge_id': self.loge_id,
             'etablissements': ','.join(self.etablissements),
-            'password_hash': hash_password(self.mot_de_passe, self.salle),
+            'password_hash': hash_password(self.mot_de_passe, self.identifiant),
         }
 
     def recherche_creneau(self, creneau_reference: int | None, ecart_mini: int, candidat: Candidat) -> int | None:
@@ -788,6 +801,13 @@ class AlgoOne:
         from webserver.credential_store import load_credentials as _load_creds
         from webserver.app_secrets import APP_SECRET_KEY as _secret_key
 
+        # Assignation anticipée de l'idx (normalement posé par db.save_all(),
+        # plus bas) : la propriété `identifiant` (clé de réutilisation des
+        # mots de passe ci-dessous) en dépend. db.save_all() la réassignera
+        # de façon identique (même ordre, même liste) — sans effet.
+        for i, e in enumerate(self.liste_examinateurs):
+            e.idx = i + 1
+
         _enc_file = _Path(__file__).resolve().parent / 'data' / 'credentials.enc'
         is_first_run = not _enc_file.exists()
 
@@ -804,8 +824,8 @@ class AlgoOne:
                 if c.numero in existing_candidats:
                     c.login_key = existing_candidats[c.numero]
             for e in self.liste_examinateurs:
-                if e.salle in existing_exam_pw:
-                    e.mot_de_passe = existing_exam_pw[e.salle]
+                if e.identifiant in existing_exam_pw:
+                    e.mot_de_passe = existing_exam_pw[e.identifiant]
 
         # ── Loges : un mot de passe + un id uniques par loge ───────────────────
         # Le sel du hash est désormais l'id (stable), pas le nom (mutable) :
@@ -842,10 +862,13 @@ class AlgoOne:
         ])
         db.save_all(self)
 
-        # ── Examinateurs : (salle, nom, mot_de_passe) ──────────────────────────
+        # ── Examinateurs : (identifiant, nom, mot_de_passe) ────────────────────
+        # Triés par nom (et non plus par salle) — un identifiant généré ne
+        # donne aucun ordre physique utile pour distribuer les papillons ;
+        # l'ordre alphabétique par nom reste le repère le plus pratique.
         liste_exams = sorted(
             [e.infos_connexion for e in self.liste_examinateurs],
-            key=lambda m: m[0],
+            key=lambda m: m[1],
         )
 
         # ── Candidats : {'nom', 'numero', 'login_key'} ─────────────────────────
@@ -1337,7 +1360,7 @@ if __name__ == '__main__':
             _creds_tmp.parent.mkdir(parents=True, exist_ok=True)
         _creds_tmp.write_text(_json.dumps({
             "candidats":    {d['numero']: d['login_key'] for d in liste_connexion_candidats},
-            "examinateurs": {salle: mdp for salle, _nom, mdp in liste_connexion_exams},
+            "examinateurs": {identifiant: mdp for identifiant, _nom, mdp in liste_connexion_exams},
             "loges":        {nom: mdp for nom, mdp in liste_connexion_loges},
         }))
         log.info(f"Credentials temporaires écrits dans {_creds_tmp}")

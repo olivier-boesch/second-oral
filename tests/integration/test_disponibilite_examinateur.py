@@ -130,7 +130,7 @@ def _side_effect_matiere_difficile(sql, *args):
     if sql is dfw.SELECT_LISTE_EDITION_ORAL:
         return []  # aucun des candidats n'a d'autre oral pertinent pour ce test
     if sql is dfw.SELECT_SALLE_LOGE_FROM_EXAMINATEUR:
-        return [{"salle": "A2", "loge": "LogeA"}]
+        return [{"salle": "A2", "identifiant": "examinateur2", "loge": "LogeA"}]
     return []
 
 
@@ -308,7 +308,7 @@ class TestDisponibiliteExaminateurConfirmation:
             [ORAL_MATIERE_DU_JOUR],      # SELECT_ORAUX_MATIERE_DU_JOUR
             EXAMINATEURS_MATIERE,        # SELECT_LISTE_EXAMINATEURS_PAR_MATIERE
             AUTRE_ORAL_CANDIDAT,         # SELECT_LISTE_EDITION_ORAL (candidat 100)
-            [{"salle": "A2", "loge": "LogeA"}],  # SELECT_SALLE_LOGE_FROM_EXAMINATEUR
+            [{"salle": "A2", "identifiant": "examinateur2", "loge": "LogeA"}],
         ]
         r = admin_client.post("/gestion/examinateur/disponibilite", data={
             "id_examinateur": "1", "etape": "confirmer",

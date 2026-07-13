@@ -185,7 +185,7 @@ class TestLoginExaminateur:
     def test_wrong_password_redirects_to_login_examinateur(self, client, db_mock):
         db_mock.make_sql_select.return_value = [{"password_hash": "not-the-right-hash"}]
         r = client.post("/login-examinateur",
-                        data={"salle": "101", "password": "mauvais"},
+                        data={"identifiant": "examinateur101", "password": "mauvais"},
                         follow_redirects=False)
         assert r.status_code == 302
         assert "/login-examinateur" in r.headers["Location"]
@@ -195,7 +195,7 @@ class TestLoginExaminateur:
     def test_no_match_in_db_redirects_to_login_examinateur(self, client, db_mock):
         db_mock.make_sql_select.return_value = []
         r = client.post("/login-examinateur",
-                        data={"salle": "101", "password": "anything"},
+                        data={"identifiant": "examinateur101", "password": "anything"},
                         follow_redirects=False)
         assert r.status_code == 302
         assert "/login-examinateur" in r.headers["Location"]
@@ -203,26 +203,26 @@ class TestLoginExaminateur:
     def test_correct_password_sets_session(self, client, db_mock):
         import sys
         app_secrets = sys.modules["app_secrets"]
-        good_hash = app_secrets.hash_password("monpass", "101")
+        good_hash = app_secrets.hash_password("monpass", "examinateur101")
         db_mock.make_sql_select.return_value = [{"password_hash": good_hash}]
         r = client.post("/login-examinateur",
-                        data={"salle": "101", "password": "monpass"},
+                        data={"identifiant": "examinateur101", "password": "monpass"},
                         follow_redirects=False)
         assert r.status_code == 302
         assert "/login-examinateur" not in r.headers["Location"]
         with client.session_transaction() as sess:
-            assert sess.get("user") == "101"
+            assert sess.get("user") == "examinateur101"
 
     def test_logout_examinateur_clears_session(self, client):
         with client.session_transaction() as sess:
-            sess["user"] = "101"
+            sess["user"] = "examinateur101"
         r = client.get("/logout", follow_redirects=False)
         assert r.status_code == 302
         with client.session_transaction() as sess:
             assert "user" not in sess
 
     def test_salle_route_redirects_without_session(self, client):
-        r = client.get("/salle/101", follow_redirects=False)
+        r = client.get("/examinateur/examinateur101", follow_redirects=False)
         assert r.status_code == 302
         assert "/login-examinateur" in r.headers["Location"]
 
@@ -278,7 +278,7 @@ class TestLogeRoutes:
 
         db_mock.make_sql_select.side_effect = fake_select
         with client.session_transaction() as sess:
-            sess["user"] = "101"
+            sess["user"] = "examinateur101"
         r = client.get("/loge/Loge%20A", follow_redirects=False)
         assert r.status_code == 200
 
@@ -427,9 +427,9 @@ class TestHeaderUserActions:
     def test_examinateur_header_links_to_salle_with_separate_logout(self, client, db_mock):
         db_mock.make_sql_select.return_value = [{"nom": "Martin"}]
         with client.session_transaction() as sess:
-            sess["user"] = "101"
+            sess["user"] = "examinateur101"
         body = client.get("/about").data.decode()
-        assert 'class="site-header__user" href="/salle/101"' in body
+        assert 'class="site-header__user" href="/examinateur/examinateur101"' in body
         assert 'class="site-header__logout"' in body
         assert 'href="/logout' in body
 
@@ -447,4 +447,84 @@ class TestHeaderUserActions:
         body = client.get("/about").data.decode()
         assert 'class="site-header__user" href="/loge/Loge%20A"' in body
         assert 'class="site-header__logout" href="/logout-loge"' in body
+
+
+class TestSalleLibrementPartagee:
+    """Depuis le 2026-07-13, deux examinateurs peuvent partager la même salle
+    (à des horaires différents dans la journée) sans que la connexion, le
+    sel du mot de passe ou le canal SSE de l'un n'interfère avec l'autre —
+    l'identité (session/connexion) repose sur l'identifiant (examinateurN,
+    dérivé de l'id DB), la salle redevenant une simple étiquette affichée."""
+
+    def test_deux_examinateurs_meme_salle_se_connectent_independamment(self, client, db_mock):
+        import sys
+        app_secrets = sys.modules["app_secrets"]
+        hash_1 = app_secrets.hash_password("pass1", "examinateur1")
+        hash_2 = app_secrets.hash_password("pass2", "examinateur2")
+
+        db_mock.make_sql_select.return_value = [{"password_hash": hash_1}]
+        r1 = client.post("/login-examinateur",
+                         data={"identifiant": "examinateur1", "password": "pass1"},
+                         follow_redirects=False)
+        assert r1.status_code == 302
+        assert "/examinateur/examinateur1" in r1.headers["Location"]
+        with client.session_transaction() as sess:
+            assert sess.get("user") == "examinateur1"
+
+        db_mock.make_sql_select.return_value = [{"password_hash": hash_2}]
+        r2 = client.post("/login-examinateur",
+                         data={"identifiant": "examinateur2", "password": "pass2"},
+                         follow_redirects=False)
+        assert r2.status_code == 302
+        assert "/examinateur/examinateur2" in r2.headers["Location"]
+        with client.session_transaction() as sess:
+            assert sess.get("user") == "examinateur2"
+
+    def test_query_selects_by_id_not_by_salle(self):
+        """La requête de vérification du mot de passe ne doit plus filtrer par
+        salle (non unique) mais par id — sinon deux lignes correspondraient et
+        `len(infos) == 1` échouerait systématiquement pour une salle partagée."""
+        import db_facility_web as dfw
+        assert "WHERE id = %s" in dfw.SELECT_PASSWORD_CHECK_SALLE
+        assert "salle" not in dfw.SELECT_PASSWORD_CHECK_SALLE
+
+
+class TestSalleFormGroupedBySharedSalle:
+    """La page /salle (index de toutes les salles) regroupe les examinateurs
+    partageant une même salle sous une seule tuile, plutôt que des tuiles
+    identiques en apparence mais menant (avant ce correctif) à la même fiche
+    ambiguë (cf. project_identifiant_examinateur)."""
+
+    def test_salle_non_partagee_reste_une_tuile_simple(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [
+            {"id": 1, "salle": "B102", "nom": "Leroy", "identifiant": "examinateur1",
+             "matiere": "SVT", "heure_debut": None},
+        ]
+        body = admin_client.get("/salle").data.decode()
+        assert '<a href="/examinateur/examinateur1">' in body
+        assert "B102" in body and "Leroy" in body
+
+    def test_salle_partagee_affiche_une_tuile_groupee_avec_un_lien_par_occupant(
+        self, admin_client, db_mock,
+    ):
+        from datetime import timedelta
+        # Déjà trié par heure_debut (comme le fait la requête SQL réelle) :
+        # le mock ne rejoue pas l'ORDER BY, l'ordre fourni ici simule son résultat.
+        db_mock.make_sql_select.return_value = [
+            {"id": 1, "salle": "B101", "nom": "Dupont", "identifiant": "examinateur1",
+             "matiere": "Maths", "heure_debut": timedelta(hours=8)},
+            {"id": 2, "salle": "B101", "nom": "Martin", "identifiant": "examinateur2",
+             "matiere": "PC", "heure_debut": timedelta(hours=13)},
+        ]
+        body = admin_client.get("/salle").data.decode()
+        assert body.index("Dupont") < body.index("Martin")
+        assert '<a href="/examinateur/examinateur1">' in body
+        assert '<a href="/examinateur/examinateur2">' in body
+        assert body.count("B101") == 1, "un seul numéro de salle affiché, pas une tuile par occupant"
+
+    def test_order_by_includes_heure_debut(self):
+        """Vérifie que la requête trie bien les occupants d'une même salle par
+        heure de début (MIN(Oral.heure_oral)), NULL (pas encore placé) en dernier."""
+        import db_facility_web as dfw
+        assert "ORDER BY Examinateur.salle, heure_debut IS NULL, heure_debut" in dfw.SELECT_LISTE_SALLES
 

@@ -1125,3 +1125,54 @@ class TestSaveLogeId:
         # save_loges doit précéder save_all (Examinateur.loge_id référence Loge.id)
         method_names = [c[0] for c in db.method_calls]
         assert method_names.index("save_loges") < method_names.index("save_all")
+
+
+class TestIdentifiantExaminateurSalleLibrementPartagee:
+    """L'identifiant de connexion (ex. 'examinateur7') est dérivé de l'id DB —
+    indépendant de la salle, qui peut désormais être partagée par plusieurs
+    examinateurs à des horaires différents dans la journée (cf. project
+    memory project_identifiant_examinateur). Avant cette évolution, la salle
+    servait à la fois d'étiquette affichée et de clé d'identité (session,
+    mot de passe, canal SSE) — deux examinateurs y étant assignés cassaient
+    silencieusement la connexion, le sel du mot de passe et le suivi en ligne."""
+
+    def test_deux_examinateurs_meme_salle_ont_des_identifiants_distincts(
+        self, tmp_path, monkeypatch,
+    ):
+        import algo as algo_module
+        monkeypatch.setattr(algo_module, "DbFacility", MagicMock())
+        monkeypatch.setattr(algo_module, "_Path", Path, raising=False)
+
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand("Cand0", "5000000000")],
+            exams=[
+                "Prof Maths;Maths;B101;8;;Loge1",
+                "Prof Philo;Philo;B101;8;;Loge1",
+            ],
+        )
+        alg.resoudre()
+        liste_exams, _liste_candidats, _liste_loges = alg.save()
+
+        # infos_connexion = (identifiant, nom, mot_de_passe) — plus (salle, nom, mdp)
+        identifiants = [t[0] for t in liste_exams]
+        assert len(identifiants) == 2
+        assert len(set(identifiants)) == 2, "chaque examinateur a un identifiant unique"
+        assert all(i.startswith("examinateur") for i in identifiants)
+
+        # La salle, elle, reste bien partagée (aucune contrainte d'unicité) —
+        # seul l'identifiant, dérivé de l'id DB (idx), distingue les deux comptes.
+        assert {e.salle for e in alg.liste_examinateurs} == {"B101"}
+        assert len({e.identifiant for e in alg.liste_examinateurs}) == 2
+
+    def test_identifiant_stable_apres_assignation_idx(self):
+        from algo import Examinateur, Matiere
+
+        matiere = Matiere("Maths", "Ma", 20, 20)
+        exam = Examinateur(
+            nom="Prof Maths", matiere=matiere, salle="B101", loge="Loge1",
+            max_creneaux_journee=10, heure_debut=time(hour=8),
+        )
+        exam.idx = 7
+        assert exam.identifiant == "examinateur7"
+        assert exam.infos_connexion == ("examinateur7", "Prof Maths", exam.mot_de_passe)

@@ -165,7 +165,16 @@ def validate_profs(rows: list[dict], matieres: set[str], noms_courts: set[str]) 
         if not salle:
             issues.append(_err("examinateurs", i, f"Colonne 'Salle' vide (prof '{nom}')."))
         elif salle in salles:
-            issues.append(_warn("examinateurs", i, f"Salle '{salle}' présente plusieurs fois."))
+            # Cas légitime : plusieurs examinateurs peuvent partager une même
+            # salle à des horaires différents dans la journée (chacun reçoit
+            # un identifiant de connexion distinct, indépendant de la salle).
+            # Le simple avertissement rappelle de vérifier l'absence de
+            # chevauchement horaire entre eux, non garantie automatiquement.
+            issues.append(_warn(
+                "examinateurs", i,
+                f"Salle '{salle}' présente plusieurs fois — vérifier que les "
+                "examinateurs concernés ne se chevauchent pas dans le planning.",
+            ))
         else:
             salles.add(salle)
 

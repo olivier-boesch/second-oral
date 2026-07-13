@@ -9,7 +9,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | Rôle | Session | Fiche candidat | Fiche salle | Fiche loge | Liste générale |
 |---|---|---|---|---|---|
 | **Admin** (TOTP) | `session['user'] = 'admin'` | ✅ toutes | ✅ toutes | ✅ toutes | ✅ |
-| **Examinateur** | `session['user'] = '<salle>'` | ✅ toutes | ✅ sa salle | ✅ sa loge | ✅ |
+| **Examinateur** | `session['user'] = '<identifiant>'` | ✅ toutes | ✅ sa salle | ✅ sa loge | ✅ |
 | **Loge** | `session['loge'] = '<nom>'` | ✅ toutes | ✅ salles de sa loge | ✅ sa loge | ✅ |
 | **Candidat** | `session['candidat'] = '<numero>'` | ✅ sa fiche uniquement | ❌ | ❌ | ❌ |
 | **Anonyme** | — | ❌ → login | ❌ → login | ❌ → login | ❌ → login |
@@ -19,7 +19,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | Rôle | URL | Mécanisme |
 |---|---|---|
 | Admin | `/login` | Code TOTP 6 chiffres (toutes les 30 s) |
-| Examinateur | `/login-examinateur` | Mot de passe par salle |
+| Examinateur | `/login-examinateur` | Mot de passe par identifiant (indépendant de la salle, cf. §Mesures) |
 | Surveillant de loge | `/login-loge` | Mot de passe par loge |
 | Candidat | `/login-candidat` | Numéro de candidat + mot de passe du papillon |
 
@@ -30,7 +30,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | Mesure | Détail |
 |---|---|
 | **SQL** | Paramètres liés `%s` / `%(name)s` — aucune interpolation |
-| **Mots de passe** | `scrypt(n=2**15, r=8, p=2)` + pepper + sel dérivé par compte (numéro candidat / salle / loge), encodé base64 ; comparaison via `hmac.compare_digest` (protection timing attack) |
+| **Mots de passe** | `scrypt(n=2**15, r=8, p=2)` + pepper + sel dérivé par compte (numéro candidat / identifiant examinateur / id loge), encodé base64 ; comparaison via `hmac.compare_digest` (protection timing attack) |
 | **TOTP admin** | `pyotp`, fenêtre ±1 intervalle, rate limit 10 req/min |
 | **CSRF** | `CSRFProtect` (Flask-WTF) enregistré globalement — vérifie le jeton sur toute requête mutante (POST/PUT/PATCH/DELETE) |
 | **CSP** | `default-src 'self'`, nonce par requête + `'strict-dynamic'` sur `script-src`, `form-action 'self'`, `base-uri 'self'` via Flask-Talisman |
@@ -50,7 +50,7 @@ Toutes les pages contenant des données personnelles sont protégées.
 | **SSE** | Auth requise (`before_request`) + autorisation par canal (`_sse_channel_allowed`) — un candidat/loge/examinateur ne peut s'abonner qu'à ses propres canaux ; `general` ne diffuse aucune donnée personnelle |
 | **Actions mutantes** | `delete-examinateur` / `reload-pages` exposées uniquement en POST (+ CSRF) |
 | **Tokens en logs** | Tokens de signature tronqués (`_redact_token`) avant journalisation |
-| **Noms examinateurs** | Dropdown `/login-examinateur` : numéro de salle uniquement, pas de noms |
+| **Noms examinateurs** | Dropdown `/login-examinateur` : identifiant + numéro de salle uniquement, pas de noms |
 | **Server header** | `server_tokens off` sur nginx hôte et Docker |
 | **IP client réelle** | nginx hôte remplace `X-Forwarded-For` par `$remote_addr` (anti-spoofing) ; `ProxyFix(x_for=1)` dans Flask |
 | **IPs de session (monitoring)** | Stockées en Redis (TTL 8 h, supprimées au logout) — admin uniquement, intérêt légitime art. 6.1.f RGPD |

@@ -10,10 +10,23 @@
 {% include 'auth_icon.html' %}
 <h1>Index des salles</h1>
 <div class="grid-container">
-    {% for s in salles %}
-        <a href="{{ url_for('salle', id_salle=s['salle'])  }}">
-            <div class="grid-item"><span class="salle_big">{{ s['salle'] }}</span> - {{ s['nom'] }} ({{ s['matiere'] }})</div>
-        </a>
+    {% for salle, occupants in salles|groupby('salle') %}
+        {% if occupants|length == 1 %}
+            {% set s = occupants[0] %}
+            <a href="{{ url_for('examinateur', identifiant=s['identifiant']) }}">
+                <div class="grid-item"><span class="salle_big">{{ s['salle'] }}</span> - {{ s['nom'] }} ({{ s['matiere'] }})</div>
+            </a>
+        {% else %}
+            {# Salle partagée par plusieurs examinateurs à des horaires différents
+               (triés par heure de début) — une tuile groupée plutôt que des tuiles
+               identiques en apparence mais menant à des fiches différentes. #}
+            <div class="grid-item grid-item-group">
+                <span class="salle_big">{{ salle }}</span>
+                {% for s in occupants %}
+                <div><a href="{{ url_for('examinateur', identifiant=s['identifiant']) }}">{{ s['nom'] }} ({{ s['matiere'] }})</a></div>
+                {% endfor %}
+            </div>
+        {% endif %}
     {% endfor %}
 </div>
 {% include 'footer.html' %}

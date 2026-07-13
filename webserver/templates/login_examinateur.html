@@ -15,8 +15,8 @@
 {% endif %}
 <form class="form-salle" action="{{ url_for('login_examinateur') }}" method="post">
     {{ form.hidden_tag() }}
-    {{ form.salle.label }}
-    {{ form.salle }}
+    {{ form.identifiant.label }}
+    {{ form.identifiant }}
     {{ form.password.label }}
     <div class="password">
         {{ form.password }}

@@ -109,7 +109,7 @@
             <tr class="tr_light"><td>Admin</td><td>—</td><td><code>{{ s['ip'] }}</code></td></tr>
             {% endfor %}{% endif %}
             {% for s in online_detail['exam'] %}
-            <tr class="tr_light"><td>Examinateur</td><td>Salle <a href="{{ url_for('salle', id_salle=s['id']) }}" target="_blank">{{ s['id'] }}</a></td><td><code>{{ s['ip'] }}</code></td></tr>
+            <tr class="tr_light"><td>Examinateur</td><td><a href="{{ url_for('examinateur', identifiant=s['id']) }}" target="_blank">{{ s['id'] }}</a></td><td><code>{{ s['ip'] }}</code></td></tr>
             {% endfor %}
             {% for s in online_detail['cand'] %}
             <tr class="tr_dark"><td>Candidat</td><td>{{ s['id'] }}</td><td><code>{{ s['ip'] }}</code></td></tr>

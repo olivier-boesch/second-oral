@@ -10,11 +10,11 @@ class TestDeleteExaminateurPurgeCredentials:
     def test_delete_purges_entry_from_vault(self, admin_client, db_mock, tmp_path, monkeypatch):
         import app as app_module
         monkeypatch.setattr(app_module, "_CREDENTIALS_FILE", tmp_path / "credentials.enc")
-        app_module._save_credentials({"examinateurs": {"A01": "secret123"}, "loges": {}})
+        app_module._save_credentials({"examinateurs": {"examinateur10": "secret123"}, "loges": {}})
 
         db_mock.make_sql_update.reset_mock()
         db_mock.make_sql_select.return_value = [
-            {"id": 10, "nom": "Martin Sophie", "salle": "A01"},
+            {"id": 10, "nom": "Martin Sophie", "salle": "A01", "identifiant": "examinateur10"},
         ]
         r = admin_client.post("/gestion/delete-examinateur",
                               data={"id_examinateur": "10"}, follow_redirects=False)
@@ -22,7 +22,7 @@ class TestDeleteExaminateurPurgeCredentials:
         db_mock.make_sql_update.assert_called_once()
 
         remaining = app_module._load_credentials()
-        assert "A01" not in remaining.get("examinateurs", {})
+        assert "examinateur10" not in remaining.get("examinateurs", {})
 
     def test_delete_ok_when_examinateur_absent_from_vault(self, admin_client, db_mock,
                                                            tmp_path, monkeypatch):
@@ -31,7 +31,7 @@ class TestDeleteExaminateurPurgeCredentials:
         monkeypatch.setattr(app_module, "_CREDENTIALS_FILE", tmp_path / "credentials.enc")
 
         db_mock.make_sql_select.return_value = [
-            {"id": 10, "nom": "Martin Sophie", "salle": "A01"},
+            {"id": 10, "nom": "Martin Sophie", "salle": "A01", "identifiant": "examinateur10"},
         ]
         r = admin_client.post("/gestion/delete-examinateur",
                               data={"id_examinateur": "10"}, follow_redirects=False)
@@ -49,7 +49,8 @@ class TestCredentialRenewal:
     """
 
     CANDIDAT = {"id": 1, "nom": "Dupont Jean", "numero": "0123456789A"}
-    EXAMINATEUR = {"id": 10, "nom": "Martin Sophie", "salle": "A01"}
+    EXAMINATEUR = {"id": 10, "nom": "Martin Sophie", "salle": "A01",
+                   "identifiant": "examinateur10"}
     LOGE = {"id": 5, "nom": "Loge A"}
 
     # ── Page de gestion ──────────────────────────────────────────────────────
@@ -76,7 +77,7 @@ class TestCredentialRenewal:
         assert "Loge A" in body
         # Examinateur/salle/loge doivent être des liens directs (cf. project_liens_admin)
         assert '/gestion/edit-examinateur?id_examinateur=10' in body
-        assert '<a href="/salle/A01" target="_blank">A01</a>' in body
+        assert '<a href="/examinateur/examinateur10" target="_blank">A01</a>' in body
         assert '<a href="/loge/Loge%20A" target="_blank">Loge A</a>' in body
 
     # ── Candidat ─────────────────────────────────────────────────────────────
@@ -204,8 +205,8 @@ class TestCredentialRenewal:
         import app as app_module
         db_mock.make_sql_update.reset_mock()
         exams = [
-            {"id": 10, "nom": "Martin S.", "salle": "A01"},
-            {"id": 11, "nom": "Durand P.", "salle": "B02"},
+            {"id": 10, "nom": "Martin S.", "salle": "A01", "identifiant": "examinateur10"},
+            {"id": 11, "nom": "Durand P.", "salle": "B02", "identifiant": "examinateur11"},
         ]
         db_mock.make_sql_select.side_effect = [
             exams,         # SELECT_ALL_EXAMINATEURS_FOR_RENEWAL

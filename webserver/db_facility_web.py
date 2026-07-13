@@ -64,19 +64,24 @@ WHERE Candidat.numero = %s
 # ---------- Salle / Examinateur
 
 SELECT_LISTE_SALLES = """
-SELECT Examinateur.salle AS salle, Examinateur.nom AS nom, Matiere.nom AS matiere
+SELECT Examinateur.id AS id, Examinateur.salle AS salle, Examinateur.nom AS nom,
+       CONCAT('examinateur', Examinateur.id) AS identifiant,
+       Matiere.nom AS matiere, MIN(Oral.heure_oral) AS heure_debut
 FROM Examinateur
     JOIN Matiere ON Examinateur.matiere = Matiere.id
-ORDER BY Examinateur.salle
+    LEFT OUTER JOIN Oral ON Oral.examinateur = Examinateur.id
+GROUP BY Examinateur.id
+ORDER BY Examinateur.salle, heure_debut IS NULL, heure_debut
 """
 
 SELECT_INFOS_SALLE = """
 SELECT Examinateur.id AS id, Examinateur.nom AS nom, Examinateur.salle AS salle,
+       CONCAT('examinateur', Examinateur.id) AS identifiant,
        Loge.nom AS loge, Matiere.nom AS matiere
 FROM Examinateur
     JOIN Matiere ON Examinateur.matiere = Matiere.id
     JOIN Loge ON Examinateur.loge_id = Loge.id
-WHERE Examinateur.salle = %s
+WHERE Examinateur.id = %s
 """
 
 SELECT_ORAUX_SALLE = """
@@ -93,7 +98,7 @@ ORDER BY Oral.heure_sujet
 """
 
 SELECT_PASSWORD_CHECK_SALLE = """
-SELECT nom, password_hash FROM Examinateur WHERE salle = %s
+SELECT nom, password_hash FROM Examinateur WHERE id = %s
 """
 
 SELECT_PASSWORD_CHECK_LOGE = """
@@ -109,7 +114,8 @@ SELECT Oral.id AS id_oral, Candidat.id AS id_candidat, Candidat.nom AS nom,
        Matiere.nom AS matiere, Oral.heure_sujet AS heure,
        Oral.heure_sujet AS heure_sujet, Oral.heure_oral AS heure_oral,
        Oral.heure_fin AS heure_fin,
-       Examinateur.salle AS salle, Oral.mis_a_jour AS maj
+       Examinateur.salle AS salle, CONCAT('examinateur', Examinateur.id) AS identifiant,
+       Oral.mis_a_jour AS maj
 FROM Oral
     JOIN Candidat ON Oral.candidat = Candidat.id
     JOIN Examinateur ON Oral.examinateur = Examinateur.id
@@ -136,6 +142,7 @@ WHERE Loge.nom = %s
 SELECT_ORAUX_LOGE = """
 SELECT Oral.id AS id_oral, Loge.nom AS loge, Candidat.nom AS candidat, Candidat.numero AS numero,
        Candidat.tiers_temps AS tiers_temps, Examinateur.salle AS salle,
+       CONCAT('examinateur', Examinateur.id) AS identifiant,
        Oral.heure_sujet AS sujet, Oral.mis_a_jour AS maj, Oral.heure_oral AS oral,
        Oral.heure_fin AS fin, Oral.passage_loge AS passage_loge,
        Matiere.nom AS matiere, Matiere.nom_court AS matiere_court,
@@ -187,7 +194,8 @@ WHERE Oral.id = %s
 SELECT_LISTE_EDITION_ORAL = """
 SELECT Oral.id AS id, Matiere.nom AS matiere, Examinateur.id AS id_examinateur,
        Examinateur.nom AS examinateur,
-       Examinateur.salle AS salle, Oral.heure_sujet AS heure_sujet,
+       Examinateur.salle AS salle, CONCAT('examinateur', Examinateur.id) AS identifiant,
+       Oral.heure_sujet AS heure_sujet,
        Oral.heure_oral AS heure_oral, Oral.heure_fin AS heure_fin
 FROM Oral
     JOIN Candidat ON Oral.candidat = Candidat.id
@@ -318,7 +326,7 @@ DELETE FROM TokenSignature
 WHERE oral IN (
     SELECT Oral.id FROM Oral
         JOIN Examinateur ON Examinateur.id = Oral.examinateur
-    WHERE Examinateur.salle = %(id_salle)s
+    WHERE Examinateur.id = %(id_examinateur)s
 )
 """
 
@@ -354,7 +362,8 @@ WHERE id = %(id)s
 
 SELECT_SIGNATURE_ORAL = """
 SELECT Oral.id AS id_oral, Candidat.nom AS nom, Candidat.numero AS numero,
-       Examinateur.salle AS salle, Examinateur.nom AS examinateur,
+       Examinateur.salle AS salle, CONCAT('examinateur', Examinateur.id) AS identifiant,
+       Examinateur.nom AS examinateur,
        Oral.emargement AS emargement, Oral.heure_emargement AS heure_emargement,
        Matiere.nom AS matiere
 FROM Oral
@@ -369,7 +378,8 @@ WHERE Oral.id = %s
 SELECT_LISTE_EXAMINATEURS = """
 SELECT Examinateur.id AS id, Examinateur.nom AS nom,
        Examinateur.etablissements AS etablissements,
-       Examinateur.salle AS salle, Loge.nom AS loge,
+       Examinateur.salle AS salle, CONCAT('examinateur', Examinateur.id) AS identifiant,
+       Loge.nom AS loge,
        Matiere.nom AS matiere, COUNT(Oral.id) AS nb_oraux,
        MAX(Oral.heure_fin) AS heure_fin_journee
 FROM Examinateur
@@ -383,7 +393,8 @@ ORDER BY Examinateur.nom
 SELECT_EXAMINATEUR_INFOS = """
 SELECT Examinateur.id AS id, Examinateur.nom AS nom,
        Examinateur.etablissements AS etablissements,
-       Examinateur.salle AS salle, Loge.nom AS loge,
+       Examinateur.salle AS salle, CONCAT('examinateur', Examinateur.id) AS identifiant,
+       Loge.nom AS loge,
        Matiere.nom AS matiere, COUNT(Oral.id) AS nb_oraux
 FROM Examinateur
     LEFT OUTER JOIN Oral ON Oral.examinateur = Examinateur.id
@@ -435,11 +446,11 @@ WHERE id = %(id)s
 """
 
 SELECT_EXAMINATEUR_FOR_RENEWAL = """
-SELECT id, nom, salle FROM Examinateur WHERE id = %s
+SELECT id, nom, salle, CONCAT('examinateur', id) AS identifiant FROM Examinateur WHERE id = %s
 """
 
 SELECT_ALL_EXAMINATEURS_FOR_RENEWAL = """
-SELECT id, nom, salle FROM Examinateur ORDER BY salle
+SELECT id, nom, salle, CONCAT('examinateur', id) AS identifiant FROM Examinateur ORDER BY salle
 """
 
 UPDATE_EXAMINATEUR_PASSWORD = """
@@ -497,6 +508,7 @@ SELECT id, nom FROM Loge WHERE id = %s
 
 SELECT_MATRICE_SALLES_LOGES = """
 SELECT Examinateur.id AS id, Examinateur.nom AS nom, Examinateur.salle AS salle,
+       CONCAT('examinateur', Examinateur.id) AS identifiant,
        Matiere.nom AS matiere, Loge.id AS loge_id, Loge.nom AS loge
 FROM Examinateur
     JOIN Matiere ON Matiere.id = Examinateur.matiere
@@ -522,6 +534,7 @@ ORDER BY Candidat.nom, Oral.heure_sujet
 
 SELECT_DOC_LISTE_SALLES = """
 SELECT Examinateur.id AS id, Examinateur.nom AS nom, Examinateur.salle AS salle,
+       CONCAT('examinateur', Examinateur.id) AS identifiant,
        Loge.nom AS loge, Matiere.nom AS matiere
 FROM Examinateur
     JOIN Matiere ON Matiere.id = Examinateur.matiere
@@ -606,7 +619,8 @@ ORDER BY Examinateur.salle, Oral.heure_oral
 # ---------- SSE — résolution des canaux
 
 SELECT_SALLE_LOGE_FROM_EXAMINATEUR = """
-SELECT Examinateur.salle AS salle, Loge.nom AS loge
+SELECT Examinateur.salle AS salle, CONCAT('examinateur', Examinateur.id) AS identifiant,
+       Loge.nom AS loge
 FROM Examinateur
     JOIN Loge ON Examinateur.loge_id = Loge.id
 WHERE Examinateur.id = %s

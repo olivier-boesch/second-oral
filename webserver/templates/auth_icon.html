@@ -15,7 +15,7 @@
     {% set user_label = username %}
     {% set logout_href = url_for('logout', link_back=url_of_page if url_of_page is defined else '/') %}
   {% elif username %}
-    {% set user_href = url_for('salle', id_salle=session['user']) %}
+    {% set user_href = url_for('examinateur', identifiant=session['user']) %}
     {% set user_title = 'Ma salle' %}
     {% set user_label = username %}
     {% set logout_href = url_for('logout', link_back=url_of_page if url_of_page is defined else '/') %}

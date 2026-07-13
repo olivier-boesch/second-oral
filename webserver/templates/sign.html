@@ -9,7 +9,7 @@
         "use strict";
 
         const SSE_BASE_URL = "{{ url_for('sse.stream') }}";
-        const SALLE_URL = "{{ url_for('salle', id_salle=data['salle']) }}";
+        const SALLE_URL = "{{ url_for('examinateur', identifiant=data['identifiant']) }}";
         let signToken = null;
         let signSource = null;
 
@@ -64,7 +64,7 @@
     <p class="centered">Si vous êtes d'accord, signez dans le cadre ci-dessous.</p>
     <canvas class="centered"></canvas>
     <div class="centered sign-buttons">
-        <button onclick="document.location='{{ url_for("salle", id_salle=data['salle']) }}';">< Retour</button>
+        <button onclick="document.location='{{ url_for("examinateur", identifiant=data['identifiant']) }}';">< Retour</button>
         <button onclick="signaturePad.clear();">Effacer</button>
         <button class="validate" onclick="prepare_form()">Valider</button>
     </div>

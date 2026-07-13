@@ -119,7 +119,7 @@
             {% else %}
             <td>
             {% endif %}
-                <a href="{{ url_for('salle', id_salle=oral['salle']) }}" target="_blank">{{ oral['salle'] }}</a>
+                <a href="{{ url_for('examinateur', identifiant=oral['identifiant']) }}" target="_blank">{{ oral['salle'] }}</a>
             </td>
             <td>
                 <a href="{{ url_for('changer_matiere_candidat', id_candidat=oral['id_candidat'], id_oral=oral['id_oral']) }}">

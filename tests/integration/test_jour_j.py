@@ -103,7 +103,7 @@ class TestJourJ:
         r = admin_client.get("/gestion/jour-j")
         assert r.status_code == 200
         body = r.data.decode()
-        assert '<a href="/salle/A1" target="_blank">A1</a>' in body
+        assert '<a href="/examinateur/A1" target="_blank">A1</a>' in body
         assert '<a href="/loge/L1" target="_blank">L1</a>' in body
 
 
