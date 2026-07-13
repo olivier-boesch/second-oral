@@ -26,7 +26,7 @@ odfpy==1.4.1
 ordered-set==4.1.0
 ortools==9.15.6755
 packaging==26.2
-pillow==12.2.0
+pillow==12.3.0
 PyOTP==2.10.0
 pypdf==6.14.2
 pytz==2026.2
