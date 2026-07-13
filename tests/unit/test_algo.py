@@ -1154,7 +1154,7 @@ class TestIdentifiantExaminateurSalleLibrementPartagee:
         alg.resoudre()
         liste_exams, _liste_candidats, _liste_loges = alg.save()
 
-        # infos_connexion = (identifiant, nom, mot_de_passe) — plus (salle, nom, mdp)
+        # infos_connexion = (identifiant, nom, mot_de_passe, salle)
         identifiants = [t[0] for t in liste_exams]
         assert len(identifiants) == 2
         assert len(set(identifiants)) == 2, "chaque examinateur a un identifiant unique"
@@ -1175,4 +1175,4 @@ class TestIdentifiantExaminateurSalleLibrementPartagee:
         )
         exam.idx = 7
         assert exam.identifiant == "examinateur7"
-        assert exam.infos_connexion == ("examinateur7", "Prof Maths", exam.mot_de_passe)
+        assert exam.infos_connexion == ("examinateur7", "Prof Maths", exam.mot_de_passe, "B101")

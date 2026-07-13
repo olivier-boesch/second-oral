@@ -409,10 +409,10 @@ class Examinateur:
         """
         Renvoie les informations de connexion de l'examinateur
 
-        :return: Tuple contenant l'identifiant, le nom et le mot de passe
+        :return: Tuple contenant l'identifiant, le nom, le mot de passe et la salle
         :rtype: tuple
         """
-        return self.identifiant, self.nom, self.mot_de_passe
+        return self.identifiant, self.nom, self.mot_de_passe, self.salle
 
     def to_dict(self) -> dict:
         """
@@ -1360,7 +1360,7 @@ if __name__ == '__main__':
             _creds_tmp.parent.mkdir(parents=True, exist_ok=True)
         _creds_tmp.write_text(_json.dumps({
             "candidats":    {d['numero']: d['login_key'] for d in liste_connexion_candidats},
-            "examinateurs": {identifiant: mdp for identifiant, _nom, mdp in liste_connexion_exams},
+            "examinateurs": {identifiant: mdp for identifiant, _nom, mdp, _salle in liste_connexion_exams},
             "loges":        {nom: mdp for nom, mdp in liste_connexion_loges},
         }))
         log.info(f"Credentials temporaires écrits dans {_creds_tmp}")

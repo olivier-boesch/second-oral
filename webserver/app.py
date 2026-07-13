@@ -3820,7 +3820,7 @@ def _renew_candidat(candidat_id: int) -> str:
     return new_key
 
 
-def _renew_examinateur(exam_id: int) -> tuple[str, str, str]:
+def _renew_examinateur(exam_id: int) -> tuple[str, str, str, str]:
     """Génère un nouveau mot de passe pour un examinateur, met à jour DB et store chiffré.
 
     L'identifiant (dérivé de l'id DB, stable) est la clé de connexion de
@@ -3828,7 +3828,7 @@ def _renew_examinateur(exam_id: int) -> tuple[str, str, str]:
     (credentials.enc) pour permettre la regénération du papillon.
 
     :param exam_id: Identifiant DB de l'examinateur.
-    :returns: Tuple (identifiant, nom, password_plaintext) pour la génération du papillon.
+    :returns: Tuple (identifiant, nom, password_plaintext, salle) pour la génération du papillon.
     """
     exam = db_get(db_facility_web.SELECT_EXAMINATEUR_FOR_RENEWAL, exam_id)
     new_password = generate_password()
@@ -3838,7 +3838,7 @@ def _renew_examinateur(exam_id: int) -> tuple[str, str, str]:
     creds = _load_credentials()
     creds.setdefault("examinateurs", {})[exam['identifiant']] = new_password
     _save_credentials(creds)
-    return exam['identifiant'], exam['nom'], new_password
+    return exam['identifiant'], exam['nom'], new_password, exam['salle']
 
 
 def _renew_loge(nom_loge: str) -> str:
@@ -3919,7 +3919,7 @@ def _regenerer_papillons_examinateurs(base_url: str) -> None:
     store_exams = creds.get("examinateurs", {})
     tous = db_get(db_facility_web.SELECT_ALL_EXAMINATEURS_FOR_RENEWAL, no_list_auto=False)
     connexions = [
-        (ex['identifiant'], ex['nom'], store_exams[ex['identifiant']])
+        (ex['identifiant'], ex['nom'], store_exams[ex['identifiant']], ex['salle'])
         for ex in tous
         if ex['identifiant'] in store_exams
     ]
@@ -4091,8 +4091,7 @@ def renew_examinateurs() -> ResponseReturnValue:
     connexions = []
     base_url = request.host_url.rstrip('/')
     for exam in tous:
-        identifiant, nom, password = _renew_examinateur(exam['id'])
-        connexions.append((identifiant, nom, password))
+        connexions.append(_renew_examinateur(exam['id']))
     papillon_filename = 'papillons_examinateurs.pdf'
     if connexions:
         reports.liste_papillons_connexion(

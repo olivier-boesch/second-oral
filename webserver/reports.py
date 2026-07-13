@@ -674,12 +674,16 @@ def liste_salle_oraux(liste_examinateurs: list, file_dir: str = '.',
 def _draw_papillon(c_canvas, x: float, y: float, slip_w: float, slip_h: float,
                    title_line1: str, title_line2: str, name: str,
                    id_label: str, id_value: str, pwd_value: str,
-                   url: str = '', qr_size: float = 35 * mm) -> None:
+                   url: str = '', qr_size: float = 35 * mm,
+                   extra_label: str = '', extra_value: str = '') -> None:
     """Dessine un papillon (slip de connexion) à la position (x, y) sur le canvas.
 
     Layout : en-tête 2 lignes (rôle + centre) ; colonne gauche pour le texte ;
     colonne droite pour le QR. Toutes les zones sont calculées pour ne pas se
     chevaucher quelle que soit la taille du QR demandée.
+
+    :param extra_label/extra_value: champ optionnel (ex. 'Salle') affiché à
+        droite de la ligne identifiant — inutilisé (candidats/loges) si vide.
     """
     sw = slip_w - 4 * mm   # largeur utile du slip (~91 mm pour 2 cols A4)
     sh = slip_h - 4 * mm   # hauteur utile (~51 mm pour 5 lignes A4)
@@ -744,6 +748,13 @@ def _draw_papillon(c_canvas, x: float, y: float, slip_w: float, slip_h: float,
     c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
     c_canvas.drawString(tx, content_top - 12 * mm, id_label)
 
+    # Champ optionnel (ex. Salle) — aligné à droite, sur la ligne du label identifiant
+    if extra_value:
+        c_canvas.setFont('BodyFont', 7)
+        c_canvas.setFillColorRGB(_SMR, _SMG, _SMB)
+        c_canvas.drawRightString(tx + text_w - 1 * mm, content_top - 12 * mm,
+                                 f"{extra_label} : {extra_value}"[:24])
+
     # Identifiant — valeur
     c_canvas.setFont('MonoFont', 8.5)
     c_canvas.setFillColorRGB(_TXR, _TXG, _TXB)
@@ -774,7 +785,8 @@ def _draw_papillon(c_canvas, x: float, y: float, slip_w: float, slip_h: float,
 
 def _build_papillons_pdf(items: list, filename: str, title1: str, title2: str,
                          id_label: str, get_id, get_name, get_pwd, get_url,
-                         qr_size: float = 35 * mm) -> None:
+                         qr_size: float = 35 * mm,
+                         get_extra=None, extra_label: str = '') -> None:
     """Moteur générique de génération de papillons (2 colonnes × 5 lignes par page A4).
 
     :param items:    Liste des objets à imprimer.
@@ -784,6 +796,9 @@ def _build_papillons_pdf(items: list, filename: str, title1: str, title2: str,
     :param id_label: Libellé de l'identifiant (ex. 'Salle', 'N° candidat').
     :param get_id/get_name/get_pwd/get_url: Callables item → valeur de chaque champ.
     :param qr_size:  Taille du QR code sur chaque papillon.
+    :param get_extra/extra_label: champ optionnel supplémentaire (ex. la salle
+        pour les examinateurs, cf. project_identifiant_examinateur) — omis si
+        get_extra est None.
     """
     W, H = pagesizes.portrait(pagesizes.A4)
     buffer = BytesIO()
@@ -817,6 +832,7 @@ def _build_papillons_pdf(items: list, filename: str, title1: str, title2: str,
             title1, title2,
             get_name(item), id_label, get_id(item),
             get_pwd(item), get_url(item), qr_size=qr_size,
+            extra_label=extra_label, extra_value=get_extra(item) if get_extra else '',
         )
 
     # Footer de la dernière page
@@ -857,10 +873,12 @@ def liste_papillons_connexion(connexions: list,
                                base_url: str = '', centre_examen: str = '') -> None:
     """Génère les papillons de connexion pour les examinateurs.
 
-    :param connexions:    Liste de tuples (identifiant, nom, mot_de_passe). Le
-        numéro de salle n'y figure pas : il peut désormais être partagé par
-        plusieurs examinateurs (cf. project_identifiant_examinateur) et est
-        déjà indiqué sur la fiche salle (émargement) distribuée séparément.
+    :param connexions:    Liste de tuples (identifiant, nom, mot_de_passe, salle).
+        La salle n'est ici qu'un rappel indicatif : elle peut désormais être
+        partagée par plusieurs examinateurs (cf.
+        project_identifiant_examinateur) et l'identifiant reste la seule clé
+        de connexion. Elle est déjà indiquée en détail sur la fiche salle
+        (émargement) distribuée séparément.
     :param filename:      Chemin du PDF de sortie.
     :param base_url:      URL de base du site (ex. 'https://stex.mesoraux.fr').
     :param centre_examen: Nom du centre affiché sur chaque papillon.
@@ -875,6 +893,8 @@ def liste_papillons_connexion(connexions: list,
         get_name=lambda t: t[1],
         get_pwd=lambda t: t[2],
         get_url=lambda t: f"{base_url}/e/{t[0]}" if base_url else "",
+        get_extra=lambda t: t[3],
+        extra_label="Salle",
     )
 
 
