@@ -37,6 +37,10 @@
         beep(1100, 0.45, 0.40, 0.60);
     }
 
+    // ── Icônes play/pause (SVG inline, style Lucide) ──────────────────────────
+    const ICON_PLAY  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
+    const ICON_PAUSE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>';
+
     // ── Utilitaires temps ─────────────────────────────────────────────────────
     function hhmm2secs(hhmm) {
         const p = hhmm.split(':').map(Number);
@@ -92,7 +96,7 @@
             display.classList.toggle('running', state.running && rem > 60);
             display.classList.toggle('warn',    rem > 0 && rem <= 60);
             display.classList.toggle('ended',   rem === 0);
-            if (btnPlay)  { btnPlay.textContent = state.running ? '⏸' : '▶'; btnPlay.disabled = (rem === 0); }
+            if (btnPlay)  { btnPlay.innerHTML = state.running ? ICON_PAUSE : ICON_PLAY; btnPlay.disabled = (rem === 0); }
         }
 
         function tick() {

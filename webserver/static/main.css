@@ -660,6 +660,14 @@ body.tv_screen {
 /* ── Utilitaires ─────────────────────────────────────────── */
 .salle_big { font-size: 1.15em; }
 
+/* Icône de chargement animée (spinner SVG inline) */
+@keyframes icon-spin { to { transform: rotate(360deg); } }
+.icon-spin {
+    animation: icon-spin 0.8s linear infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
 /* Ancien positionnement absolu des icônes : désactivé */
 .auth-icon,
 .user-name { display: none; }

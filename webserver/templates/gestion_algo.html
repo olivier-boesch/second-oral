@@ -370,7 +370,7 @@
                        {% if algo_params.cp_optimal %}checked{% endif %}
                        onchange="onCpOptimalChange(this)">
                 <span class="param-hint" style="color:#b91c1c; font-weight:600;">
-                    ⚠️ ATTENTION : aucune limite de temps — le calcul peut durer plusieurs heures
+                    ⚠ ATTENTION : aucune limite de temps — le calcul peut durer plusieurs heures
                     (voire ne jamais aboutir) et bloque le lancement jusqu'à la fin ou un arrêt
                     manuel (bouton Arrêter). À réserver à des essais hors production, sur un
                     petit jeu de données. Ignoré si l'algorithme Monte-Carlo est sélectionné.
@@ -487,7 +487,7 @@
     </p>
     <p>
         <button id="run-btn" {% if is_running %}disabled{% endif %} onclick="lancerAlgo()">
-            ▶ Lancer algo.py
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:.25em;"><polygon points="6 3 20 12 6 21 6 3"/></svg>Lancer algo.py
         </button>
         <small style="color:#666; margin-left:.5em;">
             ⚠ Recrée entièrement la base de données.
@@ -760,7 +760,7 @@ function renderReport(report, container) {
 // ── Validation pré-lancement ─────────────────────────────────────────────────
 function validerAvantLancement(callback) {
     const container = document.getElementById('prelaunch-report');
-    container.innerHTML = '<p style="font-size:.85em;color:#555">⏳ Vérification des fichiers…</p>';
+    container.innerHTML = '<p style="font-size:.85em;color:#555"><svg class="icon-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:middle; margin-right:.3em;"><circle cx="12" cy="12" r="10" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>Vérification des fichiers…</p>';
     container.style.display = '';
     fetch(VALIDATE_URL)
         .then(r => r.json())

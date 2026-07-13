@@ -84,7 +84,7 @@
                 {% if oral['emargement'] == "" %}
                     <button onclick="sign_document({{ oral['id'] }})" class="sign-button-only">Émarger</button>
                 {% else %}
-                    <a onclick="sign_document({{ oral['id'] }})">✅ {{ oral['heure_emargement'] }}</a>
+                    <a onclick="sign_document({{ oral['id'] }})">✓ {{ oral['heure_emargement'] }}</a>
                 {%  endif %}
             </td>
         {% endif %}
