@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [2027.0] — 2026-07-13
+
+Cette version tire les leçons de la session 2026 et referme les deux
+incidents rencontrés en conditions réelles (salles partagées entre
+examinateurs, loge renommée cassant l'authentification), tout en dotant
+l'admin d'un véritable arsenal pour réagir en direct le jour de l'épreuve.
+
 ### Changed
 
 **Loges — `Examinateur.loge_id` devient une clé étrangère vers `Loge.id`**
@@ -11,6 +18,25 @@
 - `webserver/app.py` : `_assurer_loge()` insère la loge avec un hash provisoire vide, récupère l'id auto-incrémenté (`db_update` renvoie `cursor.lastrowid`), puis pose le hash définitif salé par cet id (`UPDATE_LOGE_PASSWORD`) ; `_renew_loge()` résout de même l'id avant de recalculer le hash.
 - Toutes les requêtes lisant `Examinateur.loge` (`db_facility_web.py`) passent par un `JOIN Loge ON Examinateur.loge_id = Loge.id`, en gardant l'alias `AS loge` — aucun changement côté lecture dans `app.py` (`exam['loge']` continue de fonctionner).
 - **Effectif au prochain lancement complet d'`algo.py`** (qui recrée tout le schéma) — aucune migration de la base en cours n'est nécessaire ni prévue.
+
+**Examinateurs — salle librement partageable, identité de connexion découplée**
+- Lors de la dernière session, plusieurs examinateurs ont utilisé la même salle à des horaires différents (salle libérée le matin, réutilisée l'après-midi) — contourné jusqu'ici par la création de salles « bis ». `Examinateur.salle` (texte libre, jamais unique) jouait à la fois 4 rôles : étiquette affichée, identifiant de connexion, clé de session/canal SSE, clé du dict `credentials.enc`/sel du mot de passe — deux examinateurs partageant la même salle cassaient silencieusement la connexion (`WHERE salle = %s` renvoyait 2 lignes) et le sel du mot de passe (dernier gagne, écrasement en mémoire).
+- `salle` redevient une simple étiquette d'affichage, librement dupliquée. Un nouvel **identifiant généré, jamais stocké en colonne** (`examinateurN`, dérivé de l'id DB — `CONCAT('examinateur', id)` côté SQL, `Examinateur.idx` côté `algo.py`, reparsé côté Flask via `_parse_identifiant()`) porte désormais l'identité : session, canal SSE, sel du hash de mot de passe, clé du store chiffré et route de connexion.
+- Route `/salle/<id_salle>` renommée `/examinateur/<identifiant>` (raccourci `/s/` → `/e/`) ; `/salle` (index de toutes les salles physiques) est inchangée. `salle_form.html` groupe désormais les examinateurs d'une même salle partagée en une seule tuile (occupants triés par heure de début de session), pour éviter deux tuiles identiques en apparence mais menant à des fiches différentes.
+- `add_examinateur()` : même pattern que `_assurer_loge()` — INSERT avec `password_hash` vide, puis UPDATE une fois l'id (et donc l'identifiant) connu.
+- Papillon de connexion examinateur : le libellé principal passe de « Salle » à « Identifiant » ; la salle reste rappelée à titre indicatif (elle est aussi détaillée sur la fiche salle/émargement, document séparé).
+- Hors scope (à la demande d'Olivier) : l'algorithme de placement ne vérifie pas encore automatiquement que deux examinateurs partageant une salle ont des horaires non chevauchants — seul un avertissement CSV (non bloquant) le signale toujours.
+
+**UX — icônes SVG partout, sidebar et en-tête**
+- Balayage complet des emoji pictographiques restants (disponibilité, changer de matière, documents, algo, renouveler identifiants, verify-logs, archive, résolution poussée, suppression examinateur/loge...) remplacés par des SVG monochromes trait (style Lucide, cohérent avec le reste de l'admin) ; rendus forcés en couleur (⚠️→⚠, ✅→✓) également corrigés. Restent volontairement en texte les symboles simples (✓✔✘⚠🚫) et les badges de couleur sémantiques (🔴🟩🟨🟧🕐), dont la légende dépend de la couleur exacte.
+- Icône « Candidats » (sidebar + tableau de bord) : passe d'une icône générique/candidat-seul à une icône à deux personnes superposées, pour distinguer visuellement « un candidat » (fiche individuelle) de « la liste des candidats » (vue admin).
+- Barre latérale admin : le lien « Grand écran (TV) », en doublon avec la tuile du tableau de bord `/gestion`, est retiré de la sidebar (reste accessible depuis le dashboard).
+- En-tête (icône utilisateur en haut à droite) : le clic direct déconnectait auparavant sans confirmation. Séparé en deux icônes distinctes — un lien vers la page propre du rôle (dashboard admin / salle examinateur / fiche candidat / loge) et une icône de déconnexion séparée à sa droite.
+- Page de connexion admin : bouton « Valider » explicite affiché sur mobile, le clavier numérique de saisie du code n'ayant pas toujours de touche Entrée.
+
+**Qualité — tests et documentation**
+- `tests/integration/test_flask_routes.py` (3069 lignes, 33 classes) éclaté en 10 fichiers thématiques (`test_login_routes.py`, `test_gestion_algo.py`, `test_jour_j.py`, `test_gestion_candidats.py`, `test_archive.py`, `test_liste_examinateurs.py`, `test_gestion_loges.py`, `test_credentials.py`, `test_loge_timer.py`, `test_edit_oral.py`), sur le modèle des fichiers dédiés déjà existants — aucune régression (suite identique avant/après le split).
+- `docs/workflow_admin.md` : dédoublonnage de la description du dashboard `/gestion` (renvoie désormais vers `docs/architecture.md` pour le détail technique) et fusion des deux sections « Jour J » jusqu'ici non adjacentes en une seule.
 
 **UX — navigation admin et fusion Jour J / Monitoring**
 - Réorganisation de l'ordre des icônes de la barre latérale admin (`admin_nav.html`) selon la chronologie de préparation : **Algorithme → Identifiants → Documents** (configuration technique — le placement génère les identifiants, repris dans les documents/papillons), puis **Candidats → Examinateurs** (référentiels), puis **Oraux → Jour J** (pilotage en direct). Auparavant, l'ordre mélangeait référentiels et configuration sans logique explicite (Monitoring rangé avec Documents/Algorithme/Identifiants alors qu'il s'agit de supervision technique, pas de configuration).
@@ -281,6 +307,8 @@
 - `tests/unit/test_db_facility_save.py::TestSchemaLogeId` : `Loge` créée avant `Examinateur` dans `SQL_BASE`, FK `loge_id → Loge(id)` présente, `Loge.nom UNIQUE`, `SQL_INSERT_LOGES`/`SQL_INSERT_EXAMINATEURS` utilisent bien un id explicite
 - `tests/unit/test_algo.py::TestSaveLogeId` : id assigné par loge (ordre alphabétique), `Examinateur.loge_id` correctement posé, `save_loges()` appelé avant `save_all()`, mots de passe hachés (non vides)
 - `tests/integration/test_flask_routes.py::TestGestionLoges` : page `/gestion/liste-loges` (auth admin, affichage du nombre d'examinateurs) ; suppression bloquée si encore utilisée (400), 404 si inconnue, purge de `credentials.enc` si orpheline
+
+- **`SELECT_LISTE_SALLES` — erreur 500 sur `/login-examinateur` en production (incident 2026-07-13, juste après déploiement)** : `ORDER BY Examinateur.salle, heure_debut IS NULL, heure_debut` réutilisait l'alias d'une fonction d'agrégation (`MIN(Oral.heure_oral) AS heure_debut`) dans une expression dérivée — accepté par SQLite mais interdit par MySQL/MariaDB (`1247 (42S22): Reference 'heure_debut' not supported`, "reference to group function"). Corrigé en répétant l'expression complète : `ORDER BY Examinateur.salle, MIN(Oral.heure_oral) IS NULL, MIN(Oral.heure_oral)`. Invisible en local car `app._db.make_sql_select`/`make_sql_update` sont entièrement mockés dans la suite de tests (aucun SQL réel n'y est jamais exécuté) — deuxième incident du genre après la référence orpheline à `Examinateur.loge` restée après la migration FK ci-dessus. Assertion de non-régression textuelle ajoutée sur la clause `ORDER BY` (`test_login_routes.py`).
 
 ### Removed
 
