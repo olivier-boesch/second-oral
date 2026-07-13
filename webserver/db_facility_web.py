@@ -71,7 +71,7 @@ FROM Examinateur
     JOIN Matiere ON Examinateur.matiere = Matiere.id
     LEFT OUTER JOIN Oral ON Oral.examinateur = Examinateur.id
 GROUP BY Examinateur.id
-ORDER BY Examinateur.salle, heure_debut IS NULL, heure_debut
+ORDER BY Examinateur.salle, MIN(Oral.heure_oral) IS NULL, MIN(Oral.heure_oral)
 """
 
 SELECT_INFOS_SALLE = """

@@ -524,7 +524,20 @@ class TestSalleFormGroupedBySharedSalle:
 
     def test_order_by_includes_heure_debut(self):
         """Vérifie que la requête trie bien les occupants d'une même salle par
-        heure de début (MIN(Oral.heure_oral)), NULL (pas encore placé) en dernier."""
+        heure de début (MIN(Oral.heure_oral)), NULL (pas encore placé) en dernier.
+
+        Régression (2026-07-13, prod) : `ORDER BY ..., heure_debut IS NULL, heure_debut`
+        (référençant l'alias d'une fonction d'agrégation dans une expression dérivée)
+        est rejeté par MySQL/MariaDB — erreur 1247 "Reference 'heure_debut' not
+        supported (reference to group function)". Un alias de fonction d'agrégation
+        ne peut être utilisé tel quel en ORDER BY que seul, jamais réutilisé dans une
+        expression composée (ex. `... IS NULL`) : il faut répéter l'expression
+        complète. Le mock DB des autres tests n'exécute aucun vrai SQL et ne peut
+        donc pas attraper ce genre d'erreur de syntaxe — seule une simple assertion
+        textuelle sur la requête peut prévenir une régression ici.
+        """
         import db_facility_web as dfw
-        assert "ORDER BY Examinateur.salle, heure_debut IS NULL, heure_debut" in dfw.SELECT_LISTE_SALLES
+        assert "ORDER BY Examinateur.salle, MIN(Oral.heure_oral) IS NULL, MIN(Oral.heure_oral)" \
+            in dfw.SELECT_LISTE_SALLES
+        assert "heure_debut IS NULL" not in dfw.SELECT_LISTE_SALLES
 
