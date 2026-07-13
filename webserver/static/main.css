@@ -388,6 +388,10 @@ input[type="file"] {
     padding: 0.4em 0.6em;
 }
 .login input:focus { outline: none; }
+.login-submit-mobile {
+    display: none;
+    margin-top: 1em;
+}
 
 /* ── Formulaires ─────────────────────────────────────────── */
 form {
@@ -797,6 +801,12 @@ body.body-admin {
 
     .table_oraux,
     .table_mobile { width: 100%; }
+
+    /* Le clavier numérique mobile n'a pas toujours de touche "Entrée"
+       qui valide le formulaire : bouton explicite pour l'OTP admin. */
+    .login-submit-mobile {
+        display: inline-flex;
+    }
 
     /* Sur mobile, les tableaux à nombreuses colonnes (loge, salle) peuvent
        dépasser la largeur du viewport et élargir toute la page.
