@@ -72,17 +72,6 @@ def _env_time_optional(key):
     except Exception:
         return None
 
-def _env_int_optional(key):
-    """Comme _env_int, mais retourne None (fonctionnalité désactivée) si la
-    variable est absente, vide ou invalide, plutôt qu'une valeur par défaut."""
-    raw = _os.environ.get(key, "").strip()
-    if not raw:
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        return None
-
 N_run               = _env_int("ALGO_N_RUN",    1_000)
 ECART_MINI_CANDIDAT = timedelta(minutes=_env_int("ALGO_ECART_MINI", 80))
 HEURE_DEBUT         = _env_time("ALGO_HEURE_DEBUT", 8, 10)
@@ -100,8 +89,8 @@ MARGE_PETITE_MATIERE         = _env_int("ALGO_MARGE_PETITE_MATIERE", 2)
 # heure de début et durée réglables depuis /gestion/algo.
 PAUSE_MERIDIENNE_DEBUT = _env_time_optional("ALGO_PAUSE_MERIDIENNE_DEBUT")
 PAUSE_MERIDIENNE_DUREE = timedelta(minutes=_env_int("ALGO_PAUSE_MERIDIENNE_DUREE", 0))
-# Objectif souple (jamais bloquant) de dernier créneau utilisé — cf. AlgoOne.__init__.
-CRENEAU_CIBLE_FIN_JOURNEE = _env_int_optional("ALGO_CRENEAU_CIBLE_FIN_JOURNEE")
+# Objectif souple (jamais bloquant) d'heure de fin de journée — cf. AlgoOne.__init__.
+HEURE_CIBLE_FIN_JOURNEE = _env_time_optional("ALGO_HEURE_CIBLE_FIN_JOURNEE")
 # Pause périodique (toutes les N oraux) — réglable depuis /gestion/algo.
 INTERVALLE_PAUSE = _env_int("ALGO_INTERVALLE_PAUSE", 4)
 TEMPS_PAUSE      = timedelta(minutes=_env_int("ALGO_TEMPS_PAUSE", 20))
@@ -585,7 +574,7 @@ class AlgoOne:
                  marge_flexibilite_petite_matiere: int = 2,
                  heure_pause_meridienne: time | None = None,
                  duree_pause_meridienne: timedelta = timedelta(minutes=0),
-                 creneau_cible_fin_journee: int | None = None):
+                 heure_cible_fin_journee: time | None = None):
         """
         :param filename_candidats: nom du fichier des candidats
         :type filename_candidats: str
@@ -624,16 +613,25 @@ class AlgoOne:
         :type heure_pause_meridienne: time | None
         :param duree_pause_meridienne: durée de la pause méridienne
         :type duree_pause_meridienne: timedelta
-        :param creneau_cible_fin_journee: index de créneau maximum souhaité pour le dernier oral
-            de la journée (None désactive la fonctionnalité). Objectif souple, jamais bloquant,
-            partagé exactement par les deux moteurs (aucune conversion heure -> créneau) :
-            Monte-Carlo (cf. selectionner_meilleur_algo) préfère, parmi les runs déjà conformes à
-            l'écart minimum candidat, celui dont le dernier créneau utilisé
-            (dernier_creneau_journee()) est le plus petit ; CP-SAT (cf. AlgoCP.resoudre) pénalise
-            dans sa fonction objectif (poids ALGO_POIDS_CRENEAU_FIN_JOURNEE) les créneaux utilisés
-            au-delà de cet index, sans jamais rendre le modèle infaisable à cause de ce seul
-            réglage.
-        :type creneau_cible_fin_journee: int | None
+        :param heure_cible_fin_journee: heure de fin souhaitée pour le dernier oral de la
+            journée (None désactive la fonctionnalité). Objectif souple, jamais bloquant,
+            partagé exactement par les deux moteurs, qui minimisent la même grandeur :
+            depassement_fin_journee() — la somme des carrés des dépassements, en minutes,
+            de chaque examinateur au-delà de cette heure. Monte-Carlo
+            (cf. selectionner_meilleur_algo) préfère, parmi les runs déjà conformes à l'écart
+            minimum candidat, celui dont ce dépassement est le plus faible ; CP-SAT
+            (cf. AlgoCP.resoudre) pénalise la même expression dans sa fonction objectif
+            (poids ALGO_POIDS_FIN_JOURNEE), sans jamais rendre le modèle infaisable à cause de
+            ce seul réglage.
+
+            La comparaison se fait bien en heure réelle et non en index de créneau : à index
+            égal, deux matières de durées d'oral différentes finissent à des heures très
+            différentes. Chaque moteur convertit donc les créneaux en minutes réelles avec la
+            durée propre à la matière de chaque examinateur, jamais avec une durée moyenne
+            (cf. AlgoCP._minutes_fin_creneau et Oral.heure_fin) — c'est ce qui distingue ce
+            réglage d'une première version, retirée, qui convertissait l'heure cible en index
+            de créneau via une durée d'oral moyenne approchée.
+        :type heure_cible_fin_journee: time | None
         """
         self.filename_candidats: str = filename_candidats
         self.filename_examinateurs: str = filename_examinateurs
@@ -656,7 +654,7 @@ class AlgoOne:
         self.marge_flexibilite_petite_matiere = marge_flexibilite_petite_matiere
         self.heure_pause_meridienne = heure_pause_meridienne
         self.duree_pause_meridienne = duree_pause_meridienne
-        self.creneau_cible_fin_journee = creneau_cible_fin_journee
+        self.heure_cible_fin_journee = heure_cible_fin_journee
 
     def setup_from_files(self) -> None:
         """Charge les données depuis les fichiers et crée les objets"""
@@ -1119,14 +1117,56 @@ class AlgoOne:
         heures_fin = [o.heure_fin for o in self.liste_oraux if o.heure_fin is not None]
         return max(heures_fin) if heures_fin else None
 
-    def dernier_creneau_journee(self) -> int | None:
-        """Index du dernier créneau utilisé, tous examinateurs confondus.
+    def depassement_fin_journee(self, heure_cible: time | None = None) -> int:
+        """Dépassement quadratique de l'heure cible de fin de journée.
 
-        Contrairement à heure_fin_journee(), disponible immédiatement après
-        resoudre() (pas besoin d'attendre calcul_horaires()) et exact — pas de
-        conversion créneau -> heure. Renvoie None si aucun oral n'a été placé.
+        Somme, sur chaque examinateur, du carré de son retard en minutes :
+        `somme( max(0, fin_examinateur - heure_cible)**2 )`, où
+        `fin_examinateur` est l'heure de fin de son dernier oral.
+
+        Deux propriétés voulues, contre une pénalité linéaire :
+
+        - **par examinateur** : un examinateur qui traîne plusieurs oraux
+          au-delà de la cible n'est compté qu'une fois, pour son pire
+          dépassement — mais chacun est individuellement poussé à respecter
+          la cible, plutôt qu'un unique total global que le solveur pourrait
+          laisser peser sur un seul examinateur ;
+        - **quadratique** : un examinateur à +60 min coûte bien plus cher que
+          six examinateurs à +10 min. Une pénalité linéaire est indifférente
+          entre ces deux situations, alors que seule la première est
+          réellement gênante en pratique.
+
+        C'est la grandeur commune aux deux moteurs : Monte-Carlo la calcule
+        ici sur les horaires réels (tiers-temps compris), CP-SAT reconstruit
+        la même expression dans sa fonction objectif (cf. AlgoCP.resoudre).
+
+        Nécessite que calcul_horaires() ait déjà été appelé (sinon heure_fin
+        vaut None sur chaque Oral).
+
+        :param heure_cible: heure de fin souhaitée ; par défaut celle passée
+            au constructeur (`heure_cible_fin_journee`).
+        :return: somme des carrés des dépassements en minutes ; 0 si la
+                 fonctionnalité est désactivée ou si aucun oral n'est placé.
         """
-        return max((o.creneau for o in self.liste_oraux), default=None)
+        if heure_cible is None:
+            heure_cible = self.heure_cible_fin_journee
+        if heure_cible is None:
+            return 0
+        fin_par_examinateur: dict[int, time] = {}
+        for oral in self.liste_oraux:
+            if oral.heure_fin is None:
+                continue
+            cle = id(oral.examinateur)
+            if cle not in fin_par_examinateur or oral.heure_fin > fin_par_examinateur[cle]:
+                fin_par_examinateur[cle] = oral.heure_fin
+        return sum(
+            round((
+                datetime.combine(date(1, 1, 1), heure_fin)
+                - datetime.combine(date(1, 1, 1), heure_cible)
+            ).total_seconds() / 60) ** 2
+            for heure_fin in fin_par_examinateur.values()
+            if heure_fin > heure_cible
+        )
 
 
 def algo_run(parameters):
@@ -1157,7 +1197,7 @@ def algo_run(parameters):
 def selectionner_meilleur_algo(
     results: list,
     ecart_mini_minutes: float,
-    creneau_cible: int | None = None,
+    heure_cible: time | None = None,
 ) -> tuple:
     """
     Sélectionne le meilleur run parmi les résultats de algo_run().
@@ -1168,14 +1208,14 @@ def selectionner_meilleur_algo(
     meilleur taux d'occupation examinateurs (stats['profs']) — sans jamais
     élire un run non conforme tant qu'un run conforme existe dans le batch.
 
-    Si `creneau_cible` est fourni, ce critère change parmi les runs
-    conformes : on préfère celui dont le dernier créneau utilisé
-    (`alg.dernier_creneau_journee()`) est le plus petit, le taux d'occupation
-    ne servant plus qu'à départager une égalité. Même grandeur exacte que
-    celle pénalisée côté CP-SAT (cf. AlgoCP._cutoff_creneau_fin_journee),
-    sans conversion heure -> créneau. Objectif souple : le repli sur le
-    meilleur run tout court (aucun run conforme) reste inchangé, sans égard
-    au dernier créneau utilisé.
+    Si `heure_cible` est fournie, ce critère change parmi les runs
+    conformes : on préfère celui dont le dépassement quadratique de fin de
+    journée (`alg.depassement_fin_journee()`) est le plus faible, le taux
+    d'occupation ne servant plus qu'à départager une égalité. Exactement la
+    grandeur pénalisée côté CP-SAT (cf. AlgoCP.resoudre), en heure réelle et
+    non en index de créneau. Objectif souple : le repli sur le meilleur run
+    tout court (aucun run conforme) reste inchangé, sans égard à l'heure de
+    fin de journée.
 
     Si AUCUN run n'est conforme (cas limite, données très contraintes), on
     retombe sur le meilleur run tout court (par profs) pour ne pas bloquer
@@ -1187,13 +1227,13 @@ def selectionner_meilleur_algo(
                      contient alors le message d'erreur), sinon info est le
                      dict de stats retourné par statistiques().
     :param ecart_mini_minutes: écart minimum candidat requis, en minutes.
-    :param creneau_cible: dernier créneau maximum souhaité (None = ignoré).
+    :param heure_cible: heure de fin de journée souhaitée (None = ignorée).
     :return: (best_alg, best_stats, n_err, run_errors, aucun_run_conforme)
     """
     n_err = 0
     run_errors: list[str] = []
     best_percentage_compliant = -1.0
-    best_cle_creneau_compliant = None
+    best_cle_fin_journee_compliant = None
     best_alg_compliant = None
     best_stats_compliant = None
     best_percentage_any = -1.0
@@ -1213,13 +1253,10 @@ def selectionner_meilleur_algo(
             best_stats_any = stats
         if stats['candidats'] < ecart_mini_minutes:
             continue
-        if creneau_cible is not None:
-            dernier_creneau = alg.dernier_creneau_journee()
-            if dernier_creneau is None:
-                dernier_creneau = sys.maxsize
-            cle = (dernier_creneau, -stats['profs'])
-            if best_cle_creneau_compliant is None or cle < best_cle_creneau_compliant:
-                best_cle_creneau_compliant = cle
+        if heure_cible is not None:
+            cle = (alg.depassement_fin_journee(heure_cible), -stats['profs'])
+            if best_cle_fin_journee_compliant is None or cle < best_cle_fin_journee_compliant:
+                best_cle_fin_journee_compliant = cle
                 best_alg_compliant = alg
                 best_stats_compliant = stats
         elif best_percentage_compliant < stats['profs']:
@@ -1245,8 +1282,8 @@ if __name__ == '__main__':
         'heure_pause_meridienne': PAUSE_MERIDIENNE_DEBUT,
         'duree_pause_meridienne': PAUSE_MERIDIENNE_DUREE,
     }
-    _creneau_cible_kwargs = {
-        'creneau_cible_fin_journee': CRENEAU_CIBLE_FIN_JOURNEE,
+    _fin_journee_kwargs = {
+        'heure_cible_fin_journee': HEURE_CIBLE_FIN_JOURNEE,
     }
     _pause_periodique_kwargs = {
         'intervalle_pause': INTERVALLE_PAUSE,
@@ -1267,7 +1304,7 @@ if __name__ == '__main__':
                       'numero_run': 0,
                       **_petites_matieres_kwargs,
                       **_pause_meridienne_kwargs,
-                      **_creneau_cible_kwargs,
+                      **_fin_journee_kwargs,
                       **_pause_periodique_kwargs}
         results = [algo_cp_run(parameters)]
     else:
@@ -1283,7 +1320,7 @@ if __name__ == '__main__':
                                'heure_debut': HEURE_DEBUT,
                                **_petites_matieres_kwargs,
                                **_pause_meridienne_kwargs,
-                               **_creneau_cible_kwargs,
+                               **_fin_journee_kwargs,
                                **_pause_periodique_kwargs,
                                'traiter_matiere_principales_en_premier': True,
                                'numero_run': i}
@@ -1301,7 +1338,7 @@ if __name__ == '__main__':
     # aucun run du batch ne le respecte.
     ecart_mini_minutes = ECART_MINI_CANDIDAT.total_seconds() / 60
     best_alg, final_stats, n_err, run_errors, aucun_run_conforme = selectionner_meilleur_algo(
-        results, ecart_mini_minutes, creneau_cible=CRENEAU_CIBLE_FIN_JOURNEE,
+        results, ecart_mini_minutes, heure_cible=HEURE_CIBLE_FIN_JOURNEE,
     )
     if ALGO_ENGINE == "monte_carlo":
         # Non pertinent en CP-SAT : une seule résolution est tentée (pas de

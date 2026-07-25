@@ -442,19 +442,19 @@ class TestSelectionMeilleurAlgo:
         assert aucun_run_conforme is False
 
 
-class TestSelectionMeilleurAlgoCreneauCible:
-    """Quand creneau_cible est fourni, la sélection parmi les runs conformes
-    à l'écart minimum privilégie celui dont le dernier créneau utilisé est le
-    plus petit (au lieu du meilleur taux d'occupation) — objectif souple lié
-    à AlgoOne.creneau_cible_fin_journee."""
+class TestSelectionMeilleurAlgoHeureCible:
+    """Quand heure_cible est fournie, la sélection parmi les runs conformes
+    à l'écart minimum privilégie celui dont le dépassement quadratique de fin
+    de journée est le plus faible (au lieu du meilleur taux d'occupation) —
+    objectif souple lié à AlgoOne.heure_cible_fin_journee."""
 
-    def test_prefere_le_run_dont_le_dernier_creneau_est_le_plus_petit(self):
+    def test_prefere_le_run_dont_le_depassement_est_le_plus_faible(self):
         from algo import selectionner_meilleur_algo
 
         alg_tot = MagicMock(name="alg_tot")
-        alg_tot.dernier_creneau_journee.return_value = 6
+        alg_tot.depassement_fin_journee.return_value = 100
         alg_tard = MagicMock(name="alg_tard")
-        alg_tard.dernier_creneau_journee.return_value = 10
+        alg_tard.depassement_fin_journee.return_value = 3600
 
         results = [
             # Meilleure occupation (95%) mais finit plus tard : doit être écarté.
@@ -463,19 +463,35 @@ class TestSelectionMeilleurAlgoCreneauCible:
         ]
 
         best_alg, best_stats, *_ = selectionner_meilleur_algo(
-            results, ecart_mini_minutes=80, creneau_cible=6,
+            results, ecart_mini_minutes=80, heure_cible=time(hour=17, minute=30),
         )
 
         assert best_alg is alg_tot
         assert best_stats == {"profs": 80.0, "candidats": 90}
 
-    def test_egalite_creneau_departagee_par_occupation(self):
+    def test_heure_cible_transmise_a_depassement_fin_journee(self):
+        """L'heure comparée est bien celle passée à selectionner_meilleur_algo,
+        pas celle éventuellement portée par l'objet AlgoOne."""
+        from algo import selectionner_meilleur_algo
+
+        alg = MagicMock(name="alg")
+        alg.depassement_fin_journee.return_value = 0
+        heure_cible = time(hour=17, minute=30)
+
+        selectionner_meilleur_algo(
+            [(alg, {"profs": 80.0, "candidats": 90})],
+            ecart_mini_minutes=80, heure_cible=heure_cible,
+        )
+
+        alg.depassement_fin_journee.assert_called_once_with(heure_cible)
+
+    def test_egalite_depassement_departagee_par_occupation(self):
         from algo import selectionner_meilleur_algo
 
         alg_faible = MagicMock(name="alg_faible")
-        alg_faible.dernier_creneau_journee.return_value = 6
+        alg_faible.depassement_fin_journee.return_value = 400
         alg_fort = MagicMock(name="alg_fort")
-        alg_fort.dernier_creneau_journee.return_value = 6
+        alg_fort.depassement_fin_journee.return_value = 400
 
         results = [
             (alg_faible, {"profs": 70.0, "candidats": 90}),
@@ -483,20 +499,20 @@ class TestSelectionMeilleurAlgoCreneauCible:
         ]
 
         best_alg, *_ = selectionner_meilleur_algo(
-            results, ecart_mini_minutes=80, creneau_cible=6,
+            results, ecart_mini_minutes=80, heure_cible=time(hour=17, minute=30),
         )
 
         assert best_alg is alg_fort
 
     def test_ignore_par_defaut(self):
-        """Sans creneau_cible, comportement inchangé : meilleure occupation élue
+        """Sans heure_cible, comportement inchangé : meilleure occupation élue
         même si elle finit plus tard qu'une alternative conforme."""
         from algo import selectionner_meilleur_algo
 
         alg_tard_mais_plein = MagicMock(name="alg_tard_mais_plein")
-        alg_tard_mais_plein.dernier_creneau_journee.return_value = 10
+        alg_tard_mais_plein.depassement_fin_journee.return_value = 3600
         alg_tot_mais_creux = MagicMock(name="alg_tot_mais_creux")
-        alg_tot_mais_creux.dernier_creneau_journee.return_value = 6
+        alg_tot_mais_creux.depassement_fin_journee.return_value = 0
 
         results = [
             (alg_tard_mais_plein, {"profs": 95.0, "candidats": 90}),
@@ -506,28 +522,29 @@ class TestSelectionMeilleurAlgoCreneauCible:
         best_alg, *_ = selectionner_meilleur_algo(results, ecart_mini_minutes=80)
 
         assert best_alg is alg_tard_mais_plein
+        alg_tard_mais_plein.depassement_fin_journee.assert_not_called()
 
-    def test_creneau_none_traite_comme_pire_cas(self):
-        """Un run dont dernier_creneau_journee() est None (aucun oral placé,
-        cas pathologique) ne doit jamais être préféré à un run avec une vraie
-        valeur."""
+    def test_run_non_conforme_jamais_elu_malgre_un_bon_depassement(self):
+        """L'écart minimum candidat reste prioritaire sur l'heure de fin :
+        un run qui le viole n'est pas élu, même sans aucun dépassement."""
         from algo import selectionner_meilleur_algo
 
-        alg_sans_oral = MagicMock(name="alg_sans_oral")
-        alg_sans_oral.dernier_creneau_journee.return_value = None
-        alg_normal = MagicMock(name="alg_normal")
-        alg_normal.dernier_creneau_journee.return_value = 6
+        alg_non_conforme = MagicMock(name="alg_non_conforme")
+        alg_non_conforme.depassement_fin_journee.return_value = 0
+        alg_conforme = MagicMock(name="alg_conforme")
+        alg_conforme.depassement_fin_journee.return_value = 3600
 
         results = [
-            (alg_sans_oral, {"profs": 0.0, "candidats": 90}),
-            (alg_normal, {"profs": 80.0, "candidats": 90}),
+            (alg_non_conforme, {"profs": 95.0, "candidats": 30}),
+            (alg_conforme, {"profs": 80.0, "candidats": 90}),
         ]
 
-        best_alg, *_ = selectionner_meilleur_algo(
-            results, ecart_mini_minutes=80, creneau_cible=6,
+        best_alg, _stats, _n_err, _errs, aucun_run_conforme = selectionner_meilleur_algo(
+            results, ecart_mini_minutes=80, heure_cible=time(hour=17, minute=30),
         )
 
-        assert best_alg is alg_normal
+        assert best_alg is alg_conforme
+        assert aucun_run_conforme is False
 
 
 class TestTiersTempsNoOverlap:
@@ -784,38 +801,112 @@ class TestHeureFinJournee:
         assert alg.heure_fin_journee() == attendu
 
 
-class TestDernierCreneauJournee:
-    """AlgoOne.dernier_creneau_journee() : index du dernier créneau utilisé,
-    tous examinateurs confondus — exact, disponible dès resoudre() (pas
-    besoin de calcul_horaires())."""
+class TestDepassementFinJournee:
+    """AlgoOne.depassement_fin_journee() : somme, par examinateur, du carré de
+    son retard en minutes sur l'heure cible de fin de journée. C'est la
+    grandeur commune aux deux moteurs (cf. AlgoCP.resoudre)."""
 
-    def test_none_sans_aucun_oral_place(self, tmp_path):
+    def _alg_avec_fins(self, tmp_path, fins_par_examinateur, **kwargs):
+        """Construit un AlgoOne dont liste_oraux porte des heure_fin imposées.
+
+        On court-circuite resoudre()/calcul_horaires() : ce qui est testé ici
+        est l'agrégation quadratique, pas le placement.
+        """
         alg = _build_algo(
             tmp_path,
-            candidats=[_cand(f"Cand{i}", f"990000000{i}") for i in range(0)],
+            candidats=[_cand("Cand0", "9930000000")],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            **kwargs,
         )
-        assert alg.dernier_creneau_journee() is None
+        alg.liste_oraux = []
+        for examinateur, heures_fin in fins_par_examinateur.items():
+            for heure_fin in heures_fin:
+                oral = MagicMock(name=f"oral_{examinateur}_{heure_fin}")
+                oral.examinateur = examinateur
+                oral.heure_fin = heure_fin
+                alg.liste_oraux.append(oral)
+        return alg
 
-    def test_egale_au_max_des_creneaux_individuels(self, tmp_path):
+    def test_zero_si_fonctionnalite_desactivee(self, tmp_path):
+        alg = self._alg_avec_fins(tmp_path, {"A": [time(hour=19, minute=0)]})
+        assert alg.depassement_fin_journee() == 0
+
+    def test_zero_si_tout_le_monde_finit_avant_la_cible(self, tmp_path):
+        alg = self._alg_avec_fins(
+            tmp_path, {"A": [time(hour=16, minute=0)], "B": [time(hour=17, minute=30)]},
+        )
+        assert alg.depassement_fin_journee(time(hour=17, minute=30)) == 0
+
+    def test_carre_du_retard_en_minutes(self, tmp_path):
+        alg = self._alg_avec_fins(tmp_path, {"A": [time(hour=17, minute=40)]})
+        assert alg.depassement_fin_journee(time(hour=17, minute=30)) == 100
+
+    def test_un_seul_comptage_par_examinateur_le_pire(self, tmp_path):
+        """Un examinateur qui traîne plusieurs oraux au-delà de la cible n'est
+        compté qu'une fois, sur son dernier oral."""
+        alg = self._alg_avec_fins(
+            tmp_path,
+            {"A": [time(hour=17, minute=35), time(hour=17, minute=40), time(hour=17, minute=32)]},
+        )
+        assert alg.depassement_fin_journee(time(hour=17, minute=30)) == 100
+
+    def test_quadratique_un_gros_retard_coute_plus_que_plusieurs_petits(self, tmp_path):
+        """Le point de la pénalité quadratique : à retard cumulé égal, un seul
+        examinateur très en retard doit coûter beaucoup plus cher que
+        plusieurs légèrement en retard — ce dont une pénalité linéaire, elle,
+        serait indifférente."""
+        cible = time(hour=17, minute=30)
+        concentre = self._alg_avec_fins(tmp_path, {"A": [time(hour=18, minute=30)]})
+        reparti = self._alg_avec_fins(
+            tmp_path,
+            {nom: [time(hour=17, minute=40)] for nom in ("A", "B", "C", "D", "E", "F")},
+        )
+        # Retard cumulé identique (60 min), mais 60² = 3600 contre 6 * 10² = 600.
+        assert concentre.depassement_fin_journee(cible) == 3600
+        assert reparti.depassement_fin_journee(cible) == 600
+        assert concentre.depassement_fin_journee(cible) > reparti.depassement_fin_journee(cible)
+
+    def test_utilise_l_heure_cible_du_constructeur_par_defaut(self, tmp_path):
+        alg = self._alg_avec_fins(
+            tmp_path,
+            {"A": [time(hour=17, minute=40)]},
+            heure_cible_fin_journee=time(hour=17, minute=30),
+        )
+        assert alg.depassement_fin_journee() == 100
+
+    def test_ignore_les_oraux_sans_heure_fin(self, tmp_path):
+        """Avant calcul_horaires(), heure_fin vaut None sur chaque Oral."""
+        alg = self._alg_avec_fins(tmp_path, {"A": [None, time(hour=17, minute=40)]})
+        assert alg.depassement_fin_journee(time(hour=17, minute=30)) == 100
+
+    def test_zero_sans_aucun_oral_place(self, tmp_path):
+        alg = self._alg_avec_fins(tmp_path, {})
+        assert alg.depassement_fin_journee(time(hour=17, minute=30)) == 0
+
+    def test_coherent_avec_un_placement_reel(self, tmp_path):
+        """Bout en bout : la valeur retournée correspond bien aux heure_fin
+        calculées par calcul_horaires()."""
         alg = _build_algo(
             tmp_path,
-            candidats=[_cand(f"Cand{i}", f"991000000{i}") for i in range(6)],
+            candidats=[_cand(f"Cand{i}", f"994000000{i}") for i in range(6)],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
         )
         alg.resoudre()
-        attendu = max(o.creneau for o in alg.liste_oraux)
-        assert alg.dernier_creneau_journee() == attendu
-
-    def test_disponible_avant_calcul_horaires(self, tmp_path):
-        """Contrairement à heure_fin_journee(), pas besoin de calcul_horaires()."""
-        alg = _build_algo(
-            tmp_path,
-            candidats=[_cand(f"Cand{i}", f"992000000{i}") for i in range(3)],
-            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        alg.calcul_horaires()
+        cible = time(hour=9, minute=0)
+        fins = {}
+        for oral in alg.liste_oraux:
+            cle = id(oral.examinateur)
+            if cle not in fins or oral.heure_fin > fins[cle]:
+                fins[cle] = oral.heure_fin
+        attendu = sum(
+            round((
+                datetime.combine(date(1, 1, 1), fin)
+                - datetime.combine(date(1, 1, 1), cible)
+            ).total_seconds() / 60) ** 2
+            for fin in fins.values() if fin > cible
         )
-        alg.resoudre()
-        assert alg.dernier_creneau_journee() is not None
+        assert alg.depassement_fin_journee(cible) == attendu
 
 
 class TestEquiteEntreExaminateurs:

@@ -112,8 +112,8 @@ Les paramètres sont modifiables depuis l'interface web (`/gestion/algo` → sec
 | `ALGO_PAUSE_MERIDIENNE_DUREE`      | `0` (min) | Durée de la pause méridienne ; ignorée si `ALGO_PAUSE_MERIDIENNE_DEBUT` est vide |
 | `ALGO_INTERVALLE_PAUSE`   | `4`            | Nombre d'oraux entre deux pauses périodiques d'un examinateur (borné entre 3 et 6) |
 | `ALGO_TEMPS_PAUSE`        | `20` (min)     | Durée de la pause périodique (borné entre 0 et 60 min ; `0` désactive la pause) |
-| `ALGO_CRENEAU_CIBLE_FIN_JOURNEE`   | *(vide)* | Dernier créneau souhaité pour le dernier oral de la journée ; vide = désactivée. Objectif souple (les 2 moteurs), jamais bloquant |
-| `ALGO_POIDS_CRENEAU_FIN_JOURNEE`   | `200`  | Poids de la pénalité "créneau cible de fin de journée" dans l'objectif CP-SAT (ignoré par Monte-Carlo, cf. ci-dessous) |
+| `ALGO_HEURE_CIBLE_FIN_JOURNEE`     | *(vide)* | Heure à laquelle le dernier oral de chaque examinateur devrait être terminé ; vide = désactivée. Objectif souple (les 2 moteurs), jamais bloquant |
+| `ALGO_POIDS_FIN_JOURNEE`           | `25`   | Poids de la pénalité **quadratique** "heure cible de fin de journée" dans l'objectif CP-SAT (ignoré par Monte-Carlo, cf. ci-dessous) |
 | `ALGO_POIDS_EQUITE`       | `1 000 000`    | Poids de l'équité de charge entre examinateurs d'une même matière (CP-SAT uniquement) — doit rester très supérieur aux autres poids |
 | `ALGO_BRUIT_TASSEMENT`    | `25`           | Amplitude du bruit aléatoire de désambiguïsation du tassement (CP-SAT uniquement) — doit rester >= 1 |
 
@@ -219,48 +219,78 @@ limite qu'aujourd'hui pour le calcul post-résolution). `t1`/`t2` et la contrain
 ces minutes plutôt que le simple `creneau`, donc l'écart est désormais garanti **en minutes
 réelles**, y compris pour un candidat dont les deux oraux encadrent la pause (l'écart réel est alors
 naturellement majoré par la durée de la pause — plus précis qu'une simple contrainte en créneaux,
-qui l'aurait sous-estimé dans ce cas précis). Le créneau cible de fin de journée et le terme de
-tassement restent en revanche exprimés en index de créneau (approximation déjà acceptée, cf.
-sections dédiées).
+qui l'aurait sous-estimé dans ce cas précis). Le terme de tassement et la pénalité d'heure cible de
+fin de journée sont eux aussi exprimés en minutes réelles (cf. sections dédiées) — plus aucun terme
+de l'objectif CP-SAT ne raisonne en index de créneau.
 
-### Créneau cible de fin de journée
+### Heure cible de fin de journée
 
 Objectif **souple** (jamais bloquant) : contrairement aux petites matières ou à l'écart minimum
 candidat, ce réglage ne peut jamais rendre le placement infaisable — il influence seulement lequel,
 parmi les placements par ailleurs valides, est retenu. Désactivé par défaut ; réglable depuis
-`/gestion/algo` → section Paramètres (case **Activer** + créneau cible + poids CP-SAT), ou via
-`ALGO_CRENEAU_CIBLE_FIN_JOURNEE`/`ALGO_POIDS_CRENEAU_FIN_JOURNEE`.
+`/gestion/algo` → section Paramètres (heure de fin + poids CP-SAT ; heure vide = désactivé, même
+convention que la pause méridienne), ou via
+`ALGO_HEURE_CIBLE_FIN_JOURNEE`/`ALGO_POIDS_FIN_JOURNEE`.
 
-Le réglage est un **nombre de créneaux**, pas une heure — les deux moteurs comparent donc
-exactement la même grandeur, sans aucune conversion :
+Les deux moteurs minimisent **exactement la même grandeur**, définie par
+`AlgoOne.depassement_fin_journee()` :
+
+```
+somme sur chaque examinateur de  max(0, fin de son dernier oral - heure cible)²   (en minutes)
+```
+
+Trois propriétés voulues :
+
+- **en heure réelle, avec la durée propre à chaque matière.** Un index de créneau ne peut pas
+  exprimer une heure : le créneau 13 d'une matière à 20 min/oral tombe vers midi, celui d'une
+  matière à 60 min bien après 20h. Chaque créneau est donc converti en minutes réelles avec la
+  durée de la matière **de son examinateur** (`AlgoCP._minutes_fin_creneau()` = `_minutes_creneau()`
+  + `temps_preparation` + `temps_oral`), jamais avec une durée moyenne tous examinateurs confondus.
+  Le tiers-temps, inconnu avant résolution, est la seule approximation restante côté CP-SAT.
+- **par examinateur, pas par oral.** Pour chaque examinateur on prend le maximum entre 0 et son
+  propre dépassement le plus profond (`model.AddMaxEquality`, même construction que
+  `charge_max`/`charge_min` pour l'équité) plutôt que de sommer le dépassement de chacun de ses
+  oraux en retard — un examinateur ayant plusieurs oraux tardifs n'est donc pénalisé qu'une fois
+  pour son pire cas, mais **chaque** examinateur est individuellement poussé à respecter la cible,
+  ce qui empêche le solveur de laisser un seul examinateur absorber tout le dépassement pendant
+  que ses collègues finissent nettement plus tôt.
+- **quadratique.** Une pénalité linéaire est indifférente entre un examinateur à +60 min et six
+  examinateurs à +10 min, alors que seul le premier cas est réellement gênant ; elle se faisait de
+  surcroît écraser par le terme de tassement, qui pousse déjà dans le même sens (cf. ci-dessous).
+  Le carré fait décoller le coût des gros retards sans sur-contraindre les petits.
+
+Mise en œuvre par moteur :
 
 - **Monte-Carlo** (`selectionner_meilleur_algo`) : parmi les runs déjà conformes à l'écart minimum
   candidat, le run élu n'est plus celui au meilleur taux d'occupation examinateurs, mais celui dont
-  le dernier créneau utilisé (`AlgoOne.dernier_creneau_journee()`) est le plus petit — le taux
-  d'occupation ne sert plus qu'à départager une égalité. Sans effet sur le repli (aucun run
-  conforme). Exact et disponible immédiatement après `resoudre()`, sans attendre `calcul_horaires()`.
-- **CP-SAT** (`AlgoCP.resoudre`) : `AlgoCP._cutoff_creneau_fin_journee()` borne simplement la valeur
-  fournie à `[0, max_creneau]`. Le dépassement est ensuite pénalisé **par examinateur**, pas par
-  oral : pour chaque examinateur, on prend le maximum entre 0 et son propre dépassement le plus
-  profond (`(dernier créneau utilisé par cet examinateur) - cutoff`, via `model.AddMaxEquality`,
-  même construction que `charge_max`/`charge_min` pour l'équité) plutôt que de sommer le
-  dépassement de chacun de ses oraux en retard — un examinateur ayant plusieurs oraux tardifs n'est
-  donc pénalisé qu'une fois pour son pire cas, mais **chaque** examinateur est individuellement
-  poussé à respecter la cible, ce qui empêche le solveur de laisser un seul examinateur absorber
-  tout le dépassement pendant que ses collègues finissent nettement plus tôt. Poids
-  `ALGO_POIDS_CRENEAU_FIN_JOURNEE` (défaut `200`, nettement sous `ALGO_POIDS_EQUITE` : l'équité de
-  charge reste toujours prioritaire), sans jamais interdire ces créneaux (contrainte dure) : le
-  solveur les utilise quand même si c'est nécessaire pour rester faisable, il paie juste une
-  pénalité pour le faire.
+  `depassement_fin_journee()` est le plus faible — le taux d'occupation ne sert plus qu'à départager
+  une égalité. Sans effet sur le repli (aucun run conforme). Calculé sur les `Oral.heure_fin` réels,
+  donc exact (tiers-temps compris), mais nécessite `calcul_horaires()` — déjà appelé par `algo_run()`.
+- **CP-SAT** (`AlgoCP.resoudre`) : la même expression est reconstruite dans le modèle
+  (`AddMaxEquality` puis `AddMultiplicationEquality` pour le carré, une paire de variables par
+  examinateur seulement). Poids `ALGO_POIDS_FIN_JOURNEE`, sans jamais interdire les créneaux tardifs
+  (aucune contrainte dure) : le solveur les utilise quand même si c'est nécessaire pour rester
+  faisable, il paie juste une pénalité pour le faire.
 
-Les trois poids CP-SAT (`ALGO_POIDS_EQUITE`, `ALGO_BRUIT_TASSEMENT`, `ALGO_POIDS_CRENEAU_FIN_JOURNEE`)
+Le poids multipliant des **minutes²**, son défaut (`25`) est calé sur `ALGO_BRUIT_TASSEMENT`,
+l'échelle du tassement : une minute² de retard coûte exactement une minute de tassement d'un oral.
+Un dépassement de 5 min pèse alors comme un oral avancé de 25 min (arbitrable), un dépassement de
+30 min comme 30 oraux avancés de 30 min (rédhibitoire).
+
+Les trois poids CP-SAT (`ALGO_POIDS_EQUITE`, `ALGO_BRUIT_TASSEMENT`, `ALGO_POIDS_FIN_JOURNEE`)
 sont réglables depuis `/gestion/algo` → section Paramètres → **Paramètres avancés**, regroupés au
-même endroit pour faciliter leur comparaison — le créneau cible lui-même (activation + valeur) reste
-dans les paramètres principaux, à côté de la pause méridienne et des petites matières.
+même endroit pour faciliter leur comparaison — l'heure cible elle-même reste dans les paramètres
+principaux, à côté de la pause méridienne et des petites matières.
 
-Une version antérieure de ce réglage était exprimée en heure et convertie en index de créneau via
-une durée d'oral moyenne approchée côté CP-SAT — remplacé par un réglage direct en créneaux pour
-éviter cette approximation et unifier les deux moteurs sur la même grandeur exacte.
+> **Historique.** Une première version de ce réglage était déjà exprimée en heure, mais la
+> convertissait en index de créneau via une durée d'oral moyenne approchée — approximation
+> inacceptable dès que les matières ont des durées différentes. Elle a été remplacée par un réglage
+> direct en nombre de créneaux, qui supprimait bien la conversion mais ne pouvait plus exprimer une
+> heure, et dont la pénalité linéaire de poids `200` était en pratique inopérante (avancer un oral
+> d'un créneau rapporte `25 × durée du créneau` en tassement, soit ~750, contre 200 pour la
+> pénalité — dans la même direction, donc sans effet marginal). La version actuelle règle les deux
+> problèmes : on ne convertit plus l'heure en créneaux, ce sont les créneaux qui sont convertis en
+> minutes réelles, par matière.
 
 ### Pause périodique et tassement (CP-SAT)
 
@@ -277,13 +307,14 @@ qui reflète correctement le temps réellement perdu par l'examinateur plutôt q
 d'index.
 
 Passer le tassement en minutes déplace mécaniquement sa magnitude (potentiellement bien plus grande
-qu'un index de créneau, surtout sur un jeu de données réel avec beaucoup de candidats). Pour
-préserver la dominance de l'équité de charge sur le tassement (qui doit toujours l'emporter — cf.
-`ALGO_POIDS_EQUITE` ci-dessus), le poids d'équité réellement utilisé dans `model.Minimize(...)`
-n'est plus directement `ALGO_POIDS_EQUITE` mais `AlgoCP._poids_equite_effectif()`, qui relève ce
-poids **dynamiquement** au-delà de la borne max théorique du tassement quand nécessaire (et le
-laisse inchangé sinon). `ALGO_POIDS_EQUITE` reste donc un plancher réglable, jamais une valeur
-pouvant être dépassée par le tassement.
+qu'un index de créneau, surtout sur un jeu de données réel avec beaucoup de candidats) ; la pénalité
+de fin de journée, quadratique en minutes, atteint des ordres de grandeur comparables. Pour
+préserver la dominance de l'équité de charge sur ces deux termes (elle doit toujours l'emporter —
+cf. `ALGO_POIDS_EQUITE` ci-dessus), le poids d'équité réellement utilisé dans `model.Minimize(...)`
+n'est pas directement `ALGO_POIDS_EQUITE` mais `AlgoCP._poids_equite_effectif()`, qui relève ce
+poids **dynamiquement** au-delà de la borne max théorique du tassement **et** de la pénalité de fin
+de journée quand nécessaire (et le laisse inchangé sinon). `ALGO_POIDS_EQUITE` reste donc un
+plancher réglable, jamais une valeur pouvant être dépassée par les autres termes.
 
 ---
 

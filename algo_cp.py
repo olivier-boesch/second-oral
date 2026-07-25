@@ -33,10 +33,17 @@ ALGO_CP_TIMEOUT = _env_int("ALGO_CP_TIMEOUT", 60)
 # d'optimalité — peut prendre des heures sur un jeu de données réel.
 # Désactivé par défaut ; ALGO_CP_TIMEOUT est ignoré quand actif.
 ALGO_CP_OPTIMAL = _env_bool("ALGO_CP_OPTIMAL", False)
-# Poids de la pénalité "créneau cible de fin de journée" dans la fonction
-# objectif — cf. AlgoOne.creneau_cible_fin_journee et le commentaire dans
+# Poids de la pénalité "heure cible de fin de journée" dans la fonction
+# objectif — cf. AlgoOne.heure_cible_fin_journee et le commentaire dans
 # AlgoCP.resoudre().
-ALGO_POIDS_CRENEAU_FIN_JOURNEE = _env_int("ALGO_POIDS_CRENEAU_FIN_JOURNEE", 200)
+#
+# La pénalité étant QUADRATIQUE en minutes de dépassement, ce poids multiplie
+# des minutes², pas des index de créneau : le défaut est calé sur
+# ALGO_BRUIT_TASSEMENT, l'échelle du tassement (cf. plus bas), de sorte qu'une
+# minute² de retard coûte exactement une minute de tassement d'un oral. Un
+# dépassement de 5 min pèse alors comme un oral avancé de 25 min (arbitrable),
+# un dépassement de 30 min comme 30 oraux avancés de 30 min (rédhibitoire).
+ALGO_POIDS_FIN_JOURNEE = _env_int("ALGO_POIDS_FIN_JOURNEE", 25)
 # Poids de l'équité de charge entre examinateurs d'une même matière —
 # délibérément énorme par défaut (cf. commentaire dans AlgoCP.resoudre()) :
 # le solveur sacrifie toujours un meilleur tassement/créneau cible pour une
@@ -122,25 +129,37 @@ class AlgoCP(AlgoOne):
             if not isinstance(oral, CreneauInterdit)
         ]
 
-    def _cutoff_creneau_fin_journee(self, max_creneau: int) -> int | None:
-        """Borne `creneau_cible_fin_journee` à l'intervalle de créneaux valide.
+    def _cutoff_minutes_fin_journee(self) -> int | None:
+        """`heure_cible_fin_journee` exprimée en minutes depuis `heure_debut`.
 
-        Contrairement à une ancienne version de ce réglage (exprimé en heure,
-        converti en index de créneau via une durée d'oral moyenne approchée),
-        `creneau_cible_fin_journee` est déjà un index de créneau — aucune
-        conversion n'est nécessaire, seulement un clamp défensif.
+        Une ancienne version de ce réglage convertissait l'heure cible en
+        index de créneau via une durée d'oral moyenne approchée — une moyenne
+        n'a aucun sens ici, deux matières de durées différentes atteignant le
+        même index à des heures très éloignées. On ne convertit donc plus
+        l'heure en créneaux : c'est chaque créneau qui est converti en minutes
+        réelles avec la durée propre à la matière de son examinateur
+        (cf. `_minutes_fin_creneau`), et la comparaison se fait en minutes.
 
-        :return: index de créneau (borné à [0, max_creneau]), ou None si
-                 `creneau_cible_fin_journee` n'est pas défini.
+        :return: minutes écoulées depuis `heure_debut` (jamais négatif : une
+                 cible antérieure à l'heure de début donne 0, tout dépasse),
+                 ou None si `heure_cible_fin_journee` n'est pas défini.
         """
-        if self.creneau_cible_fin_journee is None:
+        if self.heure_cible_fin_journee is None:
             return None
-        return max(0, min(max_creneau, self.creneau_cible_fin_journee))
+        return max(0, round((
+            datetime.combine(date(1, 1, 1), self.heure_cible_fin_journee)
+            - datetime.combine(date(1, 1, 1), self.heure_debut)
+        ).total_seconds() / 60))
 
-    def _poids_equite_effectif(self, max_minutes: int, bruit_tassement: int) -> int:
+    def _poids_equite_effectif(
+        self,
+        max_minutes: int,
+        bruit_tassement: int,
+        borne_fin_journee: int = 0,
+    ) -> int:
         """Poids d'équité réellement utilisé dans l'objectif CP-SAT, en
-        garantissant sa dominance sur le tassement (cf. commentaire dans
-        `resoudre()`).
+        garantissant sa dominance sur TOUS les autres termes (cf. commentaire
+        dans `resoudre()`).
 
         Le tassement raisonne en minutes réelles (`AlgoCP._minutes_creneau`),
         potentiellement bien plus grandes qu'un simple index de créneau (ex.
@@ -148,12 +167,19 @@ class AlgoCP(AlgoOne):
         maximale possible (exactement 2 termes par candidat, cf.
         `model.AddExactlyOne`) peut donc dépasser `ALGO_POIDS_EQUITE` tel quel
         selon les données/réglages, cassant la garantie que l'équité de
-        charge prime toujours sur un meilleur tassement. Ne descend jamais
-        sous la valeur configurée par l'utilisateur, seulement au-dessus si
-        nécessaire.
+        charge prime toujours sur un meilleur tassement. La pénalité de fin de
+        journée, quadratique en minutes de dépassement, atteint des ordres de
+        grandeur du même genre : elle est majorée de la même façon, sans quoi
+        un réglage agressif de l'heure cible pourrait faire sacrifier
+        l'équité. Ne descend jamais sous la valeur configurée par
+        l'utilisateur, seulement au-dessus si nécessaire.
+
+        :param borne_fin_journee: majorant de la contribution de la pénalité
+            de fin de journée, poids compris (0 si la fonctionnalité est
+            désactivée).
         """
         borne_tassement = 2 * len(self.liste_candidats) * (max_minutes * bruit_tassement + bruit_tassement)
-        return max(ALGO_POIDS_EQUITE, borne_tassement + 1)
+        return max(ALGO_POIDS_EQUITE, borne_tassement + borne_fin_journee + 1)
 
     def _minutes_creneau(self, examinateur: Examinateur, matiere: Matiere) -> list[int | None]:
         """Minutes réelles écoulées depuis `heure_debut` jusqu'au sujet de
@@ -220,6 +246,33 @@ class AlgoCP(AlgoOne):
             n_avant_pause += 1
         return resultats
 
+    def _minutes_fin_creneau(self, examinateur: Examinateur, matiere: Matiere) -> list[int | None]:
+        """Minutes réelles écoulées depuis `heure_debut` jusqu'à la FIN de
+        l'oral de chaque créneau de cet examinateur.
+
+        `_minutes_creneau` donne l'instant où le sujet est remis ; la fin de
+        l'oral s'en déduit en ajoutant la durée effective d'un créneau POUR LA
+        MATIÈRE DE CET EXAMINATEUR (préparation + oral, cf.
+        `AlgoOne.calcul_horaires`), jamais une durée moyenne tous examinateurs
+        confondus : c'est précisément ce qui permet de comparer des
+        examinateurs de matières différentes à une même heure cible de fin de
+        journée.
+
+        Ignore le tiers-temps, inconnu avant résolution — même approximation
+        que `_minutes_creneau`, et écart au plus d'un tiers de temps de
+        préparation sur un objectif souple.
+
+        :return: liste indexée par créneau ; `None` pour un créneau
+                 `CreneauInterdit` (jamais assignable).
+        """
+        duree_creneau = round(
+            (matiere.temps_preparation + matiere.temps_oral).total_seconds() / 60
+        )
+        return [
+            None if minutes is None else minutes + duree_creneau
+            for minutes in self._minutes_creneau(examinateur, matiere)
+        ]
+
     def resoudre(self) -> None:
         """Résout l'appairage des oraux via un modèle CP-SAT.
 
@@ -273,8 +326,6 @@ class AlgoCP(AlgoOne):
             creneaux_par_examinateur.setdefault(examinateur, {}).setdefault(creneau, []).append(var)
         for vars_ in par_examinateur_creneau.values():
             model.AddAtMostOne(vars_)
-
-        max_creneau = self.max_creneaux_journee - 1
 
         # Correspondance créneau -> minutes réelles écoulées depuis
         # heure_debut, par examinateur (cf. _minutes_creneau) — sert à
@@ -360,49 +411,89 @@ class AlgoCP(AlgoOne):
             (minutes_par_examinateur[e][creneau] * bruit_tassement + random.randint(0, bruit_tassement - 1)) * var
             for (_c, _m, e, creneau), var in x.items()
         )
-        poids_equite_effectif = self._poids_equite_effectif(max_minutes, bruit_tassement)
+        # Heure cible de fin de journée (objectif souple, jamais bloquant) —
+        # pénalise le retard en MINUTES RÉELLES sur cette heure, PAR
+        # EXAMINATEUR (pas par oral) et de façon QUADRATIQUE. Reconstruit dans
+        # le modèle exactement la grandeur que le Monte-Carlo calcule après
+        # coup (cf. AlgoOne.depassement_fin_journee), aux approximations
+        # d'avant-résolution près (tiers-temps, cf. _minutes_creneau).
+        #
+        # - en minutes de fin d'oral, jamais en index de créneau : un même
+        #   index correspond à des heures très différentes selon la durée
+        #   d'oral de la matière, et `_minutes_fin_creneau` utilise la durée
+        #   propre à la matière de chaque examinateur, jamais une moyenne ;
+        # - par examinateur : on prend le max sur ses créneaux utilisés (même
+        #   construction que charge_max/charge_min pour l'équité ci-dessus),
+        #   donc un examinateur ayant plusieurs oraux en retard n'est pénalisé
+        #   qu'une fois pour son pire dépassement — mais CHAQUE examinateur
+        #   est individuellement poussé à respecter la cible, plutôt qu'une
+        #   seule pénalité globale que le solveur pourrait laisser peser sur
+        #   un seul examinateur sans qu'aucun autre terme ne s'y oppose ;
+        # - quadratique : une pénalité linéaire est indifférente entre un
+        #   examinateur à +60 min et six à +10 min, et se faisait de toute
+        #   façon écraser par le tassement, qui pousse déjà dans le même sens.
+        #   Le carré fait décoller le coût des gros retards — les seuls
+        #   réellement gênants — sans sur-contraindre les petits.
+        penalite_fin_journee = 0
+        borne_fin_journee = 0
+        cutoff_minutes = self._cutoff_minutes_fin_journee()
+        if cutoff_minutes is not None:
+            log.debug(
+                f"Run {self.numero_run} : CP-SAT — heure cible de fin de journée "
+                f"{self.heure_cible_fin_journee.strftime('%H:%M')} "
+                f"({cutoff_minutes} min après le début)"
+            )
+            minutes_fin_par_examinateur = {
+                examinateur: self._minutes_fin_creneau(examinateur, examinateur.matiere)
+                for examinateur in creneaux_par_examinateur
+            }
+            depassement_max = max(
+                (
+                    minutes_fin_par_examinateur[examinateur][creneau] - cutoff_minutes
+                    for examinateur, creneaux in creneaux_par_examinateur.items()
+                    for creneau in creneaux
+                ),
+                default=0,
+            )
+            depassement_max = max(0, depassement_max)
+            penalites_examinateurs = []
+            for examinateur, creneaux_utilises in creneaux_par_examinateur.items():
+                minutes_fin = minutes_fin_par_examinateur[examinateur]
+                # Un créneau non utilisé contribue 0, un créneau utilisé avant
+                # la cible contribue une valeur négative : le NewConstant(0)
+                # ajouté au max ramène les deux cas à "pas de dépassement".
+                termes = [
+                    (minutes_fin[creneau] - cutoff_minutes) * sum(vars_)
+                    for creneau, vars_ in creneaux_utilises.items()
+                ]
+                depassement = model.NewIntVar(
+                    0, depassement_max, f"depassement_fin_{examinateur.nom}",
+                )
+                model.AddMaxEquality(depassement, termes + [model.NewConstant(0)])
+                carre = model.NewIntVar(
+                    0, depassement_max ** 2, f"depassement_fin_carre_{examinateur.nom}",
+                )
+                model.AddMultiplicationEquality(carre, [depassement, depassement])
+                penalites_examinateurs.append(carre)
+            penalite_fin_journee = sum(penalites_examinateurs)
+            borne_fin_journee = (
+                ALGO_POIDS_FIN_JOURNEE * len(penalites_examinateurs) * depassement_max ** 2
+            )
+
+        poids_equite_effectif = self._poids_equite_effectif(
+            max_minutes, bruit_tassement, borne_fin_journee,
+        )
         if poids_equite_effectif > ALGO_POIDS_EQUITE:
             log.debug(
                 f"Run {self.numero_run} : CP-SAT — poids équité relevé de "
                 f"{ALGO_POIDS_EQUITE} à {poids_equite_effectif} pour garantir sa dominance "
-                f"sur le tassement (désormais en minutes réelles, potentiellement plus grand "
-                f"qu'un simple index de créneau)"
+                f"sur le tassement (en minutes réelles) et sur la pénalité de fin de journée "
+                f"(quadratique), potentiellement bien plus grands qu'un simple index de créneau"
             )
-
-        # Créneau cible de fin de journée (objectif souple, jamais bloquant) —
-        # pénalise le dépassement de cet index, PAR EXAMINATEUR (pas par
-        # oral) : pour chaque examinateur, on prend le max sur ses créneaux
-        # utilisés (même construction que charge_max/charge_min pour
-        # l'équité ci-dessus), donc un examinateur ayant plusieurs oraux en
-        # retard n'est pénalisé qu'une fois pour son pire dépassement — mais
-        # CHAQUE examinateur est individuellement poussé à respecter la
-        # cible, plutôt qu'une seule pénalité globale que le solveur pourrait
-        # laisser peser sur un seul examinateur sans qu'aucun autre terme ne
-        # s'y oppose spécifiquement. Poids nettement inférieur à ALGO_POIDS_EQUITE :
-        # l'équité de charge reste toujours prioritaire.
-        penalite_fin_journee = 0
-        cutoff_creneau = self._cutoff_creneau_fin_journee(max_creneau)
-        if cutoff_creneau is not None:
-            log.debug(
-                f"Run {self.numero_run} : CP-SAT — créneau cible de fin de journée "
-                f"{cutoff_creneau}"
-            )
-            penalites_examinateurs = []
-            for examinateur, creneaux_utilises in creneaux_par_examinateur.items():
-                termes = [
-                    (creneau - cutoff_creneau) * sum(vars_)
-                    for creneau, vars_ in creneaux_utilises.items()
-                ]
-                penalite_examinateur = model.NewIntVar(
-                    0, max_creneau, f"penalite_fin_{examinateur.nom}",
-                )
-                model.AddMaxEquality(penalite_examinateur, termes + [model.NewConstant(0)])
-                penalites_examinateurs.append(penalite_examinateur)
-            penalite_fin_journee = sum(penalites_examinateurs)
 
         model.Minimize(
             poids_equite_effectif * sum(ecarts_charge)
-            + ALGO_POIDS_CRENEAU_FIN_JOURNEE * penalite_fin_journee
+            + ALGO_POIDS_FIN_JOURNEE * penalite_fin_journee
             + objectif_tassement
         )
 

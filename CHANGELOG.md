@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+**Objectif de fin de journée — heure réelle par matière, pénalité quadratique**
+- `ALGO_CRENEAU_CIBLE_FIN_JOURNEE` (index de créneau) devient **`ALGO_HEURE_CIBLE_FIN_JOURNEE`** (heure `HH:MM`), et `ALGO_POIDS_CRENEAU_FIN_JOURNEE` (défaut `200`) devient **`ALGO_POIDS_FIN_JOURNEE`** (défaut `25`). `AlgoOne.__init__(creneau_cible_fin_journee=)` → `heure_cible_fin_journee=`.
+- **Le poids précédent était inopérant.** Trois causes cumulées : (1) écrasé par le terme de tassement, qui pousse déjà dans la même direction et pèse `25 × durée du créneau` ≈ 750 contre 200 pour la pénalité, jamais décisive ; (2) exprimé en *index* de créneau, donc incapable d'exprimer une heure — le créneau 13 tombe vers midi pour une matière à 20 min/oral, bien après 20h pour une matière à 60 min, ce qui revenait à raisonner sur une durée d'oral moyenne implicite ; (3) linéaire, donc indifférent entre un examinateur à +60 min et six à +10 min.
+- Les deux moteurs minimisent désormais la même grandeur, `AlgoOne.depassement_fin_journee()` : la somme, **par examinateur**, du **carré** de son retard en minutes sur l'heure cible. Monte-Carlo la calcule sur les `Oral.heure_fin` réels (tiers-temps compris) dans `selectionner_meilleur_algo(heure_cible=...)` ; CP-SAT reconstruit la même expression dans son objectif (`AddMaxEquality` puis `AddMultiplicationEquality`, une paire de variables par examinateur).
+- Côté CP-SAT, la conversion se fait **des créneaux vers les minutes**, jamais l'inverse : `AlgoCP._minutes_fin_creneau()` = `_minutes_creneau()` + `temps_preparation` + `temps_oral` **de la matière de l'examinateur concerné**, donc avec sa durée d'oral propre et jamais une moyenne. `_cutoff_creneau_fin_journee()` (clamp d'index) est remplacé par `_cutoff_minutes_fin_journee()` (heure cible → minutes depuis `heure_debut`). Plus aucun terme de l'objectif CP-SAT ne raisonne en index de créneau.
+- Le nouveau défaut `25` est calé sur `ALGO_BRUIT_TASSEMENT`, l'échelle du tassement : une minute² de retard coûte exactement une minute de tassement d'un oral. Un dépassement de 5 min pèse comme un oral avancé de 25 min, un dépassement de 30 min comme 30 oraux avancés de 30 min.
+- `AlgoCP._poids_equite_effectif()` prend un troisième argument `borne_fin_journee` : la pénalité quadratique pouvant à elle seule dépasser `ALGO_POIDS_EQUITE`, sa borne entre désormais dans le calcul, faute de quoi l'équité de charge cesserait d'être prioritaire.
+- `/gestion/algo` → Paramètres : le couple case « Activer » + curseur de créneau cible est remplacé par un simple sélecteur d'heure (vide = désactivé, même convention que la pause méridienne). Paramètres avancés : « Poids créneau cible » → « Poids heure de fin de journée ».
+- `AlgoOne.dernier_creneau_journee()` est supprimée (plus aucun appelant), ainsi que le helper `_env_int_optional()`.
+- **Migration** : l'ancienne clé `creneau_cible_fin_journee` d'un `data/algo_params.json` existant est ignorée — le réglage repart désactivé, à re-renseigner en heure depuis `/gestion/algo` si besoin. Il est désactivé par défaut, donc sans effet sur les installations qui ne l'utilisaient pas.
+
 ## [2027.0] — 2026-07-13
 
 Cette version tire les leçons de la session 2026 et referme les deux

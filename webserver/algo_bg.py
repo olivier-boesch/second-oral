@@ -124,10 +124,10 @@ def run_algo(publish_fn: Callable[[str], None], db_host: str | None = None,
                 )
             if "seuil_petite_matiere" in params:
                 env["ALGO_SEUIL_PETITE_MATIERE"] = str(params["seuil_petite_matiere"])
-            if "creneau_cible_fin_journee" in params:
-                env["ALGO_CRENEAU_CIBLE_FIN_JOURNEE"] = str(params["creneau_cible_fin_journee"])
-            if "poids_creneau_fin_journee" in params:
-                env["ALGO_POIDS_CRENEAU_FIN_JOURNEE"] = str(params["poids_creneau_fin_journee"])
+            if "heure_cible_fin_journee" in params:
+                env["ALGO_HEURE_CIBLE_FIN_JOURNEE"] = str(params["heure_cible_fin_journee"])
+            if "poids_fin_journee" in params:
+                env["ALGO_POIDS_FIN_JOURNEE"] = str(params["poids_fin_journee"])
             if "poids_equite" in params:
                 env["ALGO_POIDS_EQUITE"] = str(params["poids_equite"])
             if "bruit_tassement" in params:

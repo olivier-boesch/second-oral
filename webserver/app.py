@@ -3449,8 +3449,8 @@ _ALGO_PARAMS_DEFAULTS = {
     "pause_meridienne_duree": 60,
     "petites_matieres_fin_journee": True,
     "seuil_petite_matiere": 5,
-    "creneau_cible_fin_journee": "",
-    "poids_creneau_fin_journee": 200,
+    "heure_cible_fin_journee": "",
+    "poids_fin_journee": 25,
     "poids_equite": 1_000_000,
     "bruit_tassement": 25,
     "intervalle_pause": 4,
@@ -3692,13 +3692,14 @@ def algo_save_params() -> ResponseReturnValue:
         params["pause_meridienne_duree"] = max(
             0, min(240, int(data.get("pause_meridienne_duree", 60))),
         )
-        creneau_cible_raw = str(data.get("creneau_cible_fin_journee", "")).strip()
-        if creneau_cible_raw:
-            params["creneau_cible_fin_journee"] = max(1, min(30, int(creneau_cible_raw)))
+        heure_cible_raw = str(data.get("heure_cible_fin_journee", "")).strip()
+        if heure_cible_raw:
+            h, m = heure_cible_raw.split(":")
+            params["heure_cible_fin_journee"] = f"{int(h):02d}:{int(m):02d}"
         else:
-            params["creneau_cible_fin_journee"] = ""
-        params["poids_creneau_fin_journee"] = max(
-            0, min(100_000, int(data.get("poids_creneau_fin_journee", 200))),
+            params["heure_cible_fin_journee"] = ""
+        params["poids_fin_journee"] = max(
+            0, min(100_000, int(data.get("poids_fin_journee", 25))),
         )
         params["poids_equite"] = max(
             0, min(100_000_000, int(data.get("poids_equite", 1_000_000))),

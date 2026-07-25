@@ -473,13 +473,15 @@ class TestAlgoCPEquiteEntreExaminateurs:
         )
         assert max(charges.values()) - min(charges.values()) <= 1
 
-    def test_depassement_creneau_cible_reparti_pas_concentre(self, tmp_path, monkeypatch):
-        """Régression : la pénalité de créneau cible est calculée par examinateur
+    def test_depassement_fin_journee_reparti_pas_concentre(self, tmp_path, monkeypatch):
+        """Régression : la pénalité de fin de journée est calculée par examinateur
         (max de son propre dépassement), pas sommée sur tous ses oraux en retard —
         sinon un seul examinateur pourrait absorber tout le dépassement pendant
-        que ses collègues finissent nettement plus tôt."""
+        que ses collègues finissent nettement plus tôt. Le caractère quadratique
+        renforce encore cette répartition.
+        """
         import algo_cp
-        monkeypatch.setattr(algo_cp, "ALGO_POIDS_CRENEAU_FIN_JOURNEE", 5000)
+        monkeypatch.setattr(algo_cp, "ALGO_POIDS_FIN_JOURNEE", 5000)
         monkeypatch.setattr(algo_cp, "ALGO_CP_TIMEOUT", 5)
         alg = _build_algo_cp(
             tmp_path,
@@ -488,7 +490,8 @@ class TestAlgoCPEquiteEntreExaminateurs:
                 _exam("ProfA", "Maths", "A101"), _exam("ProfA2", "Maths", "A102"),
                 _exam("ProfB", "Philo", "B101"), _exam("ProfB2", "Philo", "B102"),
             ],
-            creneau_cible_fin_journee=2,
+            # Créneau 2 (20 min/créneau) : sujet à 8h40, fin d'oral à 9h20.
+            heure_cible_fin_journee=time(hour=9, minute=20),
         )
         alg.resoudre()
         dernier_creneau_par_examinateur: dict[str, int] = {}
@@ -540,55 +543,173 @@ class TestPoidsEquiteEffectif:
         # Même avec max_minutes/bruit à 0 (borne nulle), jamais sous la valeur configurée.
         assert alg._poids_equite_effectif(0, 0) == algo_cp.ALGO_POIDS_EQUITE
 
-
-class TestCutoffCreneauFinJournee:
-    """AlgoCP._cutoff_creneau_fin_journee : borne creneau_cible_fin_journee
-    à [0, max_creneau] — testée directement, sans passer par le solveur
-    CP-SAT. Aucune conversion (le réglage est déjà un index de créneau)."""
-
-    def test_none_si_creneau_cible_non_defini(self, tmp_path):
+    def test_borne_fin_journee_prise_en_compte(self, tmp_path, monkeypatch):
+        """La pénalité de fin de journée étant quadratique en minutes, elle peut
+        à elle seule dépasser le poids d'équité configuré : sa borne doit entrer
+        dans le calcul, sinon l'équité cesserait d'être prioritaire."""
+        import algo_cp
+        monkeypatch.setattr(algo_cp, "ALGO_POIDS_EQUITE", 10)
         alg = _build_algo_cp(
             tmp_path,
-            candidats=[_cand(f"Cand{i}", f"400000000{i}") for i in range(3)],
+            candidats=[_cand(f"Cand{i}", f"630000000{i}") for i in range(10)],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
         )
-        assert alg._cutoff_creneau_fin_journee(max_creneau=14) is None
+        # borne tassement = 2*10*(1200*25+25) = 600 500, + borne fin de journée.
+        assert alg._poids_equite_effectif(1200, 25, 4_000_000) == 4_600_501
 
-    def test_valeur_inchangee_si_dans_les_bornes(self, tmp_path):
+    def test_borne_fin_journee_nulle_par_defaut(self, tmp_path, monkeypatch):
+        """Fonctionnalité désactivée : le poids reste celui du seul tassement."""
+        import algo_cp
+        monkeypatch.setattr(algo_cp, "ALGO_POIDS_EQUITE", 10)
         alg = _build_algo_cp(
             tmp_path,
-            candidats=[_cand(f"Cand{i}", f"410000000{i}") for i in range(3)],
+            candidats=[_cand(f"Cand{i}", f"640000000{i}") for i in range(10)],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
-            creneau_cible_fin_journee=5,
         )
-        assert alg._cutoff_creneau_fin_journee(max_creneau=14) == 5
+        assert alg._poids_equite_effectif(1200, 25) == 600_501
 
-    def test_borne_a_zero_si_cible_negative(self, tmp_path):
+
+class TestCutoffMinutesFinJournee:
+    """AlgoCP._cutoff_minutes_fin_journee : convertit heure_cible_fin_journee
+    en minutes depuis heure_debut — testée directement, sans passer par le
+    solveur CP-SAT."""
+
+    def _alg(self, tmp_path, prefixe, **kwargs):
+        return _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"{prefixe}{i}") for i in range(3)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            heure_debut=time(hour=8, minute=0),
+            **kwargs,
+        )
+
+    def test_none_si_heure_cible_non_definie(self, tmp_path):
+        assert self._alg(tmp_path, "40000000")._cutoff_minutes_fin_journee() is None
+
+    def test_conversion_en_minutes_depuis_heure_debut(self, tmp_path):
+        alg = self._alg(tmp_path, "41000000", heure_cible_fin_journee=time(hour=17, minute=30))
+        assert alg._cutoff_minutes_fin_journee() == 570
+
+    def test_zero_si_cible_egale_a_heure_debut(self, tmp_path):
+        alg = self._alg(tmp_path, "42000000", heure_cible_fin_journee=time(hour=8, minute=0))
+        assert alg._cutoff_minutes_fin_journee() == 0
+
+    def test_borne_a_zero_si_cible_avant_heure_debut(self, tmp_path):
+        """Cas absurde mais non bloquant : tout dépasse, rien ne plante."""
+        alg = self._alg(tmp_path, "43000000", heure_cible_fin_journee=time(hour=7, minute=0))
+        assert alg._cutoff_minutes_fin_journee() == 0
+
+    def test_suit_l_heure_de_debut(self, tmp_path):
+        """La cible est absolue : décaler l'heure de début réduit d'autant la
+        marge disponible avant la cible."""
         alg = _build_algo_cp(
             tmp_path,
-            candidats=[_cand(f"Cand{i}", f"430000000{i}") for i in range(3)],
+            candidats=[_cand(f"Cand{i}", f"44000000{i}") for i in range(3)],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
-            creneau_cible_fin_journee=-3,
+            heure_debut=time(hour=9, minute=30),
+            heure_cible_fin_journee=time(hour=17, minute=30),
         )
-        assert alg._cutoff_creneau_fin_journee(max_creneau=14) == 0
+        assert alg._cutoff_minutes_fin_journee() == 480
 
-    def test_borne_a_max_creneau_si_cible_trop_grande(self, tmp_path):
+
+class TestMinutesFinCreneau:
+    """AlgoCP._minutes_fin_creneau : minutes réelles jusqu'à la FIN de l'oral
+    de chaque créneau, avec la durée propre à la matière de l'examinateur."""
+
+    # Maths : 20 min de préparation + 20 min d'oral -> créneau de 20 min,
+    # oral terminé 40 min après la remise du sujet.
+    # Long  : 60 + 60 -> créneau de 60 min, oral terminé 120 min après.
+    _PREPS_DUREES_DIFFERENTES = ["Maths;Maths;20;20", "Long;Long;60;60"]
+
+    def _alg(self, tmp_path):
+        return _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"45000000{i}", m1="Maths", m2="Long")
+                        for i in range(3)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfLong", "Long", "B101")],
+            preps=self._PREPS_DUREES_DIFFERENTES,
+            heure_debut=time(hour=8, minute=0),
+            heure_cible_fin_journee=time(hour=12, minute=0),
+        )
+
+    def _par_matiere(self, alg):
+        exams = {e.matiere.nom: e for e in alg.liste_examinateurs}
+        return {
+            nom: alg._minutes_fin_creneau(exam, exam.matiere)
+            for nom, exam in exams.items()
+        }
+
+    def test_ajoute_la_duree_effective_de_la_matiere(self, tmp_path):
+        alg = self._alg(tmp_path)
+        for nom, minutes_fin in self._par_matiere(alg).items():
+            exam = next(e for e in alg.liste_examinateurs if e.matiere.nom == nom)
+            duree = round(
+                (exam.matiere.temps_preparation + exam.matiere.temps_oral).total_seconds() / 60
+            )
+            minutes_sujet = alg._minutes_creneau(exam, exam.matiere)
+            assert [
+                None if m is None else m + duree for m in minutes_sujet
+            ] == minutes_fin
+
+    def test_duree_propre_a_la_matiere_jamais_une_moyenne(self, tmp_path):
+        """Le cœur du réglage : à index de créneau égal, deux matières de durées
+        différentes finissent à des heures très différentes. Une conversion par
+        durée d'oral moyenne (ce que faisait une version retirée de ce réglage)
+        les confondrait."""
+        minutes = self._par_matiere(self._alg(tmp_path))
+        # Créneau 0 : Maths finit à 8h40 (40 min), Long à 10h00 (120 min).
+        assert minutes["Maths"][0] == 40
+        assert minutes["Long"][0] == 120
+        # Créneau 2 : Maths finit à 9h20 (80 min), Long à 12h00 (240 min).
+        assert minutes["Maths"][2] == 80
+        assert minutes["Long"][2] == 240
+
+    def test_meme_heure_cible_bornes_de_creneaux_differentes(self, tmp_path):
+        """Conséquence directe : une même heure cible autorise beaucoup plus de
+        créneaux à la matière courte qu'à la longue."""
+        alg = self._alg(tmp_path)
+        cutoff = alg._cutoff_minutes_fin_journee()   # 12h00 - 8h00 = 240 min
+        assert cutoff == 240
+        minutes = self._par_matiere(alg)
+        derniers = {
+            nom: max(
+                (creneau for creneau, m in enumerate(minutes_fin)
+                 if m is not None and m <= cutoff),
+                default=None,
+            )
+            for nom, minutes_fin in minutes.items()
+        }
+        assert derniers["Maths"] > derniers["Long"]
+        # Le solveur pénalise en minutes, jamais en index : c'est bien la même
+        # heure cible qui produit ces deux bornes différentes.
+        assert minutes["Long"][derniers["Long"]] <= cutoff
+        assert minutes["Maths"][derniers["Maths"]] <= cutoff
+
+    def test_none_conserve_pour_les_creneaux_interdits(self, tmp_path):
+        """Un créneau interdit (début de journée décalé) reste non assignable."""
         alg = _build_algo_cp(
             tmp_path,
-            candidats=[_cand(f"Cand{i}", f"440000000{i}") for i in range(3)],
-            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
-            creneau_cible_fin_journee=999,
+            candidats=[_cand(f"Cand{i}", f"46000000{i}") for i in range(3)],
+            exams=[
+                _exam("ProfMaths", "Maths", "A101", heure=10),
+                _exam("ProfPhilo", "Philo", "B101"),
+            ],
+            heure_debut=time(hour=8, minute=0),
         )
-        assert alg._cutoff_creneau_fin_journee(max_creneau=14) == 14
+        exam = next(e for e in alg.liste_examinateurs if e.nom == "ProfMaths")
+        minutes_sujet = alg._minutes_creneau(exam, exam.matiere)
+        minutes_fin = alg._minutes_fin_creneau(exam, exam.matiere)
+        assert [m is None for m in minutes_fin] == [m is None for m in minutes_sujet]
+        assert any(m is None for m in minutes_fin)
 
 
-class TestAlgoCPCreneauCibleFinJournee:
-    """Résolution complète avec creneau_cible_fin_journee : objectif souple,
+class TestAlgoCPHeureCibleFinJournee:
+    """Résolution complète avec heure_cible_fin_journee : objectif souple,
     ne doit jamais empêcher un placement par ailleurs faisable."""
 
     def test_poids_defaut(self):
         import algo_cp
-        assert algo_cp.ALGO_POIDS_CRENEAU_FIN_JOURNEE == 200
+        assert algo_cp.ALGO_POIDS_FIN_JOURNEE == 25
 
     def test_poids_equite_defaut(self):
         import algo_cp
@@ -617,7 +738,8 @@ class TestAlgoCPCreneauCibleFinJournee:
             candidats=[_cand(f"Cand{i}", f"450000000{i}") for i in range(6)],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
             heure_debut=time(hour=8, minute=0),
-            creneau_cible_fin_journee=1,
+            # Cible volontairement intenable : objectif souple, jamais bloquant.
+            heure_cible_fin_journee=time(hour=8, minute=30),
         )
         alg.resoudre()
         alg.calcul_horaires()
@@ -631,6 +753,36 @@ class TestAlgoCPCreneauCibleFinJournee:
                 datetime.combine(date(1, 1, 1), h2) - datetime.combine(date(1, 1, 1), h1)
             ).total_seconds() / 60
             assert ecart_minutes >= minutes_mini
+
+    def test_cible_atteignable_respectee(self, tmp_path, monkeypatch):
+        """Avec assez d'examinateurs pour tenir la cible, aucun oral ne doit la
+        dépasser — c'est ce que l'ancienne pénalité linéaire en index de créneau,
+        écrasée par le tassement, ne garantissait pas."""
+        import algo_cp
+        monkeypatch.setattr(algo_cp, "ALGO_CP_TIMEOUT", 10)
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"480000000{i}") for i in range(6)],
+            exams=[
+                _exam("ProfA", "Maths", "A101"), _exam("ProfA2", "Maths", "A102"),
+                _exam("ProfB", "Philo", "B101"), _exam("ProfB2", "Philo", "B102"),
+            ],
+            heure_debut=time(hour=8, minute=0),
+            heure_cible_fin_journee=time(hour=10, minute=0),
+        )
+        alg.resoudre()
+        alg.calcul_horaires()
+        assert alg.depassement_fin_journee(time(hour=10, minute=0)) == 0
+
+    def test_desactivee_aucune_penalite(self, tmp_path):
+        """Sans heure cible, le modèle ne crée aucune variable de dépassement."""
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"490000000{i}") for i in range(4)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+        alg.resoudre()
+        assert len(alg.liste_oraux) == 8
 
 
 class TestAlgoCPModeOptimal:
