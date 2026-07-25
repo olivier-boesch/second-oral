@@ -803,26 +803,40 @@ class TestHeureFinJournee:
 
 class TestDepassementFinJournee:
     """AlgoOne.depassement_fin_journee() : somme, par examinateur, du carré de
-    son retard en minutes sur l'heure cible de fin de journée. C'est la
-    grandeur commune aux deux moteurs (cf. AlgoCP.resoudre)."""
+    son retard évitable en minutes sur l'heure cible de fin de journée. C'est
+    la grandeur commune aux deux moteurs (cf. AlgoCP.resoudre).
+
+    Ici la cible (17h30) est très au-delà de ce que les examinateurs sont
+    forcés de faire : leur cutoff personnalisé reste la cible globale, et
+    seule l'agrégation quadratique est testée (le plancher de charge a sa
+    propre classe ci-dessous).
+    """
+
+    _CIBLE = time(hour=17, minute=30)
 
     def _alg_avec_fins(self, tmp_path, fins_par_examinateur, **kwargs):
         """Construit un AlgoOne dont liste_oraux porte des heure_fin imposées.
 
         On court-circuite resoudre()/calcul_horaires() : ce qui est testé ici
-        est l'agrégation quadratique, pas le placement.
+        est l'agrégation, pas le placement. Les Examinateur sont en revanche
+        de vrais objets — depassement_fin_journee() a besoin de leur matière
+        pour calculer leur cutoff personnalisé.
         """
+        noms = list(fins_par_examinateur)
         alg = _build_algo(
             tmp_path,
             candidats=[_cand("Cand0", "9930000000")],
-            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            exams=[_exam(nom, "Maths", f"A{i}") for i, nom in enumerate(noms)]
+                  + [_exam("ProfPhilo", "Philo", "B101")],
+            heure_debut=time(hour=8, minute=0),
             **kwargs,
         )
+        par_nom = {e.nom: e for e in alg.liste_examinateurs}
         alg.liste_oraux = []
-        for examinateur, heures_fin in fins_par_examinateur.items():
+        for nom, heures_fin in fins_par_examinateur.items():
             for heure_fin in heures_fin:
-                oral = MagicMock(name=f"oral_{examinateur}_{heure_fin}")
-                oral.examinateur = examinateur
+                oral = MagicMock(name=f"oral_{nom}_{heure_fin}")
+                oral.examinateur = par_nom[nom]
                 oral.heure_fin = heure_fin
                 alg.liste_oraux.append(oral)
         return alg
@@ -835,11 +849,11 @@ class TestDepassementFinJournee:
         alg = self._alg_avec_fins(
             tmp_path, {"A": [time(hour=16, minute=0)], "B": [time(hour=17, minute=30)]},
         )
-        assert alg.depassement_fin_journee(time(hour=17, minute=30)) == 0
+        assert alg.depassement_fin_journee(self._CIBLE) == 0
 
     def test_carre_du_retard_en_minutes(self, tmp_path):
         alg = self._alg_avec_fins(tmp_path, {"A": [time(hour=17, minute=40)]})
-        assert alg.depassement_fin_journee(time(hour=17, minute=30)) == 100
+        assert alg.depassement_fin_journee(self._CIBLE) == 100
 
     def test_un_seul_comptage_par_examinateur_le_pire(self, tmp_path):
         """Un examinateur qui traîne plusieurs oraux au-delà de la cible n'est
@@ -848,65 +862,172 @@ class TestDepassementFinJournee:
             tmp_path,
             {"A": [time(hour=17, minute=35), time(hour=17, minute=40), time(hour=17, minute=32)]},
         )
-        assert alg.depassement_fin_journee(time(hour=17, minute=30)) == 100
+        assert alg.depassement_fin_journee(self._CIBLE) == 100
 
     def test_quadratique_un_gros_retard_coute_plus_que_plusieurs_petits(self, tmp_path):
         """Le point de la pénalité quadratique : à retard cumulé égal, un seul
         examinateur très en retard doit coûter beaucoup plus cher que
         plusieurs légèrement en retard — ce dont une pénalité linéaire, elle,
         serait indifférente."""
-        cible = time(hour=17, minute=30)
         concentre = self._alg_avec_fins(tmp_path, {"A": [time(hour=18, minute=30)]})
         reparti = self._alg_avec_fins(
             tmp_path,
             {nom: [time(hour=17, minute=40)] for nom in ("A", "B", "C", "D", "E", "F")},
         )
         # Retard cumulé identique (60 min), mais 60² = 3600 contre 6 * 10² = 600.
-        assert concentre.depassement_fin_journee(cible) == 3600
-        assert reparti.depassement_fin_journee(cible) == 600
-        assert concentre.depassement_fin_journee(cible) > reparti.depassement_fin_journee(cible)
+        assert concentre.depassement_fin_journee(self._CIBLE) == 3600
+        assert reparti.depassement_fin_journee(self._CIBLE) == 600
+        assert (concentre.depassement_fin_journee(self._CIBLE)
+                > reparti.depassement_fin_journee(self._CIBLE))
 
     def test_utilise_l_heure_cible_du_constructeur_par_defaut(self, tmp_path):
         alg = self._alg_avec_fins(
             tmp_path,
             {"A": [time(hour=17, minute=40)]},
-            heure_cible_fin_journee=time(hour=17, minute=30),
+            heure_cible_fin_journee=self._CIBLE,
         )
         assert alg.depassement_fin_journee() == 100
 
     def test_ignore_les_oraux_sans_heure_fin(self, tmp_path):
         """Avant calcul_horaires(), heure_fin vaut None sur chaque Oral."""
         alg = self._alg_avec_fins(tmp_path, {"A": [None, time(hour=17, minute=40)]})
-        assert alg.depassement_fin_journee(time(hour=17, minute=30)) == 100
+        assert alg.depassement_fin_journee(self._CIBLE) == 100
 
     def test_zero_sans_aucun_oral_place(self, tmp_path):
-        alg = self._alg_avec_fins(tmp_path, {})
-        assert alg.depassement_fin_journee(time(hour=17, minute=30)) == 0
+        alg = self._alg_avec_fins(tmp_path, {"A": []})
+        assert alg.depassement_fin_journee(self._CIBLE) == 0
 
-    def test_coherent_avec_un_placement_reel(self, tmp_path):
-        """Bout en bout : la valeur retournée correspond bien aux heure_fin
-        calculées par calcul_horaires()."""
+
+class TestChargePlancher:
+    """AlgoOne._charge_plancher() : nombre d'oraux que chaque examinateur d'une
+    matière recevra au moins, déduit des seules données (jamais de la solution
+    en cours) — cf. _cutoff_minutes_examinateur."""
+
+    def _matiere(self, tmp_path, nom, n_candidats, n_examinateurs, prefixe):
         alg = _build_algo(
             tmp_path,
-            candidats=[_cand(f"Cand{i}", f"994000000{i}") for i in range(6)],
+            candidats=[_cand(f"Cand{i}", f"{prefixe}{i}") for i in range(n_candidats)],
+            exams=[_exam(f"ProfMaths{i}", "Maths", f"A{i}") for i in range(n_examinateurs)]
+                  + [_exam("ProfPhilo", "Philo", "B101")],
+        )
+        return alg, next(m for m in alg.liste_matieres if m.nom == nom)
+
+    def test_division_entiere_du_nombre_d_oraux(self, tmp_path):
+        alg, matiere = self._matiere(tmp_path, "Maths", 10, 2, "99500000")
+        assert alg._charge_plancher(matiere) == 5
+
+    def test_arrondi_vers_le_bas_jamais_vers_le_haut(self, tmp_path):
+        """floor et non ceil : surestimer la charge forcée excuserait un retard
+        que le solveur aurait pu éviter."""
+        alg, matiere = self._matiere(tmp_path, "Maths", 11, 2, "99510000")
+        assert alg._charge_plancher(matiere) == 5
+
+    def test_zero_si_plus_d_examinateurs_que_de_candidats(self, tmp_path):
+        alg, matiere = self._matiere(tmp_path, "Maths", 2, 4, "99520000")
+        assert alg._charge_plancher(matiere) == 0
+
+    def test_zero_si_aucun_examinateur(self, tmp_path):
+        alg, matiere = self._matiere(tmp_path, "Maths", 3, 1, "99530000")
+        matiere.examinateurs = []
+        assert alg._charge_plancher(matiere) == 0
+
+
+class TestCutoffMinutesExaminateur:
+    """AlgoOne._cutoff_minutes_examinateur() : heure cible personnalisée, de
+    sorte que seul le retard ÉVITABLE soit pénalisé."""
+
+    def _alg(self, tmp_path):
+        return _build_algo(
+            tmp_path,
+            candidats=[_cand("Cand0", "9960000000")],
             exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+        )
+
+    # Créneaux de 20 min, oral terminé 40 min après le sujet : le créneau k se
+    # termine à 20k + 40 min (hors pause périodique).
+    _MINUTES_FIN = [40, 60, 80, 100, 120]
+
+    def test_cible_globale_si_aucune_charge_forcee(self, tmp_path):
+        alg = self._alg(tmp_path)
+        assert alg._cutoff_minutes_examinateur(90, self._MINUTES_FIN, 0) == 90
+
+    def test_cible_globale_si_la_charge_forcee_tient_dans_le_delai(self, tmp_path):
+        """Plancher de 2 oraux -> fin minimale 60 min, avant la cible (90) :
+        l'examinateur pouvait tenir la cible, rien n'est excusé."""
+        alg = self._alg(tmp_path)
+        assert alg._cutoff_minutes_examinateur(90, self._MINUTES_FIN, 2) == 90
+
+    def test_repousse_a_la_fin_minimale_forcee(self, tmp_path):
+        """Plancher de 4 oraux -> fin minimale 100 min, au-delà de la cible
+        (90) : les 10 min de retard forcées ne sont pas pénalisées."""
+        alg = self._alg(tmp_path)
+        assert alg._cutoff_minutes_examinateur(90, self._MINUTES_FIN, 4) == 100
+
+    def test_jamais_avance_avant_la_cible_globale(self, tmp_path):
+        alg = self._alg(tmp_path)
+        assert alg._cutoff_minutes_examinateur(200, self._MINUTES_FIN, 1) == 200
+
+    def test_sature_par_construction_plus_aucune_penalite(self, tmp_path):
+        """Plancher supérieur au nombre de créneaux assignables : l'examinateur
+        est saturé par les données elles-mêmes, son cutoff devient la fin de son
+        dernier créneau — donc dépassement nul quoi qu'il arrive."""
+        alg = self._alg(tmp_path)
+        assert alg._cutoff_minutes_examinateur(90, self._MINUTES_FIN, 99) == 120
+
+    def test_journee_commencant_tard_repousse_la_fin_minimale(self, tmp_path):
+        """Les créneaux CreneauInterdit (None) ne comptent pas dans le décompte
+        du plancher : un examinateur démarrant plus tard voit mécaniquement sa
+        fin minimale repoussée."""
+        alg = self._alg(tmp_path)
+        tot = [40, 60, 80, 100, 120]
+        tard = [None, None, 80, 100, 120]
+        # 2e créneau assignable : 60 min pour le premier, 100 min pour le second.
+        assert alg._cutoff_minutes_examinateur(50, tot, 2) == 60
+        assert alg._cutoff_minutes_examinateur(50, tard, 2) == 100
+
+    def test_cible_globale_si_aucun_creneau_assignable(self, tmp_path):
+        alg = self._alg(tmp_path)
+        assert alg._cutoff_minutes_examinateur(90, [None, None], 3) == 90
+
+
+class TestDepassementFinJourneeRetardEvitable:
+    """Le plancher de charge appliqué bout en bout : un retard imposé par la
+    charge que l'examinateur recevra de toute façon n'est pas pénalisé."""
+
+    def test_charge_forcee_non_penalisee(self, tmp_path):
+        """Un seul examinateur par matière : il recevra forcément les 6 oraux,
+        donc son heure de fin est entièrement subie — dépassement nul, même
+        avec une cible très en amont."""
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"997000000{i}") for i in range(6)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            heure_debut=time(hour=8, minute=0),
         )
         alg.resoudre()
         alg.calcul_horaires()
-        cible = time(hour=9, minute=0)
-        fins = {}
-        for oral in alg.liste_oraux:
-            cle = id(oral.examinateur)
-            if cle not in fins or oral.heure_fin > fins[cle]:
-                fins[cle] = oral.heure_fin
-        attendu = sum(
-            round((
-                datetime.combine(date(1, 1, 1), fin)
-                - datetime.combine(date(1, 1, 1), cible)
-            ).total_seconds() / 60) ** 2
-            for fin in fins.values() if fin > cible
+        assert alg.heure_fin_journee() > time(hour=9, minute=0)
+        assert alg.depassement_fin_journee(time(hour=9, minute=0)) == 0
+
+    def test_retard_evitable_toujours_penalise(self, tmp_path):
+        """À l'inverse, un examinateur qui finit au-delà de ce que sa charge
+        plancher impose reste pénalisé."""
+        alg = _build_algo(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"998000000{i}") for i in range(2)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            heure_debut=time(hour=8, minute=0),
         )
-        assert alg.depassement_fin_journee(cible) == attendu
+        alg.resoudre()
+        alg.calcul_horaires()
+        prof = next(e for e in alg.liste_examinateurs if e.nom == "ProfMaths")
+        # On isole ProfMaths : son collègue de Philo laisse des trous dans sa
+        # grille, donc son propre retard est lui aussi évitable et compterait.
+        alg.liste_oraux = [o for o in alg.liste_oraux if o.examinateur is prof]
+        # Plancher = 2 oraux // 1 examinateur = 2 -> fin minimale = créneau 1
+        # (60 min). On force un oral bien au-delà : le surplus est évitable.
+        alg.liste_oraux[0].heure_fin = time(hour=10, minute=0)
+        assert alg.depassement_fin_journee(time(hour=8, minute=30)) == (120 - 60) ** 2
 
 
 class TestEquiteEntreExaminateurs:

@@ -774,6 +774,47 @@ class TestAlgoCPHeureCibleFinJournee:
         alg.calcul_horaires()
         assert alg.depassement_fin_journee(time(hour=10, minute=0)) == 0
 
+    def test_retard_force_par_la_charge_non_penalise(self, tmp_path, monkeypatch):
+        """Un seul examinateur par matière : il recevra forcément tous les oraux,
+        son heure de fin est entièrement subie. Le cutoff personnalisé
+        (`_cutoff_minutes_examinateur`, partagé avec le Monte-Carlo) annule donc
+        la pénalité — vérifié sur la solution produite par CP-SAT.
+        """
+        import algo_cp
+        monkeypatch.setattr(algo_cp, "ALGO_CP_TIMEOUT", 10)
+        cible = time(hour=9, minute=0)
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"500000000{i}") for i in range(6)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            heure_debut=time(hour=8, minute=0),
+            heure_cible_fin_journee=cible,
+        )
+        alg.resoudre()
+        alg.calcul_horaires()
+        assert alg.heure_fin_journee() > cible
+        assert alg.depassement_fin_journee(cible) == 0
+
+    def test_cutoff_personnalise_par_examinateur(self, tmp_path):
+        """Le cutoff appliqué dans le modèle est bien celui, par examinateur, que
+        le Monte-Carlo utilisera après coup — même méthode, mêmes données."""
+        alg = _build_algo_cp(
+            tmp_path,
+            candidats=[_cand(f"Cand{i}", f"510000000{i}") for i in range(6)],
+            exams=[_exam("ProfMaths", "Maths", "A101"), _exam("ProfPhilo", "Philo", "B101")],
+            heure_debut=time(hour=8, minute=0),
+            heure_cible_fin_journee=time(hour=9, minute=0),
+        )
+        cutoff = alg._cutoff_minutes_fin_journee()
+        assert cutoff == 60
+        for examinateur in alg.liste_examinateurs:
+            minutes_fin = alg._minutes_fin_creneau(examinateur, examinateur.matiere)
+            plancher = alg._charge_plancher(examinateur.matiere)
+            # 6 oraux pour 1 examinateur par matière : plancher de 6 créneaux,
+            # dont la fin dépasse largement la cible -> cutoff repoussé.
+            assert plancher == 6
+            assert alg._cutoff_minutes_examinateur(cutoff, minutes_fin, plancher) > cutoff
+
     def test_desactivee_aucune_penalite(self, tmp_path):
         """Sans heure cible, le modèle ne crée aucune variable de dépassement."""
         alg = _build_algo_cp(

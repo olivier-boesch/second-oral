@@ -258,6 +258,31 @@ Trois propriétés voulues :
   examinateurs à +10 min, alors que seul le premier cas est réellement gênant ; elle se faisait de
   surcroît écraser par le terme de tassement, qui pousse déjà dans le même sens (cf. ci-dessous).
   Le carré fait décoller le coût des gros retards sans sur-contraindre les petits.
+- **seul le retard évitable compte.** Chaque examinateur a un **cutoff personnalisé**
+  (`AlgoOne._cutoff_minutes_examinateur()`) : un examinateur qui recevra de toute façon
+  `AlgoOne._charge_plancher()` oraux ne peut pas terminer avant la fin de son
+  `charge_plancher`-ième créneau assignable, même en remplissant au plus tôt. Son cutoff est
+  repoussé jusque-là (jamais avancé avant la cible globale), de sorte que cette part subie ne soit
+  pas pénalisée — elle serait une constante de l'objectif, sans gradient utile, qui ne ferait que
+  gonfler les bornes et donc `_poids_equite_effectif`. Un examinateur dont la journée commence tard
+  (créneaux `CreneauInterdit` en début de grille) bénéficie mécaniquement du même report, les
+  créneaux interdits ne comptant pas dans le décompte du plancher.
+
+Le plancher vaut `floor(n_oraux_matière / n_examinateurs_matière)` — **`floor`, jamais `ceil`** :
+sous-estimer la charge forcée revient à continuer de pénaliser un retard peut-être inévitable
+(statu quo, sans risque), alors que la surestimer excuserait un retard que le solveur aurait pu
+éviter. L'erreur n'est pas symétrique.
+
+> **Pourquoi ce plancher est calculé sur les données et jamais sur la solution.** Exempter un
+> examinateur *parce que sa grille est pleine* dans la solution en cours créerait une incitation
+> perverse : le solveur gagnerait à saturer l'examinateur qui finit le plus tard, puisque la
+> saturation éteindrait sa pénalité. Sur la configuration des tests (créneau 20 min, cible à 80 min
+> du début), un examinateur de capacité 10 passerait d'une pénalité de 14 400 à 9 oraux à une
+> pénalité nulle à 10 oraux — le solveur lui donnerait le 10ᵉ. Le plancher étant déduit du seul
+> couple (nombre d'oraux de la matière, nombre d'examinateurs), il reste une constante du modèle et
+> ne crée aucun gradient exploitable. Effet de bord voulu : si le plancher dépasse le nombre de
+> créneaux assignables, l'examinateur est saturé *par construction* et sa pénalité tombe bien à
+> zéro — le cas visé, obtenu sans la faille.
 
 Mise en œuvre par moteur :
 
@@ -266,6 +291,9 @@ Mise en œuvre par moteur :
   `depassement_fin_journee()` est le plus faible — le taux d'occupation ne sert plus qu'à départager
   une égalité. Sans effet sur le repli (aucun run conforme). Calculé sur les `Oral.heure_fin` réels,
   donc exact (tiers-temps compris), mais nécessite `calcul_horaires()` — déjà appelé par `algo_run()`.
+  `_minutes_creneau()`/`_minutes_fin_creneau()`, `_charge_plancher()` et
+  `_cutoff_minutes_examinateur()` sont portées par `AlgoOne` (et non `AlgoCP`) précisément pour que
+  les deux moteurs partagent le même cutoff personnalisé, au bit près.
 - **CP-SAT** (`AlgoCP.resoudre`) : la même expression est reconstruite dans le modèle
   (`AddMaxEquality` puis `AddMultiplicationEquality` pour le carré, une paire de variables par
   examinateur seulement). Poids `ALGO_POIDS_FIN_JOURNEE`, sans jamais interdire les créneaux tardifs

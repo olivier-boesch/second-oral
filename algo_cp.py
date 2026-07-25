@@ -10,7 +10,6 @@ aléatoires. L'écart minimum entre les deux oraux d'un candidat devient une
 contrainte garantie (et non un critère de sélection a posteriori).
 """
 import random
-from datetime import date, datetime
 from os import cpu_count
 
 from ortools.sat.python import cp_model
@@ -146,10 +145,7 @@ class AlgoCP(AlgoOne):
         """
         if self.heure_cible_fin_journee is None:
             return None
-        return max(0, round((
-            datetime.combine(date(1, 1, 1), self.heure_cible_fin_journee)
-            - datetime.combine(date(1, 1, 1), self.heure_debut)
-        ).total_seconds() / 60))
+        return max(0, self._minutes_depuis_debut(self.heure_cible_fin_journee))
 
     def _poids_equite_effectif(
         self,
@@ -180,98 +176,6 @@ class AlgoCP(AlgoOne):
         """
         borne_tassement = 2 * len(self.liste_candidats) * (max_minutes * bruit_tassement + bruit_tassement)
         return max(ALGO_POIDS_EQUITE, borne_tassement + borne_fin_journee + 1)
-
-    def _minutes_creneau(self, examinateur: Examinateur, matiere: Matiere) -> list[int | None]:
-        """Minutes réelles écoulées depuis `heure_debut` jusqu'au sujet de
-        chaque créneau de cet examinateur — réplique `AlgoOne.calcul_horaires()`
-        (pause méridienne et pauses périodiques incluses), à une différence
-        près : ignore le tiers-temps, qui dépend de quel candidat est assigné
-        et n'est donc pas connu avant résolution (même limite qu'aujourd'hui
-        pour le calcul post-résolution, cf. commentaire dans calcul_horaires()).
-
-        Sert à contraindre l'écart minimum candidat en minutes réelles plutôt
-        qu'en nombre de créneaux : un simple compte de créneaux sous-estime
-        l'écart réel dès qu'un candidat a un oral de chaque côté de la pause
-        méridienne (elle s'ajoute alors "gratuitement" à l'écart réel), et
-        peut au contraire le surestimer si elle n'est appliquée qu'après coup
-        de façon non uniforme d'un examinateur à l'autre (cf. investigation
-        ayant motivé cette méthode).
-
-        :return: liste indexée par créneau ; `None` pour un créneau
-                 `CreneauInterdit` (jamais assignable, donc jamais utilisé
-                 dans la contrainte).
-        """
-        oraux = examinateur.oraux
-        resultats: list[int | None] = [None] * len(oraux)
-        heure_courante = self.heure_debut
-        pause_meridienne_appliquee = False
-        i = 0
-        while i < len(oraux) and isinstance(oraux[i], CreneauInterdit):
-            heure_courante = self.ajouter_temps(heure_courante, matiere.temps_oral)
-            i += 1
-            if i % self.intervalle_pause == 0:
-                heure_courante = self.ajouter_temps(heure_courante, self.temps_pause)
-        n_avant_pause = i % self.intervalle_pause
-        for i_creneau in range(i, len(oraux)):
-            if i_creneau != i:
-                if (
-                    not self.interrompre_oral
-                    and matiere.temps_preparation.total_seconds() % matiere.temps_oral.total_seconds() != 0
-                ):
-                    heure_courante = self.ajouter_temps(heure_courante, matiere.temps_preparation)
-                else:
-                    heure_courante = self.ajouter_temps(heure_courante, matiere.temps_oral)
-                if n_avant_pause >= self.intervalle_pause:
-                    n_avant_pause = 0
-                    heure_courante = self.ajouter_temps(heure_courante, self.temps_pause)
-            if (
-                self.heure_pause_meridienne is not None
-                and not pause_meridienne_appliquee
-                and self._chevauche_pause_meridienne(heure_courante, matiere)
-            ):
-                heure_courante = max(heure_courante, self.heure_pause_meridienne)
-                heure_courante = self.ajouter_temps(heure_courante, self.duree_pause_meridienne)
-                pause_meridienne_appliquee = True
-            resultats[i_creneau] = round((
-                datetime.combine(date(1, 1, 1), heure_courante)
-                - datetime.combine(date(1, 1, 1), self.heure_debut)
-            ).total_seconds() / 60)
-            # calcul_horaires() ne compte que les oraux réellement délivrés
-            # (n_oraux_avant_pause += 1 sous `if oraux_examinateur[i_oral] is
-            # not None`) — ici, avant résolution, on ignore encore quels
-            # créneaux seront occupés : on incrémente donc pour chaque
-            # créneau du mapping, en supposant qu'il sera utilisé (la même
-            # approximation que pour le tiers-temps ci-dessus, nécessaire
-            # pour éviter la dépendance circulaire à la solution).
-            n_avant_pause += 1
-        return resultats
-
-    def _minutes_fin_creneau(self, examinateur: Examinateur, matiere: Matiere) -> list[int | None]:
-        """Minutes réelles écoulées depuis `heure_debut` jusqu'à la FIN de
-        l'oral de chaque créneau de cet examinateur.
-
-        `_minutes_creneau` donne l'instant où le sujet est remis ; la fin de
-        l'oral s'en déduit en ajoutant la durée effective d'un créneau POUR LA
-        MATIÈRE DE CET EXAMINATEUR (préparation + oral, cf.
-        `AlgoOne.calcul_horaires`), jamais une durée moyenne tous examinateurs
-        confondus : c'est précisément ce qui permet de comparer des
-        examinateurs de matières différentes à une même heure cible de fin de
-        journée.
-
-        Ignore le tiers-temps, inconnu avant résolution — même approximation
-        que `_minutes_creneau`, et écart au plus d'un tiers de temps de
-        préparation sur un objectif souple.
-
-        :return: liste indexée par créneau ; `None` pour un créneau
-                 `CreneauInterdit` (jamais assignable).
-        """
-        duree_creneau = round(
-            (matiere.temps_preparation + matiere.temps_oral).total_seconds() / 60
-        )
-        return [
-            None if minutes is None else minutes + duree_creneau
-            for minutes in self._minutes_creneau(examinateur, matiere)
-        ]
 
     def resoudre(self) -> None:
         """Résout l'appairage des oraux via un modèle CP-SAT.
@@ -433,7 +337,14 @@ class AlgoCP(AlgoOne):
         #   examinateur à +60 min et six à +10 min, et se faisait de toute
         #   façon écraser par le tassement, qui pousse déjà dans le même sens.
         #   Le carré fait décoller le coût des gros retards — les seuls
-        #   réellement gênants — sans sur-contraindre les petits.
+        #   réellement gênants — sans sur-contraindre les petits ;
+        # - seul le retard ÉVITABLE est pénalisé : chaque examinateur a un
+        #   cutoff personnalisé (`_cutoff_minutes_examinateur`) tenant compte
+        #   de la charge qu'il recevra de toute façon et d'une éventuelle
+        #   journée commençant tard. Ce cutoff est calculé sur les seules
+        #   DONNÉES, jamais sur la solution : une exemption qui dépendrait de
+        #   la grille effectivement remplie inciterait au contraire le solveur
+        #   à saturer un examinateur pour éteindre sa pénalité.
         penalite_fin_journee = 0
         borne_fin_journee = 0
         cutoff_minutes = self._cutoff_minutes_fin_journee()
@@ -447,9 +358,18 @@ class AlgoCP(AlgoOne):
                 examinateur: self._minutes_fin_creneau(examinateur, examinateur.matiere)
                 for examinateur in creneaux_par_examinateur
             }
+            cutoff_par_examinateur = {
+                examinateur: self._cutoff_minutes_examinateur(
+                    cutoff_minutes,
+                    minutes_fin,
+                    self._charge_plancher(examinateur.matiere),
+                )
+                for examinateur, minutes_fin in minutes_fin_par_examinateur.items()
+            }
             depassement_max = max(
                 (
-                    minutes_fin_par_examinateur[examinateur][creneau] - cutoff_minutes
+                    minutes_fin_par_examinateur[examinateur][creneau]
+                    - cutoff_par_examinateur[examinateur]
                     for examinateur, creneaux in creneaux_par_examinateur.items()
                     for creneau in creneaux
                 ),
@@ -459,11 +379,12 @@ class AlgoCP(AlgoOne):
             penalites_examinateurs = []
             for examinateur, creneaux_utilises in creneaux_par_examinateur.items():
                 minutes_fin = minutes_fin_par_examinateur[examinateur]
+                cutoff_examinateur = cutoff_par_examinateur[examinateur]
                 # Un créneau non utilisé contribue 0, un créneau utilisé avant
                 # la cible contribue une valeur négative : le NewConstant(0)
                 # ajouté au max ramène les deux cas à "pas de dépassement".
                 termes = [
-                    (minutes_fin[creneau] - cutoff_minutes) * sum(vars_)
+                    (minutes_fin[creneau] - cutoff_examinateur) * sum(vars_)
                     for creneau, vars_ in creneaux_utilises.items()
                 ]
                 depassement = model.NewIntVar(
