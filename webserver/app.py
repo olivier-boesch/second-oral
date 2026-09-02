@@ -65,6 +65,7 @@ HEBERGEUR      = getattr(_app_secrets, "HEBERGEUR",      "")
 DPD_EMAIL      = getattr(_app_secrets, "DPD_EMAIL",      "")
 ACCENT_COLOR   = getattr(_app_secrets, "ACCENT_COLOR",   "#6c63ff")
 from secrets import token_urlsafe
+from hmac import compare_digest
 from datetime import timedelta
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -657,6 +658,57 @@ def _redact_token(token):
     return token[:6] + "…"
 
 
+def _token_key_emargement() -> str | None:
+    """
+    Clé de MAC du jeton d'émargement : 'admin' pour l'administrateur (qui peut
+    émarger depuis n'importe quelle salle), sinon l'identifiant de
+    l'examinateur connecté. None si personne n'est connecté.
+    """
+    return 'admin' if is_admin_user() else get_username(complete=False)
+
+
+def _token_emargement_valide(id_oral) -> bool:
+    """
+    Vrai si le jeton d'émargement présent en session correspond bien à
+    `id_oral` — c'est-à-dire si un GET /sign autorisé a eu lieu pour CET oral.
+
+    Le jeton est un MAC de (clé utilisateur + id_oral), pas un mot de passe
+    stocké : sa seule vérification n'établit pas l'autorisation d'émarger, elle
+    prouve seulement la provenance. Toujours l'associer à `_emargement_autorise`.
+    """
+    stored = session.get('token_emargement')
+    token_key = _token_key_emargement()
+    if not stored or not token_key or not id_oral:
+        return False
+    return compare_digest(stored, hash_password(token_key + str(id_oral), ''))
+
+
+def _emargement_autorise(id_oral, data: dict | None = None) -> bool:
+    """
+    Vrai si l'utilisateur courant a le droit d'émarger l'oral `id_oral`.
+
+    L'admin émarge n'importe quel oral ; un examinateur uniquement les siens.
+    `id_oral` est entièrement choisi par le client (query string GET, champ
+    caché POST) et UPDATE_SIGNATURE_ORAL ne filtre que sur `Oral.id` : sans ce
+    contrôle, un examinateur pouvait apposer — ou effacer, via cancel=1 — la
+    signature d'un oral tenu par un collègue, sur un document à valeur légale.
+
+    :param data: ligne SELECT_SIGNATURE_ORAL déjà chargée, pour éviter une
+        seconde requête quand l'appelant l'a sous la main.
+    """
+    if is_admin_user():
+        return True
+    user = get_username(complete=False)
+    if user is None:
+        return False
+    if data is None:
+        rows = db_get(db_facility_web.SELECT_SIGNATURE_ORAL, id_oral, no_list_auto=False)
+        data = rows[0] if rows else None
+    if data is None:
+        return False   # oral inexistant : refus, jamais un accès par défaut
+    return data['identifiant'] == user
+
+
 def generate_token(id_oral):
     """Génère un token de signature et le stocke en base."""
     tk = token_urlsafe(16)
@@ -1186,6 +1238,11 @@ def sign() -> ResponseReturnValue:
         form.id_oral.data = request.args.get('id', None)
         if form.id_oral.data is None:
             return abort(403)
+        rows = db_get(db_facility_web.SELECT_SIGNATURE_ORAL,
+                      form.id_oral.data, no_list_auto=False)
+        if not rows:
+            return abort(404, "Oral introuvable")
+        data = rows[0]
         if is_admin_user():
             # L'admin peut signer depuis n'importe quelle salle.
             # link_back contient l'identifiant de l'examinateur (pour le retour).
@@ -1195,29 +1252,34 @@ def sign() -> ResponseReturnValue:
             if user is None or form.link_back.data != user:
                 return abort(403)
             token_key = user
+        # link_back prouve seulement que l'examinateur revient sur SA fiche :
+        # il ne dit rien de l'oral visé, que le client choisit librement.
+        if not _emargement_autorise(form.id_oral.data, data):
+            app.logger.warning(
+                f"Signature refusée: {token_key} sur l'oral {form.id_oral.data} "
+                f"(tenu par {data['identifiant']})"
+            )
+            return abort(403)
         app.logger.info(f"Signature: {token_key} id_oral={form.id_oral.data}")
         # Usage interne en tant que MAC (pas un mot de passe stocké) — pas
         # d'identifiant de sel par compte ici, l'id_oral fait déjà partie de
         # l'entrée hachée.
         session['token_emargement'] = hash_password(token_key + str(form.id_oral.data), '')
-        data = db_get(db_facility_web.SELECT_SIGNATURE_ORAL, form.id_oral.data)
         return render_template("sign.html", centre=CENTRE_EXAMEN, data=data, form=form)
 
     # POST
     link = form.link_back.data
     id_oral = form.id_oral.data
-    stored_token = session.get('token_emargement')
-    if is_admin_user():
-        token_key = 'admin'
-    else:
-        token_key = get_username(complete=False)
-        if link != token_key:
-            session.pop('token_emargement', None)
-            return abort(403)
-    expected_token = (
-        hash_password(token_key + id_oral, '') if token_key and id_oral else None
-    )
-    if stored_token != expected_token:
+    if not is_admin_user() and link != get_username(complete=False):
+        session.pop('token_emargement', None)
+        return abort(403)
+    if not _token_emargement_valide(id_oral):
+        session.pop('token_emargement', None)
+        return abort(403)
+    # Le jeton ne prouve que la provenance (un GET /sign a eu lieu pour cet
+    # oral) : c'est ici, juste avant l'écriture en base, que la propriété de
+    # l'oral est réellement exigée.
+    if not _emargement_autorise(id_oral):
         session.pop('token_emargement', None)
         return abort(403)
     session.pop('token_emargement', None)
@@ -1240,7 +1302,12 @@ def sign() -> ResponseReturnValue:
 @nocache
 def request_token(id_oral: str) -> ResponseReturnValue:
     """Génère un token de signature à usage unique + QR code (signature sur un autre appareil)."""
-    if 'token_emargement' not in session:
+    # Le token produit ici est une capacité au porteur : /sign-other-device
+    # l'accepte SANS authentification. La seule présence d'un jeton
+    # d'émargement en session ne suffit donc pas — il doit correspondre à CET
+    # oral, faute de quoi un examinateur ayant ouvert /sign pour son propre
+    # oral pouvait fabriquer une capacité de signature pour l'oral d'autrui.
+    if not _token_emargement_valide(id_oral) or not _emargement_autorise(id_oral):
         return abort(403)
     token = generate_token(id_oral)
     image = qr(url_for('sign_other_device', token=token, _external=True), scale=5)

@@ -135,7 +135,14 @@ def flask_app():
 
 @pytest.fixture(autouse=True)
 def _reset_db_mock():
-    """Réinitialise le mock DB avant chaque test (évite les fuites de side_effect)."""
+    """Réinitialise le mock DB avant chaque test (évite les fuites de side_effect).
+
+    `reset_mock()` remet aussi les compteurs d'appels à zéro : sans lui, un test
+    qui affirme `make_sql_update.call_count == 0` (« aucune écriture ne doit
+    avoir lieu ») passe ou échoue selon les tests exécutés avant lui.
+    """
+    _db_mock.make_sql_select.reset_mock()
+    _db_mock.make_sql_update.reset_mock()
     _db_mock.make_sql_select.side_effect = None
     _db_mock.make_sql_select.return_value = []
     _db_mock.make_sql_update.side_effect = None

@@ -487,3 +487,169 @@ class TestLogIntegrityChain:
         assert r.status_code == 200
         # Icône SVG rouge (pas emoji) sur la ligne au hash invalide — cf. project_icones_admin.
         assert 'stroke="var(--danger)"' in r.get_data(as_text=True)
+
+
+# ── #12 — Émargement : la propriété de l'oral est exigée ──────────────────────
+
+JOUR_J_HTML = (Path(__file__).resolve().parents[2] / "webserver"
+               / "templates" / "jour_j.html")
+
+_ORAL_ID = "42"
+
+
+def _oral_row(identifiant: str) -> dict:
+    """Ligne SELECT_SIGNATURE_ORAL pour un oral tenu par `identifiant`."""
+    return {
+        "id_oral": int(_ORAL_ID), "nom": "Martin Paul", "numero": "111111111AA",
+        "salle": "101", "identifiant": identifiant, "examinateur": "Durand",
+        "emargement": "", "heure_emargement": "", "matiere": "Maths",
+    }
+
+
+def _jeton_emargement(token_key: str, id_oral: str = _ORAL_ID) -> str:
+    """Reproduit le MAC stocké en session par un GET /sign autorisé."""
+    from app_secrets import hash_password
+    return hash_password(token_key + str(id_oral), "")
+
+
+def _png_data_uri() -> str:
+    """Petite image PNG valide en data-URI (image_normalize la redimensionne)."""
+    from base64 import b64encode
+    from io import BytesIO
+
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (4, 4), "white").save(buf, format="PNG")
+    return "data:image/png;base64," + b64encode(buf.getvalue()).decode()
+
+
+class TestSignatureOwnership:
+    """Vuln audit : `/sign` et `/request-token` ne vérifiaient que l'identité de
+    l'examinateur connecté, jamais que l'oral visé était bien le sien. `id_oral`
+    étant choisi par le client et UPDATE_SIGNATURE_ORAL ne filtrant que sur
+    `Oral.id`, tout examinateur pouvait signer — ou effacer via cancel=1 —
+    l'émargement d'un collègue, document à valeur légale."""
+
+    def test_sign_get_refuse_oral_dun_autre_examinateur(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [_oral_row("examinateur102")]
+        with client.session_transaction() as sess:
+            sess["user"] = "examinateur101"
+        r = client.get(f"/sign?id={_ORAL_ID}&link_back=examinateur101")
+        assert r.status_code == 403
+
+    def test_sign_get_accepte_son_propre_oral(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [_oral_row("examinateur101")]
+        with client.session_transaction() as sess:
+            sess["user"] = "examinateur101"
+        r = client.get(f"/sign?id={_ORAL_ID}&link_back=examinateur101")
+        assert r.status_code == 200
+
+    def test_sign_get_admin_peut_emarger_nimporte_quel_oral(self, admin_client, db_mock):
+        db_mock.make_sql_select.return_value = [_oral_row("examinateur102")]
+        r = admin_client.get(f"/sign?id={_ORAL_ID}&link_back=examinateur102")
+        assert r.status_code == 200
+
+    def test_sign_get_oral_inexistant_renvoie_404(self, client, db_mock):
+        db_mock.make_sql_select.return_value = []
+        with client.session_transaction() as sess:
+            sess["user"] = "examinateur101"
+        r = client.get(f"/sign?id={_ORAL_ID}&link_back=examinateur101")
+        assert r.status_code == 404
+
+    def test_sign_post_refuse_oral_dun_autre_et_necrit_rien(self, client, db_mock):
+        """Même avec un jeton de session valide pour cet id_oral, l'écriture en
+        base doit être refusée si l'oral appartient à un autre examinateur."""
+        db_mock.make_sql_select.return_value = [_oral_row("examinateur102")]
+        with client.session_transaction() as sess:
+            sess["user"] = "examinateur101"
+            sess["token_emargement"] = _jeton_emargement("examinateur101")
+        r = client.post("/sign", data={
+            "link_back": "examinateur101", "id_oral": _ORAL_ID,
+            "signature_image": _png_data_uri(), "cancel": "0",
+        })
+        assert r.status_code == 403
+        assert db_mock.make_sql_update.call_count == 0, (
+            "Aucun UPDATE ne doit être émis quand l'émargement est refusé"
+        )
+
+    def test_sign_post_accepte_son_propre_oral(self, client, db_mock):
+        def _select(sql, *args):
+            if "TokenSignature" in sql:
+                return []
+            if "Oral.emargement" in sql:
+                return [_oral_row("examinateur101")]
+            return []
+
+        db_mock.make_sql_select.side_effect = _select
+        with client.session_transaction() as sess:
+            sess["user"] = "examinateur101"
+            sess["token_emargement"] = _jeton_emargement("examinateur101")
+        r = client.post("/sign", data={
+            "link_back": "examinateur101", "id_oral": _ORAL_ID,
+            "signature_image": _png_data_uri(), "cancel": "0",
+        })
+        assert r.status_code == 302
+        assert db_mock.make_sql_update.call_count == 1
+
+    def test_request_token_refuse_un_autre_oral(self, client, db_mock):
+        """Le token produit est une capacité au porteur (/sign-other-device
+        l'accepte sans authentification) : il ne doit jamais pouvoir viser un
+        oral autre que celui du jeton de session."""
+        db_mock.make_sql_select.return_value = [_oral_row("examinateur101")]
+        with client.session_transaction() as sess:
+            sess["user"] = "examinateur101"
+            sess["token_emargement"] = _jeton_emargement("examinateur101", _ORAL_ID)
+        r = client.get("/request-token/99")
+        assert r.status_code == 403
+
+    def test_request_token_refuse_oral_dun_autre_examinateur(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [_oral_row("examinateur102")]
+        with client.session_transaction() as sess:
+            sess["user"] = "examinateur101"
+            sess["token_emargement"] = _jeton_emargement("examinateur101")
+        r = client.get(f"/request-token/{_ORAL_ID}")
+        assert r.status_code == 403
+
+    def test_request_token_accepte_son_propre_oral(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [_oral_row("examinateur101")]
+        with client.session_transaction() as sess:
+            sess["user"] = "examinateur101"
+            sess["token_emargement"] = _jeton_emargement("examinateur101")
+        r = client.get(f"/request-token/{_ORAL_ID}")
+        assert r.status_code == 200
+        assert "token" in r.get_json()
+
+    def test_request_token_refuse_sans_jeton_de_session(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [_oral_row("examinateur101")]
+        with client.session_transaction() as sess:
+            sess["user"] = "examinateur101"
+        r = client.get(f"/request-token/{_ORAL_ID}")
+        assert r.status_code == 403
+
+
+# ── #13 — Monitoring admin : échappement HTML côté client ─────────────────────
+
+class TestMonitoringEscaping:
+    """Vuln audit : /gestion/jour-j assemblait les lignes de session et d'échec
+    d'authentification par concaténation puis injection via innerHTML. Un nom de
+    loge issu du CSV importé (ou une adresse IP) contenant du HTML s'exécutait
+    dans la session admin — la CSP ne l'arrête pas, `script-src-attr` autorisant
+    'unsafe-inline'."""
+
+    def test_helper_esc_present(self):
+        content = JOUR_J_HTML.read_text(encoding="utf-8")
+        assert "function esc(" in content
+        for entite in ("&amp;", "&lt;", "&gt;", "&quot;", "&#39;"):
+            assert entite in content, f"esc() doit échapper vers {entite}"
+
+    @pytest.mark.parametrize("valeur", ["s.ip", "s.id", "f.ip", "h.label"])
+    def test_valeurs_dynamiques_toujours_echappees(self, valeur):
+        """Aucune valeur venant du JSON de monitoring ne doit être concaténée
+        brute : elle doit systématiquement passer par esc()."""
+        content = JOUR_J_HTML.read_text(encoding="utf-8")
+        brut = f"+ {valeur} +"
+        assert brut not in content, (
+            f"{valeur} est concaténé sans échappement — utiliser esc({valeur})"
+        )
+        assert f"esc({valeur})" in content

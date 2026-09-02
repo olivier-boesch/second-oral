@@ -160,14 +160,26 @@
 
     function pad(n) { return String(n).padStart(2, '0'); }
 
+    // Ces tableaux sont assemblés en HTML puis injectés via innerHTML, et
+    // certaines valeurs viennent de données importées (nom de loge issu du
+    // CSV) ou d'en-têtes de requête (adresse IP) : sans échappement, une
+    // valeur bien choisie exécute du script dans la session admin. La CSP ne
+    // rattrape pas ce cas (script-src-attr autorise 'unsafe-inline').
+    // encodeURIComponent ne protège que les href, jamais le texte.
+    function esc(v) {
+        return String(v === undefined || v === null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function buildChart(hourly) {
         if (!hourly || !hourly.length) return { bars: '', yaxis: '<span>—</span><span></span><span>0</span>' };
         const max = Math.max(...hourly.map(function (h) { return h.count; }), 1);
         const bars = hourly.map(function (h) {
             const pct = Math.round(h.count / max * 100);
-            return '<div class="monitor-bar-wrap" title="' + h.label + ' : ' + h.count + ' req.">'
+            return '<div class="monitor-bar-wrap" title="' + esc(h.label) + ' : ' + esc(h.count) + ' req.">'
                 + '<div class="monitor-bar" style="height:' + pct + '%"></div>'
-                + '<span class="monitor-bar-label">' + h.label + '</span></div>';
+                + '<span class="monitor-bar-label">' + esc(h.label) + '</span></div>';
         }).join('');
         const yaxis = '<span>' + max + '</span><span>' + Math.floor(max / 2) + '</span><span>0</span>';
         return { bars: bars, yaxis: yaxis };
@@ -177,18 +189,18 @@
         if (!online) return '<tr class="tr_light"><td colspan="3">—</td></tr>';
         var rows = [];
         (detail.admin || []).forEach(function (s) {
-            rows.push('<tr class="tr_light"><td>Admin</td><td>—</td><td><code>' + s.ip + '</code></td></tr>');
+            rows.push('<tr class="tr_light"><td>Admin</td><td>—</td><td><code>' + esc(s.ip) + '</code></td></tr>');
         });
         (detail.exam || []).forEach(function (s) {
             rows.push('<tr class="tr_light"><td>Examinateur</td><td>Salle <a href="/salle/'
-                + encodeURIComponent(s.id) + '" target="_blank">' + s.id + '</a></td><td><code>' + s.ip + '</code></td></tr>');
+                + encodeURIComponent(s.id) + '" target="_blank">' + esc(s.id) + '</a></td><td><code>' + esc(s.ip) + '</code></td></tr>');
         });
         (detail.cand || []).forEach(function (s) {
-            rows.push('<tr class="tr_dark"><td>Candidat</td><td>' + s.id + '</td><td><code>' + s.ip + '</code></td></tr>');
+            rows.push('<tr class="tr_dark"><td>Candidat</td><td>' + esc(s.id) + '</td><td><code>' + esc(s.ip) + '</code></td></tr>');
         });
         (detail.loge || []).forEach(function (s) {
             rows.push('<tr class="tr_light"><td>Loge</td><td><a href="/loge/'
-                + encodeURIComponent(s.id) + '" target="_blank">' + s.id + '</a></td><td><code>' + s.ip + '</code></td></tr>');
+                + encodeURIComponent(s.id) + '" target="_blank">' + esc(s.id) + '</a></td><td><code>' + esc(s.ip) + '</code></td></tr>');
         });
         if (!rows.length) rows.push('<tr class="tr_light"><td colspan="3">Aucune session active</td></tr>');
         return rows.join('');
@@ -199,7 +211,7 @@
             return '<tr class="tr_light"><td colspan="2">Aucun échec récent</td></tr>';
         return failures.map(function (f, i) {
             return '<tr class="' + (i % 2 === 0 ? 'tr_light' : 'tr_dark') + '">'
-                + '<td>' + f.ip + '</td><td class="red">' + f.count + '</td></tr>';
+                + '<td>' + esc(f.ip) + '</td><td class="red">' + esc(f.count) + '</td></tr>';
         }).join('');
     }
 

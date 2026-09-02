@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Security
+
+**Émargement — la propriété de l'oral est désormais exigée (`/sign`, `/request-token`)**
+- `/sign` ne vérifiait que l'identité de l'examinateur connecté (`link_back == identifiant`), **jamais que l'oral visé était le sien**. `id_oral` étant entièrement choisi par le client (query string en GET, champ caché en POST) et `UPDATE_SIGNATURE_ORAL` ne filtrant que sur `Oral.id`, tout examinateur pouvait apposer une signature sur l'oral d'un collègue — ou l'effacer via `cancel=1`, qui remet `emargement` et `heure_emargement` à vide sur un document à valeur légale.
+- Nouveau `_emargement_autorise(id_oral, data=None)` : l'admin émarge n'importe quel oral, un examinateur uniquement les siens. La comparaison porte sur l'`identifiant` déjà renvoyé par `SELECT_SIGNATURE_ORAL` — aucune nouvelle requête SQL. Appliqué en GET (avant la remise du jeton) **et** en POST (juste avant l'écriture en base, seul point d'application réel).
+- `/request-token/<id_oral>` ne testait que la *présence* d'un jeton d'émargement en session, sans le rattacher à l'oral demandé. Or le token produit est une **capacité au porteur** : `/sign-other-device/<token>` l'accepte sans aucune authentification. Un examinateur ayant ouvert `/sign` pour son propre oral pouvait donc fabriquer une capacité de signature pour l'oral de n'importe qui. Nouveau `_token_emargement_valide(id_oral)` : le MAC de session doit correspondre à cet `id_oral` précis, comparé via `hmac.compare_digest`.
+- `/sign` en GET renvoie désormais `404` sur un oral inexistant (auparavant : template rendu avec une liste vide).
+- Helpers factorisés : `_token_key_emargement()` (clé de MAC `admin` / identifiant), `_token_emargement_valide()`, `_emargement_autorise()`. Le POST de `/sign` réutilise `_token_emargement_valide` au lieu de recalculer le MAC en ligne avec un `!=` non constant en temps.
+
+**Monitoring admin — échappement HTML des valeurs dynamiques (`/gestion/jour-j`)**
+- `buildSessions()` et `buildFailures()` assemblaient les lignes du tableau par concaténation de chaînes puis injection via `innerHTML`, sans échappement. Un nom de loge issu du CSV importé (ou une adresse IP) contenant du HTML s'exécutait dans la session admin. Les `encodeURIComponent` présents ne protégeaient que les `href`, jamais le texte, et la CSP ne rattrape pas ce cas : `script-src-attr: 'unsafe-inline'` autorise les gestionnaires inline (`onerror=`).
+- Nouveau helper `esc()` dans `jour_j.html`, appliqué à `s.ip`, `s.id`, `f.ip` et `h.label`.
+
+### Fixed
+
+- Tests : `_reset_db_mock` (conftest d'intégration) appelle désormais `reset_mock()` sur `make_sql_select`/`make_sql_update`. Les compteurs d'appels fuyaient d'un test à l'autre, si bien qu'une assertion « aucune écriture ne doit avoir lieu » (`make_sql_update.call_count == 0`) passait ou échouait selon les tests exécutés avant elle — donc verte en isolation, rouge dans la suite complète.
+
 ### Changed
 
 **Objectif de fin de journée — heure réelle par matière, pénalité quadratique**
