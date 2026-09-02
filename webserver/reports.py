@@ -6,6 +6,7 @@ La palette de couleurs est dérivée depuis ACCENT_COLOR (app_secrets.py) via th
 ce qui permet d'adapter la charte graphique au moment du setup sans toucher au code.
 """
 import datetime
+import re
 import tempfile
 from io import BytesIO
 from os.path import join as path_join
@@ -272,6 +273,18 @@ def _table_style_base(data_rows: int, span_col0: bool = False,
 
 # ── Fiche candidat ────────────────────────────────────────────────────────────
 
+def _safe_filename_part(valeur: str) -> str:
+    """Réduit une valeur issue des données (nom, salle) à un fragment de nom de
+    fichier sûr.
+
+    Ces valeurs viennent des CSV importés et sont concaténées dans un chemin :
+    sans filtrage, un nom contenant `/` ou `..` ferait écrire le PDF hors du
+    répertoire prévu.
+    """
+    nettoye = re.sub(r'[^\w\-.]', '_', str(valeur).replace(' ', '_'))
+    return nettoye.strip('.') or 'sans_nom'
+
+
 def fiche_candidat(infos_candidat: dict, tempdirname: str, file_dir: str = '.',
                    filename_root: str = '', centre_examen: str = '') -> str:
     """PDF : fiche individuelle d'un candidat avec ses horaires et identifiants de connexion."""
@@ -419,7 +432,7 @@ def fiche_candidat(infos_candidat: dict, tempdirname: str, file_dir: str = '.',
 
     doc.build(story, canvasmaker=canvas_cls)
     buffer.seek(0)
-    safe_nom = infos_candidat['nom'].replace(" ", "_")
+    safe_nom = _safe_filename_part(infos_candidat['nom'])
     filename = f"{filename_root}{safe_nom}.pdf"
     with open(path_join(file_dir, filename), "wb") as f:
         f.write(buffer.read())
@@ -429,14 +442,25 @@ def fiche_candidat(infos_candidat: dict, tempdirname: str, file_dir: str = '.',
 def liste_fiches_candidats(candidats: list, file_dir: str = '.',
                             filename_root: str = 'candidat_',
                             centre_examen: str = '') -> str:
-    """PDF : concaténation des fiches de tous les candidats."""
+    """PDF : concaténation des fiches de tous les candidats.
+
+    Les fiches individuelles sont écrites dans le répertoire temporaire, jamais
+    dans `file_dir` : ce ne sont que des intermédiaires de concaténation, et
+    chacune contient le `login_key` en clair du candidat plus un QR
+    d'auto-connexion. Les laisser dans `generated/` sous un nom dérivé du nom
+    du candidat — donc devinable — les rendait téléchargeables par tout
+    utilisateur authentifié via /download (IDOR).
+
+    Le préfixe indexé évite par ailleurs que deux candidats homonymes
+    produisent le même nom de fichier et s'écrasent l'un l'autre.
+    """
     files = []
     with tempfile.TemporaryDirectory() as tempdirname:
-        for c in candidats:
+        for i, c in enumerate(candidats):
             files.append(
-                path_join(file_dir,
-                          fiche_candidat(c, tempdirname, file_dir,
-                                         filename_root, centre_examen))
+                path_join(tempdirname,
+                          fiche_candidat(c, tempdirname, tempdirname,
+                                         f"{filename_root}{i:05d}_", centre_examen))
             )
         _concat_pdfs(files, path_join(file_dir, "liste_candidats.pdf"))
     return path_join(file_dir, "liste_candidats.pdf")
@@ -544,7 +568,7 @@ def loge_oraux(infos_loge: dict, tempdir: str = ".", file_dir: str = '.',
                filename_root: str = '', centre_examen: str = '') -> str:
     """PDF : fiche d'une loge (salle de préparation), A3 paysage."""
     data = []
-    filename = f"{filename_root}-{infos_loge['salle']}.pdf"
+    filename = f"{filename_root}-{_safe_filename_part(infos_loge['salle'])}.pdf"
     for o in infos_loge['oraux']:
         nom = o['candidat']
         if o['tiers_temps']:
@@ -603,8 +627,8 @@ def salle_oraux(infos_examinateur: dict, tempdir: str = ".", file_dir: str = '.'
                 filename_root: str = '', centre_examen: str = '') -> str:
     """PDF : fiche d'émargement d'une salle (examinateur), portrait A4."""
     data = []
-    safe_nom = infos_examinateur['nom'].replace(" ", "_")
-    filename = f"{filename_root}-{infos_examinateur['salle']}-{safe_nom}.pdf"
+    safe_nom = _safe_filename_part(infos_examinateur['nom'])
+    filename = f"{filename_root}-{_safe_filename_part(infos_examinateur['salle'])}-{safe_nom}.pdf"
     for o in infos_examinateur['oraux']:
         nom = f"{o['candidat']} ({o['numero']})"
         if o['tiers_temps']:

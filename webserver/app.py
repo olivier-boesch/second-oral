@@ -1056,31 +1056,12 @@ def generate_screen_one() -> ResponseReturnValue:
 @app.route('/generate-doc-one/<type_doc>-<id_doc>', methods=['GET'])
 @nocache
 def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturnValue:
-    """Génère un PDF individuel (fiche candidat, salle ou loge)."""
-    if type_doc == 'fiche_candidat':
-        info_candidat = db_get(db_facility_web.SELECT_DOC_INFOS_CANDIDAT,
-                               id_doc, no_list_auto=False)
-        if not info_candidat:
-            abort(404)
-        info_candidat = info_candidat[0]
-        # Ce PDF contient le login_key en clair (et désormais un QR de
-        # connexion automatique) : réservé à l'admin ou au candidat
-        # lui-même, comme show_credentials sur la fiche web candidat.html —
-        # pas à n'importe quel personnel authentifié (IDOR sur id_doc sinon).
-        if not (is_admin_user() or is_student_user(info_candidat['numero'])):
-            abort(403)
-        info_candidat['oraux'] = db_get(
-            db_facility_web.SELECT_DOC_INFOS_CANDIDATS_ORAUX, id_doc, no_list_auto=False
-        )
-        info_candidat['token'] = _get_or_create_login_token(info_candidat['numero'])
-        app.logger.debug(f"Document: fiche candidat {id_doc}")
-        with tempfile.TemporaryDirectory() as tmpdir:
-            filename = reports.fiche_candidat(
-                info_candidat, tmpdir, 'generated',
-                filename_root='candidat_', centre_examen=CENTRE_EXAMEN,
-            )
-        return jsonify({"url": url_for('download', filename=filename)})
+    """Génère un PDF individuel (fiche salle ou loge).
 
+    La fiche candidat ne passe plus par ici : elle contient des identifiants
+    de connexion et est servie directement par `fiche_candidat_pdf`, sans
+    jamais être écrite dans `generated/` (cf. la docstring de cette route).
+    """
     if type_doc == 'fiche_salle':
         if not is_authenticated():
             abort(403)
@@ -1111,6 +1092,51 @@ def generate_doc_one(type_doc: str, id_doc: str | None = None) -> ResponseReturn
 
     app.logger.warning(f"Document: paramètres invalides ({type_doc}; {id_doc})")
     abort(404)
+
+
+@app.route('/fiche-candidat/<int:id_candidat>.pdf', methods=['GET'])
+@nocache
+def fiche_candidat_pdf(id_candidat: int) -> ResponseReturnValue:
+    """Sert la fiche PDF individuelle d'un candidat, générée à la demande.
+
+    Ce PDF contient le `login_key` en clair du candidat **et** un QR
+    d'auto-connexion valide 48 h : le posséder, c'est pouvoir se connecter à
+    son compte. Il n'est donc jamais écrit dans `generated/`, mais produit
+    dans un répertoire temporaire et renvoyé directement dans la réponse.
+
+    Auparavant, la génération était bien restreinte (admin ou le candidat
+    lui-même) mais le fichier restait ensuite dans `generated/` sous
+    `candidat_<NOM>.pdf` — un nom devinable — et `/download` ne demandait
+    qu'une session authentifiée quelconque : n'importe quel candidat, loge ou
+    examinateur pouvait récupérer la fiche de n'importe quel autre candidat.
+    Supprimer l'artefact persistant ferme la fuite à la source, plutôt que de
+    rattraper l'autorisation à l'étape qui sert le fichier.
+    """
+    rows = db_get(db_facility_web.SELECT_DOC_INFOS_CANDIDAT,
+                  id_candidat, no_list_auto=False)
+    if not rows:
+        abort(404)
+    info_candidat = rows[0]
+    # Même règle que `show_credentials` sur la fiche web (candidat.html) :
+    # l'admin, ou le candidat concerné — pas le personnel authentifié.
+    if not (is_admin_user() or is_student_user(info_candidat['numero'])):
+        abort(403)
+    info_candidat['oraux'] = db_get(
+        db_facility_web.SELECT_DOC_INFOS_CANDIDATS_ORAUX, id_candidat, no_list_auto=False
+    )
+    info_candidat['token'] = _get_or_create_login_token(info_candidat['numero'])
+    app.logger.info(f"Document: fiche candidat {id_candidat} servie")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        filename = reports.fiche_candidat(
+            info_candidat, tmpdir, tmpdir,
+            filename_root='candidat_', centre_examen=CENTRE_EXAMEN,
+        )
+        # Lire avant la sortie du contexte : le répertoire est supprimé ensuite.
+        contenu = (Path(tmpdir) / filename).read_bytes()
+    return send_file(
+        BytesIO(contenu), mimetype='application/pdf',
+        download_name=secure_filename(f"fiche_{info_candidat['nom']}.pdf"),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -3403,29 +3429,57 @@ def algo_doc_exists(filename: str) -> ResponseReturnValue:
                     "url": url_for('download', filename=filename) if exists else None})
 
 
+# Niveau d'autorisation requis par document servi depuis generated/.
+#
+# Liste blanche, avec refus par défaut : l'ancienne cascade de préfixes se
+# terminait par un `else` permissif (« personnel authentifié »), si bien que
+# tout nouveau document non préfixé y retombait silencieusement. C'est ainsi
+# que `liste_candidats.pdf` — la concaténation de toutes les fiches, donc
+# l'ensemble des mots de passe et des QR d'auto-connexion — s'est retrouvée
+# téléchargeable par n'importe quel examinateur ou surveillant de loge.
+_DOWNLOAD_RULES: tuple[tuple[str, str], ...] = (
+    (r'papillons_[\w\-. ]+\.pdf', 'admin'),      # mots de passe en clair
+    (r'liste_candidats\.pdf',     'admin'),      # toutes les fiches candidats concaténées
+    (r'liste_oraux\.pdf',         'personnel'),
+    (r'liste_salles\.pdf',        'personnel'),
+    (r'liste_loges\.pdf',         'personnel'),
+    (r'salle-[\w\-. ]+\.pdf',     'personnel'),
+    (r'loge-[\w\-. ]+\.pdf',      'personnel'),
+)
+
+
+def _download_niveau_requis(filename: str) -> str | None:
+    """Niveau d'autorisation exigé pour `filename`, ou None s'il n'est pas servi."""
+    for motif, niveau in _DOWNLOAD_RULES:
+        if re.fullmatch(motif, filename):
+            return niveau
+    return None
+
+
 @app.route('/download')
 @nocache
 def download() -> ResponseReturnValue:
     """
-    Sert les fichiers PDF générés.
-    - Les papillons (papillons_*) nécessitent d'être admin.
-    - Les fiches candidats (candidat_*) nécessitent d'être authentifié (personnel ou candidat).
-    - Tous les autres documents nécessitent d'être authentifié (personnel).
+    Sert les fichiers PDF générés, selon la liste blanche `_DOWNLOAD_RULES`.
+
+    Un document non listé est refusé — notamment les `candidat_*.pdf`, qui ne
+    sont plus produits (cf. `fiche_candidat_pdf`) mais peuvent subsister sur
+    le disque des instances déjà déployées.
     """
     filename = request.args.get('filename', '')
     # Anti path-traversal : nom de fichier simple uniquement
     if not re.match(r'^[\w\-. ]+\.pdf$', filename):
         abort(400, "Nom de fichier invalide")
 
-    if filename.startswith('papillons_'):
+    niveau = _download_niveau_requis(filename)
+    if niveau is None:
+        app.logger.warning(f"Téléchargement refusé (hors liste blanche): {filename}")
+        abort(403)
+    if niveau == 'admin':
         if not is_admin_user():
             abort(403)
-    elif filename.startswith('candidat_'):
-        if not is_any_authenticated():
-            abort(403)
-    else:
-        if not is_authenticated():
-            return redirect(url_for('login', link_back=request.url))
+    elif not is_authenticated():
+        return redirect(url_for('login', link_back=request.url))
 
     app.logger.info(f"Téléchargement: {filename}")
     return send_from_directory('generated', filename)
@@ -4023,6 +4077,32 @@ def _regenerer_papillons_loges(base_url: str) -> None:
         )
 
 
+def _purger_fiches_candidats_residuelles() -> int:
+    """Supprime les `candidat_*.pdf` laissés dans generated/ par les versions
+    antérieures.
+
+    Ces fiches contiennent le mot de passe en clair et un QR d'auto-connexion,
+    sous un nom dérivé du nom du candidat donc devinable. Elles ne sont plus
+    produites, mais les instances déjà déployées en ont sur disque : `/download`
+    les refuse désormais, on les efface en plus au premier passage.
+
+    :returns: nombre de fichiers supprimés.
+    """
+    generated_dir = Path(app.root_path) / 'generated'
+    if not generated_dir.is_dir():
+        return 0
+    supprimes = 0
+    for pdf in generated_dir.glob('candidat_*.pdf'):
+        try:
+            pdf.unlink()
+            supprimes += 1
+        except OSError as exc:
+            app.logger.warning(f"Purge fiche candidat résiduelle {pdf.name} : {exc}")
+    if supprimes:
+        app.logger.info(f"Purge: {supprimes} fiche(s) candidat résiduelle(s) supprimée(s)")
+    return supprimes
+
+
 def _regenerer_fiches_candidats(duree_heures: int = 48) -> None:
     """Regénère liste_candidats.pdf (fiches individuelles concaténées) avec
     tous les candidats en DB.
@@ -4034,6 +4114,7 @@ def _regenerer_fiches_candidats(duree_heures: int = 48) -> None:
     Chaque candidat reçoit un token de connexion QR (réutilisé s'il en a
     déjà un valide, cf. _get_or_create_login_token).
     """
+    _purger_fiches_candidats_residuelles()
     candidats = db_get(db_facility_web.SELECT_DOC_LISTE_CANDIDATS, no_list_auto=False)
     if candidats:
         for c in candidats:

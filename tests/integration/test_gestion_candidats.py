@@ -1,6 +1,8 @@
 """Tests d'intégration Flask — candidats côté admin : fiche /gestion/candidats,
 accès aux documents PDF candidat, filtre tel, génération en lot."""
 
+from pathlib import Path
+
 
 # ── Candidat (route protégée) ─────────────────────────────────────────────────
 
@@ -33,63 +35,112 @@ class TestCandidatRoutes:
         assert "telephone" not in dfw.SELECT_INFOS_CANDIDAT.lower()
 
 
-class TestGenerateDocOneFicheCandidatAccessControl:
-    """Régression sécurité (2026-07-10) : /generate-doc-one/fiche_candidat-<id>
-    ne vérifiait que is_any_authenticated() — n'importe quel examinateur/loge
-    authentifié pouvait télécharger la fiche PDF de n'importe quel candidat
-    (login_key en clair, id énumérable). Resserré à la même règle que
-    show_credentials sur candidat.html : admin ou le candidat lui-même,
-    d'autant plus critique maintenant que le QR de ce PDF connecte
-    automatiquement (cf. TestLoginCandidatQr)."""
+class TestFicheCandidatPdfAccessControl:
+    """Régression sécurité : la fiche PDF d'un candidat (login_key en clair +
+    QR d'auto-connexion) est servie par `/fiche-candidat/<id>.pdf`, générée à
+    la demande dans un répertoire temporaire.
+
+    Deux resserrages successifs y ont conduit. 2026-07-10 : la génération ne
+    vérifiait que `is_any_authenticated()`. Puis l'audit suivant a montré que
+    restreindre la génération ne suffisait pas — le PDF restait dans
+    `generated/` sous un nom devinable, et `/download` le rendait accessible à
+    toute session authentifiée. D'où la suppression de l'artefact persistant."""
 
     INFOS = {"id": 5, "nom": "Dupont Jean", "numero": "111111111AA",
              "tiers_temps": 0, "etablissement": "Lycée Test", "login_key": "secretkey"}
 
+    URL = "/fiche-candidat/5.pdf"
+
+    @staticmethod
+    def _fake_fiche(monkeypatch):
+        """Remplace la génération ReportLab par l'écriture d'un PDF factice.
+
+        La route relit le fichier produit avant de sortir du TemporaryDirectory :
+        le double doit donc réellement écrire dans le `file_dir` reçu.
+        """
+        import app as app_module
+
+        def _ecrire(infos, tempdirname, file_dir='.', filename_root='', centre_examen=''):
+            Path(file_dir, "candidat_5.pdf").write_bytes(b"%PDF-1.4 fake")
+            return "candidat_5.pdf"
+
+        monkeypatch.setattr(app_module.reports, "fiche_candidat", _ecrire)
+
     def test_unauthenticated_forbidden(self, client, db_mock):
         db_mock.make_sql_select.return_value = [self.INFOS]
-        r = client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
+        r = client.get(self.URL, follow_redirects=False)
         assert r.status_code == 403
 
-    def test_examinateur_cannot_access_other_candidat_fiche(self, client, db_mock):
-        """Une session examinateur (non-admin) ne doit plus suffire."""
+    def test_examinateur_cannot_access_candidat_fiche(self, client, db_mock):
+        """Une session personnel (examinateur/loge) ne donne aucun droit ici."""
         db_mock.make_sql_select.return_value = [self.INFOS]
         with client.session_transaction() as sess:
-            sess["user"] = "101"
-        r = client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
+            sess["user"] = "examinateur101"
+        r = client.get(self.URL, follow_redirects=False)
         assert r.status_code == 403
 
     def test_candidat_cannot_access_other_candidat_fiche(self, client, db_mock):
         db_mock.make_sql_select.return_value = [self.INFOS]
         with client.session_transaction() as sess:
             sess["candidat"] = "999999999ZZ"
-        r = client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
+        r = client.get(self.URL, follow_redirects=False)
         assert r.status_code == 403
 
     def test_admin_can_access(self, admin_client, db_mock, monkeypatch):
-        import app as app_module
         db_mock.make_sql_select.side_effect = [
             [self.INFOS],   # SELECT_DOC_INFOS_CANDIDAT
             [],             # SELECT_DOC_INFOS_CANDIDATS_ORAUX
             [],             # SELECT_TOKEN_LOGIN_CANDIDAT_BY_NUMERO
         ]
-        monkeypatch.setattr(app_module.reports, "fiche_candidat",
-                            lambda *a, **kw: "candidat_5.pdf")
-        r = admin_client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
+        self._fake_fiche(monkeypatch)
+        r = admin_client.get(self.URL, follow_redirects=False)
         assert r.status_code == 200
+        assert r.mimetype == "application/pdf"
 
     def test_candidat_can_access_own_fiche(self, client, db_mock, monkeypatch):
-        import app as app_module
         db_mock.make_sql_select.side_effect = [[self.INFOS], [], []]
-        monkeypatch.setattr(app_module.reports, "fiche_candidat",
-                            lambda *a, **kw: "candidat_5.pdf")
+        self._fake_fiche(monkeypatch)
         with client.session_transaction() as sess:
             sess["candidat"] = "111111111AA"
-        r = client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
+        r = client.get(self.URL, follow_redirects=False)
         assert r.status_code == 200
+        assert r.data.startswith(b"%PDF")
+
+    def test_fiche_nest_jamais_ecrite_dans_generated(self, client, db_mock, monkeypatch):
+        """Le PDF ne doit exister que le temps de la réponse : c'est la
+        persistance sous un nom devinable qui constituait la fuite."""
+        import app as app_module
+
+        vus = {}
+
+        def _ecrire(infos, tempdirname, file_dir='.', filename_root='', centre_examen=''):
+            vus["file_dir"] = file_dir
+            Path(file_dir, "candidat_5.pdf").write_bytes(b"%PDF-1.4 fake")
+            return "candidat_5.pdf"
+
+        monkeypatch.setattr(app_module.reports, "fiche_candidat", _ecrire)
+        db_mock.make_sql_select.side_effect = [[self.INFOS], [], []]
+        with client.session_transaction() as sess:
+            sess["candidat"] = "111111111AA"
+        assert client.get(self.URL).status_code == 200
+        assert "generated" not in vus["file_dir"], (
+            "La fiche doit être écrite dans un répertoire temporaire, pas dans generated/"
+        )
+        assert not Path(vus["file_dir"]).exists(), (
+            "Le répertoire temporaire doit être supprimé après la réponse"
+        )
 
     def test_unknown_candidat_404(self, client, db_mock):
         db_mock.make_sql_select.return_value = []
-        r = client.get("/generate-doc-one/fiche_candidat-999", follow_redirects=False)
+        with client.session_transaction() as sess:
+            sess["candidat"] = "111111111AA"
+        r = client.get("/fiche-candidat/999.pdf", follow_redirects=False)
+        assert r.status_code == 404
+
+    def test_generate_doc_one_ne_sert_plus_les_fiches_candidats(self, admin_client, db_mock):
+        """L'ancienne route ne doit plus produire de fiche candidat."""
+        db_mock.make_sql_select.return_value = [self.INFOS]
+        r = admin_client.get("/generate-doc-one/fiche_candidat-5", follow_redirects=False)
         assert r.status_code == 404
 
 

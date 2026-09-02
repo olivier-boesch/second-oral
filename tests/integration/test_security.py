@@ -334,48 +334,132 @@ class TestSafeRedirectUrl:
 
 # ── #10 — PDFs candidats protégés par authentification ────────────────────────
 
-class TestCandidatPdfAccessControl:
-    """Vuln audit : la route `/download` servait les fichiers `candidat_*.pdf`
-    sans aucune authentification. Ces PDFs contiennent le nom, le numéro de candidat, le
-    planning d'oraux et les identifiants de connexion du candidat."""
+class TestDownloadWhitelist:
+    """Vuln audit : `/download` appliquait une cascade de préfixes terminée par
+    un `else` permissif (« personnel authentifié »). Deux conséquences :
 
-    def test_candidat_pdf_denied_without_session(self, client):
+    - `candidat_<NOM>.pdf` — mot de passe en clair + QR d'auto-connexion, sous
+      un nom devinable — était accessible à toute session authentifiée, dont
+      celle d'un autre candidat (prise de contrôle de compte) ;
+    - `liste_candidats.pdf`, concaténation de TOUTES les fiches, ne commençant
+      par aucun préfixe connu, retombait dans le cas large : n'importe quel
+      examinateur ou surveillant de loge pouvait la télécharger.
+
+    La route applique désormais une liste blanche avec refus par défaut."""
+
+    def _session_examinateur(self, client, db_mock):
+        db_mock.make_sql_select.return_value = [{"nom": "Martin", "password_hash": "x",
+                                                 "salle": "101"}]
+        with client.session_transaction() as sess:
+            sess["user"] = "examinateur101"
+
+    # ── Fiches candidats : plus jamais servies, quelle que soit la session ────
+
+    @pytest.mark.parametrize("session_data", [
+        None,
+        {"candidat": "111111111AA"},
+        {"user": "examinateur101"},
+        {"loge": "Loge A"},
+        {"user": "admin"},
+    ])
+    def test_candidat_pdf_toujours_refuse(self, client, session_data):
+        """Ces fichiers ne sont plus produits ; ceux qui subsistent sur les
+        instances déjà déployées ne doivent plus être servis, même à l'admin."""
+        if session_data:
+            with client.session_transaction() as sess:
+                sess.update(session_data)
         r = client.get("/download?filename=candidat_Martin_Paul.pdf",
                        follow_redirects=False)
         assert r.status_code == 403
 
-    def test_candidat_pdf_accessible_with_admin_session(self, admin_client):
-        r = admin_client.get("/download?filename=candidat_Martin_Paul.pdf",
+    # ── liste_candidats.pdf : admin uniquement ───────────────────────────────
+
+    def test_liste_candidats_refusee_a_un_examinateur(self, client, db_mock):
+        self._session_examinateur(client, db_mock)
+        r = client.get("/download?filename=liste_candidats.pdf", follow_redirects=False)
+        assert r.status_code == 403
+
+    def test_liste_candidats_refusee_a_une_loge(self, client):
+        with client.session_transaction() as sess:
+            sess["loge"] = "Loge A"
+        r = client.get("/download?filename=liste_candidats.pdf", follow_redirects=False)
+        assert r.status_code == 403
+
+    def test_liste_candidats_autorisee_a_ladmin(self, admin_client):
+        r = admin_client.get("/download?filename=liste_candidats.pdf",
                              follow_redirects=False)
         # Le fichier n'existe pas en test → 404, mais PAS 403
         assert r.status_code != 403
 
-    def test_candidat_pdf_accessible_with_candidat_session(self, client, flask_app):
-        with client.session_transaction() as sess:
-            sess["candidat"] = "111111111AA"
-        r = client.get("/download?filename=candidat_Martin_Paul.pdf",
-                       follow_redirects=False)
-        assert r.status_code != 403
-
-    def test_candidat_pdf_accessible_with_examinateur_session(self, client, db_mock):
-        db_mock.make_sql_select.return_value = [{"nom": "Martin", "password_hash": "x",
-                                                  "salle": "101"}]
-        with client.session_transaction() as sess:
-            sess["user"] = "examinateur101"
-        r = client.get("/download?filename=candidat_Martin_Paul.pdf",
-                       follow_redirects=False)
-        assert r.status_code != 403
+    # ── Papillons : admin uniquement (inchangé) ──────────────────────────────
 
     def test_papillons_pdf_still_requires_admin(self, client):
         r = client.get("/download?filename=papillons_candidats.pdf",
                        follow_redirects=False)
         assert r.status_code == 403
 
-    def test_other_pdf_still_requires_authentication(self, client):
-        r = client.get("/download?filename=liste_oraux.pdf",
-                       follow_redirects=False)
-        # Sans session → redirect vers login (302) ou 403, jamais 200
-        assert r.status_code in (302, 403)
+    # ── Documents « personnel » : inchangés ──────────────────────────────────
+
+    @pytest.mark.parametrize("filename", [
+        "liste_oraux.pdf", "liste_salles.pdf", "liste_loges.pdf",
+        "salle-101-Martin.pdf", "loge-A.pdf",
+    ])
+    def test_documents_personnel_requierent_une_authentification(self, client, filename):
+        r = client.get(f"/download?filename={filename}", follow_redirects=False)
+        assert r.status_code in (302, 403), "jamais servi sans session"
+
+    @pytest.mark.parametrize("filename", [
+        "liste_oraux.pdf", "salle-101-Martin.pdf", "loge-A.pdf",
+    ])
+    def test_documents_personnel_accessibles_a_un_examinateur(
+            self, client, db_mock, filename):
+        self._session_examinateur(client, db_mock)
+        r = client.get(f"/download?filename={filename}", follow_redirects=False)
+        assert r.status_code != 403
+
+    # ── Refus par défaut ─────────────────────────────────────────────────────
+
+    def test_document_inconnu_refuse_meme_a_ladmin(self, admin_client):
+        """Le point de la liste blanche : ce qui n'est pas listé est refusé,
+        au lieu de retomber dans le cas permissif."""
+        r = admin_client.get("/download?filename=export_confidentiel.pdf",
+                             follow_redirects=False)
+        assert r.status_code == 403
+
+    def test_nom_de_fichier_invalide_rejete(self, admin_client):
+        r = admin_client.get("/download?filename=../app_secrets.py",
+                             follow_redirects=False)
+        assert r.status_code == 400
+
+
+class TestPurgeFichesCandidatsResiduelles:
+    """Les instances déjà déployées ont des `candidat_*.pdf` sur disque : la
+    régénération des fiches les efface, en plus du refus côté /download."""
+
+    def test_purge_supprime_les_fiches_candidats(self, flask_app, tmp_path, monkeypatch):
+        import app as app_module
+
+        generated = tmp_path / "generated"
+        generated.mkdir()
+        (generated / "candidat_Martin_Paul.pdf").write_bytes(b"%PDF")
+        (generated / "candidat_Dupont_Jean.pdf").write_bytes(b"%PDF")
+        (generated / "liste_oraux.pdf").write_bytes(b"%PDF")
+        monkeypatch.setattr(flask_app, "root_path", str(tmp_path))
+
+        with flask_app.app_context():
+            assert app_module._purger_fiches_candidats_residuelles() == 2
+
+        assert not (generated / "candidat_Martin_Paul.pdf").exists()
+        assert not (generated / "candidat_Dupont_Jean.pdf").exists()
+        assert (generated / "liste_oraux.pdf").exists(), (
+            "La purge ne doit toucher que les fiches candidats"
+        )
+
+    def test_purge_sans_repertoire_ne_casse_pas(self, flask_app, tmp_path, monkeypatch):
+        import app as app_module
+        monkeypatch.setattr(flask_app, "root_path", str(tmp_path))
+        with flask_app.app_context():
+            assert app_module._purger_fiches_candidats_residuelles() == 0
 
 
 # ── #11 — Triggers DB sans password_hash ─────────────────────────────────────

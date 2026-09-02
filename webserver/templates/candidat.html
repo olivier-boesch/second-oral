@@ -55,7 +55,10 @@
 {% endif %}
 
 <div class="centered">
-    <a href="#" onclick="open_url('{{ url_for('generate_screen_one', type_doc='fiche_candidat', id_doc=data['id']) }}')"><img src="{{ url_for('static', filename='pdf.png') }}"></a>
+    {# Lien direct : la fiche est générée à la demande et servie dans la
+       réponse, sans passer par generated/ (elle contient les identifiants
+       de connexion du candidat) — donc pas d'écran d'attente à afficher. #}
+    <a href="{{ url_for('fiche_candidat_pdf', id_candidat=data['id']) }}" target="_blank"><img src="{{ url_for('static', filename='pdf.png') }}"></a>
 </div>
 
 {% include 'footer.html' %}
