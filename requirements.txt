@@ -4,7 +4,7 @@ brotli==1.2.0
 cffi==2.0.0
 charset-normalizer==3.4.7
 click==8.4.1
-cryptography==49.0.0
+cryptography==50.0.1
 colorama==0.4.6
 defusedxml==0.7.1
 Deprecated==1.3.1
@@ -28,7 +28,7 @@ ortools==9.15.6755
 packaging==26.2
 pillow==12.3.0
 PyOTP==2.10.0
-pypdf==6.14.2
+pypdf==6.18.1
 pytz==2026.2
 redis==8.0.0
 reportlab==5.0.0
