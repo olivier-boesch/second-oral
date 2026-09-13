@@ -34,6 +34,14 @@ if "webserver.app_secrets" not in sys.modules:
     if "app_secrets" not in sys.modules:
         sys.modules["app_secrets"] = _as
 
+# Même correctif de compatibilité que db_facility_save.py/db_facility_web.py
+# (cf. leur commentaire) : nécessaire ici aussi car cet import direct de
+# mysql.connector précède celui de db_facility_save.
+import ssl as _ssl
+for _proto in ("PROTOCOL_TLSv1", "PROTOCOL_TLSv1_1", "PROTOCOL_TLSv1_2"):
+    if not hasattr(_ssl, _proto):
+        setattr(_ssl, _proto, _ssl.PROTOCOL_TLS)
+
 import mysql.connector  # noqa: E402
 
 # D'autres fichiers de test (ex. test_algo.py) installent un db_facility_save

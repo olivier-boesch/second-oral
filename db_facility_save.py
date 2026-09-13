@@ -9,6 +9,18 @@ Note : les directives DELIMITER ne sont pas utilisées car mysql.connector
 import os
 from concurrent.futures import ThreadPoolExecutor
 
+# mysql-connector-python référence sans filet ssl.PROTOCOL_TLSv1(_1/_2) au
+# chargement du module (network.py) — un OpenSSL qui ne les expose plus
+# (protocoles obsolètes, retirés) fait planter l'import avec une
+# AttributeError, avant même toute tentative de connexion. Alias vers
+# PROTOCOL_TLS (négociation de version automatique, l'API moderne) : contourne
+# le crash sans changer le comportement réel de connexion, qui ne fixait déjà
+# aucune version explicite.
+import ssl as _ssl
+for _proto in ("PROTOCOL_TLSv1", "PROTOCOL_TLSv1_1", "PROTOCOL_TLSv1_2"):
+    if not hasattr(_ssl, _proto):
+        setattr(_ssl, _proto, _ssl.PROTOCOL_TLS)
+
 import mysql.connector
 
 from webserver.app_secrets import DB_PARAMS, DB_SALT
